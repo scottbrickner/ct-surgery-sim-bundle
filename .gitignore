@@ -1,0 +1,11 @@
+node_modules/
+.DS_Store
+*.log
+
+# Internal policy docs and manufacturer-copyrighted manuals - kept locally
+# for the build session's reference, deliberately not pushed to GitHub.
+docs/references/CP4-156.doc
+docs/references/CP4-156 Attachment B.pdf
+docs/references/Manual_IntelliVue-MX-Patient-Monitor-IFU.pdf
+docs/references/Manual_Medtronic-5392-Pacemaker_Compatibility-Components.pdf
+docs/references/Manual_Medtronic-5392-Pacemaker_Tip-Card.pdf

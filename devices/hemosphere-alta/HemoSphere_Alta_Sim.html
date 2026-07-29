@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HemoSphere Alta — Simulation Trainer</title>
+<style>
+  :root{
+    --bg:#000; --panel:#0c1118; --panel2:#070a0f; --line:#1c2530; --txt:#f0f4f8; --dim:#8aa0b4;
+    --co:#36c2d6; --sv:#4a90d9; --svv:#b388ff; --ppv:#c79bff; --svr:#e8923a; --map:#eef2f6;
+    --pr:#46d07a; --cvp:#2bd0d0; --scvo2:#e05ac9; --hpi:#ff5a5a;
+    --good:#46c95a; --warn:#f5c542; --bad:#ff4d4d; --accent:#1f7fb8;
+  }
+  *{box-sizing:border-box;-webkit-user-select:none;user-select:none;}
+  html,body{margin:0;height:100%;background:#000;font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:var(--txt);overflow:hidden;}
+  input,select,button{font-family:inherit;}
+  #app{display:flex;flex-direction:column;height:100vh;width:100vw;}
+  /* status bar */
+  #status{flex:0 0 auto;height:40px;display:flex;align-items:center;gap:10px;padding:5px 8px;background:#000;}
+  #status.alarm{background:#b00000;}
+  #note{flex:1 1 auto;min-width:0;display:flex;align-items:center;gap:8px;background:#0c141d;border-radius:7px;height:30px;padding:0 12px;font-size:13px;overflow:hidden;}
+  #status.alarm #note{background:transparent;}
+  #note .cnt{color:#7fb0d6;font-weight:700;} #status.alarm #note .cnt{color:#fff;}
+  #note .q{width:16px;height:16px;border-radius:50%;background:#1f7fb8;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;font-weight:700;}
+  #status.alarm #note .q{background:#fff;color:#b00000;}
+  #noteTxt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#cfe0ee;font-weight:600;} #status.alarm #noteTxt{color:#fff;font-weight:700;}
+  #icons{flex:0 0 auto;display:flex;align-items:center;gap:12px;background:#0c141d;border-radius:7px;height:30px;padding:0 12px;font-size:13px;}
+  #status.alarm #icons{background:rgba(0,0,0,.25);}
+  #icons .sn{color:#bcd2e6;font-weight:600;} #icons .hr{color:#fff;font-weight:700;} #icons .hr b{color:#ff6a8a;}
+  #icons .ico{opacity:.85;} #icons .clk{font-variant-numeric:tabular-nums;color:#cfe0ee;font-size:11px;line-height:1.1;text-align:right;}
+  /* body: side panel + main */
+  #body{flex:1 1 auto;display:flex;min-height:0;}
+  #side{flex:0 0 0;width:0;overflow:hidden;background:#05080c;border-right:1px solid var(--line);transition:width .18s;}
+  #side.open{width:232px;}
+  #side .sinner{width:232px;padding:10px;}
+  #side .sdd{width:100%;background:#0c141d;border:1px solid #22303d;border-radius:6px;color:#cfe0ee;padding:8px;font-size:12px;margin-bottom:10px;display:flex;justify-content:space-between;}
+  #side .stool{display:block;width:100%;text-align:left;background:#0c141d;border:1px solid #22303d;border-radius:6px;color:#dce8f2;padding:11px 12px;font-size:12.5px;font-weight:600;margin-bottom:7px;cursor:pointer;}
+  #side .stool:hover{background:#13202c;border-color:#2f6f9a;} #side .stool.on{background:#16384f;border-color:#2f6f9a;color:#fff;}
+  #side .scontent{margin-top:10px;font-size:12px;color:#bcd2e6;line-height:1.5;background:#0a1119;border:1px solid #1c2530;border-radius:6px;padding:10px;display:none;}
+  #side .scontent.show{display:block;} #side .scontent b{color:#fff;}
+  #main{flex:1 1 auto;display:flex;flex-direction:column;min-width:0;background:#000;padding:6px;gap:6px;}
+  /* ART row */
+  #artRow{flex:0 0 96px;display:flex;gap:6px;}
+  #artWave{flex:1 1 auto;position:relative;background:#0a0d12;border:1px solid #2a1414;border-radius:8px;overflow:hidden;}
+  #artWave .scaleTag{position:absolute;top:6px;left:6px;font-size:10px;color:#b06a6a;background:#160a0a;border-radius:3px;padding:1px 5px;}
+  #artC{position:absolute;inset:0;width:100%;height:100%;}
+  #artVal{flex:0 0 228px;background:#1a0e0e;border:1px solid #3a1c1c;border-radius:8px;padding:6px 12px;display:flex;flex-direction:column;justify-content:center;position:relative;}
+  #artVal .src{position:absolute;top:6px;left:10px;font-size:10px;color:#c98a8a;}
+  #artVal .bp{font-size:34px;font-weight:800;color:#ff5a5a;line-height:1;font-variant-numeric:tabular-nums;text-align:right;}
+  #artVal .lab{font-size:13px;color:#c98a8a;font-weight:700;} #artVal .mean{font-size:18px;color:#ff9a9a;font-weight:700;}
+  #artVal .pr{position:absolute;right:12px;bottom:8px;font-size:14px;color:#fff;font-weight:700;}
+  /* lower: center + tiles */
+  #lower{flex:1 1 auto;display:flex;gap:6px;min-height:0;}
+  #center{flex:1 1 auto;position:relative;min-width:0;}
+  #trendC{position:absolute;inset:0;width:100%;height:100%;}
+  #tabArea,#cockpitView,#hpiView,#gdtView{position:absolute;inset:0;display:none;overflow:auto;}
+  #tiles{flex:0 0 228px;display:flex;flex-direction:column;gap:6px;min-height:0;}
+  .tile{flex:1 1 0;background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:6px 12px;position:relative;cursor:pointer;display:flex;flex-direction:column;justify-content:center;min-height:0;}
+  .tile.sel{border-color:#2f9ad6;box-shadow:0 0 0 1px #2f9ad6 inset;}
+  .tile .src{position:absolute;top:6px;left:10px;font-size:10px;color:var(--dim);font-weight:600;}
+  .tile .bell{position:absolute;top:6px;right:10px;font-size:13px;color:#5e7488;}
+  .tile .tval{font-size:54px;font-weight:800;line-height:.95;font-variant-numeric:tabular-nums;letter-spacing:-1px;text-align:right;}
+  .tile .tname{text-align:right;font-size:15px;font-weight:700;} .tile .tname .tu{color:var(--dim);font-size:11px;font-weight:600;margin-left:3px;}
+  .tval.good{color:#fff;} .tval.warn{color:var(--warn);} .tval.bad{color:var(--bad);} .tval.neutral{color:#fff;}
+  .tile.alarm{animation:al 1s steps(1) infinite;} @keyframes al{50%{background:#3a0000;border-color:#ff5a5a;}}
+  #addTile{flex:0 0 38px;background:#0a0d12;border:1px dashed #2a3a4a;border-radius:8px;color:#5e7488;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;}
+  /* cockpit */
+  #cockpitView{padding:6px;gap:6px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));grid-auto-rows:1fr;}
+  #cockpitView.show{display:grid!important;}
+  .globe{background:#070a0f;border:1px solid #161d26;border-radius:10px;position:relative;cursor:pointer;min-height:200px;}
+  .globe canvas{position:absolute;inset:0;width:100%;height:100%;}
+  .globe .gtag{position:absolute;top:9px;left:11px;font-size:10px;color:var(--dim);font-weight:600;z-index:2;}
+  .globe .gbell{position:absolute;top:9px;right:11px;font-size:13px;color:#5e7488;z-index:2;}
+  .globe.alarm{animation:al 1s steps(1) infinite;}
+  /* tabular */
+  #tabArea{background:#000;display:flex;flex-direction:column;}
+  #tabBar{flex:0 0 auto;padding:8px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid #14202b;}
+  #tabBar button{background:#11202c;border:1px solid #25394a;color:#bcd2e6;border-radius:6px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;}
+  #tabBar button:hover{background:#1a3043;} #tabBar button.on{background:#1f7fb8;color:#fff;border-color:#3a9fd8;}
+  #tabTable{flex:1 1 auto;overflow:auto;}
+  table.tab{border-collapse:collapse;width:100%;font-size:18px;}
+  table.tab td{border:1px solid #14202b;text-align:center;padding:14px 8px;font-variant-numeric:tabular-nums;color:#fff;font-weight:600;}
+  table.tab td.pl{text-align:left;color:var(--dim);font-weight:700;white-space:nowrap;font-size:14px;}
+  table.tab td.time{color:#7f9bb3;font-size:12px;font-weight:600;} table.tab tr:nth-child(even) td{background:#060a0e;}
+  /* HPI / GDT */
+  #hpiView,#gdtView{flex-direction:column;padding:18px 24px;}
+  #hpiView.show,#gdtView.show{display:flex!important;}
+  .vhead{font-size:18px;font-weight:800;color:#cfe0ee;margin-bottom:4px;} .vsub{font-size:12px;color:var(--dim);margin-bottom:14px;}
+  .hpiwrap{display:flex;gap:28px;align-items:center;flex-wrap:wrap;}
+  .hpibanner{background:#7a0000;border:1px solid #ff5a5a;border-radius:8px;padding:10px 16px;font-weight:800;margin-bottom:14px;display:none;} .hpibanner.show{display:block;animation:al 1s steps(1) infinite;}
+  .contrib{flex:1 1 320px;} .contrib h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);}
+  .crow{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;}
+  .crow b{font-variant-numeric:tabular-nums;font-size:18px;} .crow .cu{color:var(--dim);font-size:11px;margin-left:4px;}
+  .bar{height:8px;border-radius:4px;background:#16202b;overflow:hidden;flex:1;margin:0 12px;max-width:160px;} .bar i{display:block;height:100%;background:var(--accent);}
+  .gdtgrid{display:flex;gap:18px;flex-wrap:wrap;} .gdtcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;flex:1 1 260px;}
+  .gdtbig{font-size:52px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1;} .tit{font-size:34px;font-weight:800;color:var(--good);}
+  #gdtC{width:100%;height:150px;background:#000;border:1px solid var(--line);border-radius:8px;margin-top:10px;display:block;}
+  .selrow{display:flex;gap:10px;align-items:center;margin:8px 0;font-size:13px;color:var(--dim);flex-wrap:wrap;}
+  .selrow select,.selrow input{background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;font-size:13px;}
+  /* nav */
+  #nav{flex:0 0 auto;height:58px;display:flex;align-items:stretch;gap:2px;padding:4px 6px;background:#0a0d12;border-top:1px solid #000;}
+  .nb{background:none;border:none;color:#cfe0ee;font-size:11px;font-weight:600;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;padding:0 10px;border-radius:8px;min-width:62px;}
+  .nb .ic{font-size:18px;} .nb:hover{background:#161f29;} .nb.on{background:#13384f;color:#fff;}
+  .nb.mode{background:#0e2233;color:#fff;border:1px solid #1f7fb8;}
+  .nb.alarmbtn{color:#ff6a6a;} .nb.alarmbtn.active{background:#b00000;color:#fff;animation:al 1s steps(1) infinite;}
+  #navspace{flex:1 1 auto;}
+  #facToggle{position:fixed;bottom:66px;right:10px;z-index:40;background:var(--accent);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);opacity:.55;} #facToggle:hover{opacity:1;}
+  /* facilitator */
+  #fac{position:fixed;top:0;right:0;height:100vh;width:360px;background:#0c131b;border-left:2px solid var(--accent);transform:translateX(100%);transition:transform .22s;z-index:60;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.6);}
+  #fac.open{transform:translateX(0);}
+  #fac h2{margin:0;padding:10px 14px;background:var(--accent);font-size:14px;display:flex;justify-content:space-between;align-items:center;} #fac h2 .x{cursor:pointer;font-size:18px;}
+  #fac .bodyf{overflow-y:auto;padding:8px 14px 40px;}
+  #fac .grp{margin-bottom:12px;border-top:1px solid var(--line);padding-top:8px;} #fac .grp:first-child{border-top:none;}
+  #fac .gl{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#6f8aa3;margin-bottom:6px;font-weight:700;}
+  #fac label.row{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;margin:4px 0;color:#cdd9e4;}
+  #fac input[type=range]{flex:1;} #fac .val{width:46px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+  #fac select{width:100%;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;font-size:12.5px;}
+  #fac .scn{display:block;width:100%;text-align:left;margin:4px 0;background:#13202c;border:1px solid #26415a;border-radius:6px;padding:8px 10px;cursor:pointer;color:#dce8f2;}
+  #fac .scn:hover{background:#1b3144;} #fac .scn b{display:block;font-size:12.5px;color:#fff;} #fac .scn span{font-size:10.5px;color:#90a6ba;}
+  #fac .toggrid{display:flex;flex-wrap:wrap;gap:5px;} #fac .tog{flex:1 1 28%;background:#13202c;border:1px solid #26415a;border-radius:5px;padding:6px 3px;font-size:11px;cursor:pointer;color:#90a6ba;text-align:center;font-weight:700;} #fac .tog.on{background:#16384f;color:#fff;border-color:#2f6f9a;}
+  .hint{font-size:10.5px;color:#6f8aa3;margin-top:6px;line-height:1.45;}
+  #cfgModal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:70;display:none;align-items:center;justify-content:center;}
+  #cfgModal .win{background:#0d1925;border:1px solid #2f6f9a;border-radius:8px;width:380px;}
+  #cfgModal .h{padding:10px 16px;background:#13384f;font-weight:700;display:flex;justify-content:space-between;}
+  #cfgModal .cw{padding:16px;} #cfgModal .r{display:flex;justify-content:space-between;align-items:center;margin:8px 0;font-size:13px;}
+  #cfgModal input{width:90px;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:4px;padding:6px;}
+  #cfgModal button{padding:8px 16px;border-radius:5px;border:1px solid #2a4a63;background:#1b3346;color:#dce8f2;cursor:pointer;}
+  .amodal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:70;display:none;align-items:center;justify-content:center;} .amodal.open{display:flex;}
+  .awin{background:#0d1925;border:1px solid #2f6f9a;border-radius:8px;width:460px;max-width:94vw;max-height:92vh;overflow:auto;}
+  .ah{padding:11px 16px;background:#13384f;font-weight:700;display:flex;justify-content:space-between;font-size:15px;} .ah span{cursor:pointer;font-size:20px;}
+  .acw{padding:16px;font-size:13px;color:#cdd9e4;}
+  .acw input,.acw select{background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;font-size:13px;}
+  .acw button{background:#1b3346;border:1px solid #2a4a63;color:#dce8f2;border-radius:6px;padding:8px 13px;cursor:pointer;font-size:12.5px;} .acw button:hover{background:#244a66;} .acw button:disabled{opacity:.4;cursor:default;}
+  .acw button.go{background:#15502f;border-color:#1d6e40;color:#d6ffe4;font-weight:700;}
+  .osteps{padding-left:18px;line-height:2;} .osteps li{margin-bottom:6px;} .osteps b{color:#fff;}
+  .ostep{margin-bottom:10px;color:#9fb4c6;} #oxi_sqi{color:#46c95a;font-size:15px;letter-spacing:1px;}
+  .omsg{margin-top:10px;font-size:12.5px;color:#7ad17a;min-height:16px;} .omsg.warn{color:#f5c542;}
+  .prow{display:flex;justify-content:space-between;align-items:center;margin:8px 0;gap:10px;} .prow input{flex:1;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="status">
+    <div id="note"><span class="cnt" id="noteCnt">02/02</span><span class="q">?</span><span id="noteTxt">Monitoring</span></div>
+    <div id="icons"><span class="sn" id="snLab">SK-SN12345</span><span class="hr"><b>♥</b> <span id="hrIco">75</span> bpm</span><span class="ico" id="battIco">🔋</span><span class="ico">🔆</span><span class="ico" id="sndIco">🔔</span><span class="clk" id="clk">--:--<br><span id="dte"></span></span></div>
+  </div>
+  <div id="body">
+    <div id="side"><div class="sinner">
+      <div class="sdd">Quick View <span>▾</span></div>
+      <button class="stool" data-tool="afm">Assisted Fluid Management</button>
+      <button class="stool" data-tool="dvc">Derived Value Calculator</button>
+      <button class="stool" data-tool="events">Events &amp; Intervention</button>
+      <button class="stool" data-tool="frt">Fluid Responsiveness Test</button>
+      <button class="stool" data-tool="gdt">Goal Directed Therapy</button>
+      <button class="stool" data-tool="hpi">Hypotension Predictive Index</button>
+      <div class="scontent" id="sContent"></div>
+    </div></div>
+    <div id="main">
+      <div id="artRow">
+        <div id="artWave"><span class="scaleTag" id="artScale">25 mm/sec</span><canvas id="artC"></canvas></div>
+        <div id="artVal"><span class="src" id="artSrc">IQ Sensor</span><span class="bp" id="artBP">118/64</span><div style="display:flex;justify-content:space-between;align-items:baseline"><span class="lab" id="artLab">ART mmHg</span><span class="mean">(<span id="artMean">82</span>)</span></div><span class="pr"><span id="prVal">78</span> <span style="font-size:10px;color:#c98a8a">PR bpm</span></span></div>
+      </div>
+      <div id="lower">
+        <div id="center">
+          <canvas id="trendC"></canvas>
+          <div id="tabArea"><div id="tabBar"><span style="color:#8aa0b4;font-size:12px;margin-right:6px">Increment</span><button data-inc="60">1 min</button><button data-inc="300">5 min</button><button data-inc="900">15 min</button><button data-inc="1800">30 min</button><button data-inc="3600">1 hr</button><button data-inc="14400">4 hr</button></div><div id="tabTable"></div></div>
+          <div id="cockpitView"></div>
+          <div id="hpiView">
+            <div class="vhead">Acumen Hypotension Prediction Index (HPI)</div>
+            <div class="vsub">Likelihood (0–100) of a hypotensive event (MAP &lt; 65 mmHg). High alert at threshold.</div>
+            <div class="hpibanner" id="hpiBanner">⚠ High likelihood of a hypotensive event — assess preload, contractility, afterload.</div>
+            <div class="hpiwrap">
+              <canvas id="hpiGauge" width="240" height="240"></canvas>
+              <div class="contrib"><h4>Contributing Hemodynamics (Acumen)</h4>
+                <div class="crow"><span>MAP</span><div class="bar"><i id="cb_map"></i></div><span><b id="cv_map">82</b><span class="cu">mmHg</span></span></div>
+                <div class="crow"><span>dP/dt (contractility)</span><div class="bar"><i id="cb_dpdt"></i></div><span><b id="cv_dpdt">680</b><span class="cu">mmHg/s</span></span></div>
+                <div class="crow"><span>Eadyn (afterload)</span><div class="bar"><i id="cb_ea"></i></div><span><b id="cv_ea">0.9</b></span></div>
+                <div class="crow"><span>SVV (preload)</span><div class="bar"><i id="cb_svv"></i></div><span><b id="cv_svv">9</b><span class="cu">%</span></span></div>
+                <div class="crow"><span>CO</span><div class="bar"><i id="cb_co"></i></div><span><b id="cv_co">5.2</b><span class="cu">L/min</span></span></div>
+                <div class="crow"><span>PR</span><div class="bar"><i id="cb_pr"></i></div><span><b id="cv_pr">78</b><span class="cu">bpm</span></span></div>
+              </div>
+            </div>
+          </div>
+          <div id="gdtView">
+            <div class="vhead">Goal-Directed Therapy (GDT)</div>
+            <div class="vsub">Select a key parameter and target range; the platform tracks time-in-target.</div>
+            <div class="selrow">Parameter <select id="gdtParam"></select> Target <input type="number" id="gdtLo" style="width:70px"> – <input type="number" id="gdtHi" style="width:70px"> <button class="nb" style="padding:6px 14px;background:#16384f" id="gdtRun">Start / Reset</button></div>
+            <div class="gdtgrid">
+              <div class="gdtcard"><div style="color:var(--dim);font-size:12px">CURRENT</div><div class="gdtbig" id="gdtCur">2.6</div><div style="color:var(--dim);font-size:11px" id="gdtCurU">CI L/min/m²</div></div>
+              <div class="gdtcard"><div style="color:var(--dim);font-size:12px">TIME IN TARGET</div><div class="tit" id="gdtTit">0%</div><div style="color:var(--dim);font-size:11px">since start (<span id="gdtElapsed">0:00</span>)</div></div>
+              <div class="gdtcard" style="flex:1 1 100%"><canvas id="gdtC"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div id="tiles"></div>
+      </div>
+    </div>
+  </div>
+  <div id="nav">
+    <button class="nb alarmbtn" id="nb_alarm"><span class="ic">🔕</span><span id="alarmLab">Silenced</span></button>
+    <button class="nb" id="nb_patient"><span class="ic">👤</span>Patient</button>
+    <button class="nb" id="nb_zero"><span class="ic">⊘</span>Zero</button>
+    <button class="nb mode" id="nb_mode"><span class="ic">🩸</span><span id="modeBtnLab">FloTrac</span></button>
+    <div id="navspace"></div>
+    <button class="nb" id="nb_side"><span class="ic">⬛</span>Side Panel</button>
+    <button class="nb" id="nb_screen"><span class="ic">🗗</span>Screen</button>
+    <button class="nb" id="nb_voice"><span class="ic">🎤</span>Voice</button>
+    <button class="nb" id="nb_gesture"><span class="ic">✋</span>Gesture</button>
+    <button class="nb" id="nb_help"><span class="ic">❓</span>Help</button>
+    <button class="nb" id="nb_settings"><span class="ic">⚙</span>Settings</button>
+  </div>
+</div>
+<button id="facToggle" title="Facilitator (F)">⚙</button>
+
+<div id="fac">
+  <h2>Facilitator Control <span class="x" id="fac_close">×</span></h2>
+  <div class="bodyf">
+    <div class="grp"><div class="gl">Sensor / Mode</div>
+      <select id="f_mode"><option value="FloTrac">FloTrac Sensor (arterial)</option><option value="Swan">Swan-Ganz (PAC + oximetry)</option><option value="ClearSight">ClearSight (non-invasive cuff)</option></select></div>
+    <div class="grp"><div class="gl">Connected Sensors</div>
+      <div class="toggrid"><div class="tog on" data-sensor="cco">Swan CCO</div><div class="tog on" data-sensor="acumen">Acumen IQ Art</div><div class="tog on" data-sensor="oximetry">Oximetry</div></div>
+      <label class="row" style="margin-top:6px">SQI <input type="range" id="f_sqi" min="1" max="4" value="2"><span class="val" id="f_sqi_v">2</span></label>
+      <button class="scn" id="f_oxi" style="text-align:center;margin-top:4px">Open SvO₂ Calibration…</button>
+      <div class="hint">HPI &amp; advanced hemodynamics require Swan CCO + Acumen IQ. SvO₂ requires Oximetry + calibration.</div></div>
+    <div class="grp"><div class="gl">Load Scenario</div>
+      <button class="scn" data-scn="postop"><b>Stable Post-op</b><span>Normal CO/CI, in target.</span></button>
+      <button class="scn" data-scn="hypov"><b>Hypovolemia</b><span>↑SVV/PPV, ↓CO/CI, rising HPI.</span></button>
+      <button class="scn" data-scn="sepsis"><b>Vasoplegia / Sepsis</b><span>↑CO, ↓SVR, ↓MAP, ↓ScvO₂.</span></button>
+      <button class="scn" data-scn="cardiogenic"><b>Cardiogenic / LV failure</b><span>↓CO/CI, ↑SVR, ↓ScvO₂, high HPI.</span></button></div>
+    <div class="grp"><div class="gl">CT Surgery scenarios (stepped)</div>
+      <select id="ctScnHS" style="width:100%;margin-bottom:6px">
+        <option value="">— select CT scenario —</option>
+        <option value="sce1">SCE 1 · Aortic dissection</option>
+        <option value="sce2">SCE 2 · MVR/CABG bleeding → tamponade</option>
+        <option value="sce3">SCE 3 · Maze — pacing optimization</option>
+        <option value="sce4">SCE 4 · Post-TAVR complete heart block</option>
+      </select>
+      <div style="display:flex;gap:6px">
+        <button class="scn" id="ctPrevHS" style="flex:1;text-align:center">‹ Prev</button>
+        <button class="scn" id="ctNextHS" style="flex:1;text-align:center">Next ›</button>
+        <button class="scn" id="ctResetHS" style="flex:1;text-align:center">Reset</button>
+      </div>
+      <div class="hint" id="ctStepHS" style="margin-top:6px">No CT scenario loaded.</div></div>
+    <div class="grp"><div class="gl">Drivers</div>
+      <label class="row">CO <input type="range" id="f_co" min="1.5" max="12" step="0.1" value="5.2"><span class="val" id="f_co_v">5.2</span></label>
+      <label class="row">MAP <input type="range" id="f_map" min="40" max="130" value="82"><span class="val" id="f_map_v">82</span></label>
+      <label class="row">PR <input type="range" id="f_pr" min="30" max="180" value="78"><span class="val" id="f_pr_v">78</span></label>
+      <label class="row">CVP <input type="range" id="f_cvp" min="0" max="30" value="8"><span class="val" id="f_cvp_v">8</span></label>
+      <label class="row">SVV <input type="range" id="f_svv" min="2" max="35" value="9"><span class="val" id="f_svv_v">9</span></label>
+      <label class="row">PPV <input type="range" id="f_ppv" min="2" max="35" value="8"><span class="val" id="f_ppv_v">8</span></label>
+      <label class="row">ScvO₂ <input type="range" id="f_scvo2" min="30" max="90" value="72"><span class="val" id="f_scvo2_v">72</span></label>
+      <label class="row">HPI <input type="range" id="f_hpi" min="0" max="100" value="18"><span class="val" id="f_hpi_v">18</span></label>
+      <label class="row">ART sys <input type="range" id="f_sys" min="50" max="220" value="118"><span class="val" id="f_sys_v">118</span></label>
+      <label class="row">ART dia <input type="range" id="f_dia" min="30" max="130" value="64"><span class="val" id="f_dia_v">64</span></label>
+      <label class="row">Temp <input type="range" id="f_temp" min="33" max="42" step="0.1" value="37.0"><span class="val" id="f_temp_v">37.0</span></label></div>
+    <div class="grp"><div class="gl">Progressive Transition</div>
+      <div class="selrow" style="margin:0">→ <select id="tr_target"><option value="hypov">Hypovolemia</option><option value="sepsis">Vasoplegia</option><option value="cardiogenic">Cardiogenic</option><option value="postop">Recover→Stable</option></select>
+        <input type="number" id="tr_dur" value="120" style="width:60px"> s <button class="nb" style="padding:6px 12px;background:#16384f" id="tr_go">Run ▶</button></div>
+      <div id="tr_prog" class="hint">No transition running.</div></div>
+    <div class="grp"><div class="gl">Key Parameter Tiles (tap to toggle)</div><div class="toggrid" id="keybox"></div></div>
+    <div class="grp"><div class="gl">Patient</div>
+      <label class="row">Ht(cm) <input type="number" id="f_ht" value="170" style="width:70px;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:4px;padding:4px"> Wt(kg) <input type="number" id="f_wt" value="80" style="width:70px;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:4px;padding:4px"></label>
+      <label class="row">HPI threshold <input type="range" id="f_hpithr" min="50" max="95" value="85"><span class="val" id="f_hpithr_v">85</span></label>
+      <div class="hint">Tap any tile/globe to set its target range. Screen button cycles Trend → Cockpit → Tabular. Side Panel opens clinical tools. Keys: F panel · H full-screen.</div></div>
+  </div>
+</div>
+
+<div id="cfgModal"><div class="win"><div class="h"><span id="cfg_title">Target</span><span id="cfg_x" style="cursor:pointer">×</span></div>
+  <div class="cw"><div class="r">Target low <input type="number" id="cfg_lo"></div><div class="r">Target high <input type="number" id="cfg_hi"></div>
+    <div style="display:flex;gap:8px;margin-top:12px"><button id="cfg_apply" style="background:#15502f;border-color:#1d6e40;color:#d6ffe4">Apply</button><button id="cfg_cancel">Cancel</button></div></div></div></div>
+
+<div id="oxiModal" class="amodal"><div class="awin">
+  <div class="ah">Venous Oximetry — In Vivo Calibration <span id="oxi_x">×</span></div>
+  <div class="acw">
+    <div class="ostep">Signal Quality (SQI) <span id="oxi_sqi">▮▮▯▯</span> — calibrate when SQI is 1–2 bars. Recommended every 24 h.</div>
+    <ol class="osteps">
+      <li><b>Baseline</b> — establish reference signal. <button id="oxi_base">Establish Baseline</button> <span id="oxi_baseSt" style="color:#7ad17a"></span></li>
+      <li><b>Draw</b> — withdraw 2 mL waste + sample over 30 s; send to lab. <button id="oxi_draw" disabled>Mark Drawn</button> <span id="oxi_drawSt" style="color:#7ad17a"></span></li>
+      <li><b>Lab values</b> — enter co-oximeter result: &nbsp; ScvO₂/SvO₂ <input type="number" id="oxi_lab" value="70" style="width:64px"> % &nbsp; HGB <input type="number" id="oxi_hgb" value="11.5" step="0.1" style="width:64px"> g/dL</li>
+    </ol>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button id="oxi_cal" class="go" disabled>Calibrate</button><button id="oxi_recat">New Catheter (uncalibrate)</button><button id="oxi_close2">Close</button></div>
+    <div id="oxi_msg" class="omsg"></div>
+  </div></div></div>
+
+<div id="patientModal" class="amodal"><div class="awin">
+  <div class="ah">Patient Data <span id="pat_x">×</span></div>
+  <div class="acw">
+    <div class="prow">Name <input id="pat_name"></div>
+    <div class="prow">Patient ID <input id="pat_id"></div>
+    <div class="prow">Age <input type="number" id="pat_age" style="flex:0 0 80px"> Sex <select id="pat_sex" style="flex:0 0 80px"><option>M</option><option>F</option></select></div>
+    <div class="prow">Height (cm) <input type="number" id="pat_ht"></div>
+    <div class="prow">Weight (kg) <input type="number" id="pat_wt"></div>
+    <div class="prow">Hemoglobin (g/dL) <input type="number" id="pat_hgb" step="0.1"></div>
+    <div class="prow">BSA (DuBois) <b id="pat_bsa">2.0</b> m²</div>
+    <div style="display:flex;gap:8px;margin-top:10px"><button id="pat_apply" class="go">Apply</button><button id="pat_close2">Cancel</button></div>
+  </div></div></div>
+
+<script>
+"use strict";
+const byId=id=>document.getElementById(id);
+const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+
+/* ===== engine (validated) ===== */
+const drv={co:5.2,map:82,pr:78,cvp:8,svv:9,ppv:8,scvo2:72,hpi:18,sys:118,dia:64,temp:37.0,ht:170,wt:80,mode:"FloTrac",hpiThr:85,scn:"postop",
+  sensors:{cco:true,acumen:true,oximetry:true},oxiCal:true,sqi:2,hgb:11.5,hct:34,lastCalMin:0,
+  patName:"Doe, John",patId:"SK-SN12345",age:64,sex:"M",tabInc:300};
+let ccoAvg=drv.co,scoVal=drv.co,statTimer=0;
+function statTick(dt){ccoAvg+=(drv.co-ccoAvg)*Math.min(1,dt*0.12);statTimer+=dt;if(statTimer>=2){statTimer=0;scoVal=drv.co*(0.93+Math.random()*0.14);}drv.lastCalMin+=dt/60;}
+function bsa(){return 0.007184*Math.pow(drv.ht,0.725)*Math.pow(drv.wt,0.425);}
+function deriv(){const B=bsa();const CO=ccoAvg;const sv=CO*1000/Math.max(20,drv.pr);const svr=80*(drv.map-drv.cvp)/Math.max(0.5,CO);
+  return {bsa:B,ci:CO/B,sv:sv,svi:sv/B,svr:svr,svri:svr*B,dpdt:clamp(380+(drv.map-65)*9+(CO-5)*40,200,2000),ea:clamp(0.5+(drv.svv-6)*0.06+(svr-1000)/2200,0.3,2.5)};}
+function sensorsOK(t){const s=drv.sensors;if(t==="flow")return s.cco||s.acumen;if(t==="cco")return s.cco;if(t==="acumen")return s.acumen;if(t==="adv")return s.cco&&s.acumen;if(t==="oximetry")return s.oximetry;return true;}
+function paramAvailable(k){const t=P[k].need;if(!sensorsOK(t)){const m={flow:"Connect sensor",cco:"Connect Swan CCO",acumen:"Connect Acumen IQ",adv:"Swan CCO + Acumen IQ",oximetry:"Connect Oximetry"}[t];return{ok:false,msg:m};}
+  if(t==="oximetry"&&!drv.oxiCal)return{ok:false,msg:"Calibration required"};return{ok:true};}
+const P={
+  co:{lab:"CO",u:"L/min",c:"--co",lo:4,hi:8,dec:1,gmin:0,gmax:12,need:"flow",val:()=>ccoAvg},
+  ci:{lab:"CI",u:"L/min/m²",c:"--co",lo:2.5,hi:4.0,dec:1,gmin:0,gmax:12,need:"flow",val:()=>ccoAvg/bsa()},
+  sco:{lab:"sCO",u:"L/min STAT",c:"--co",lo:4,hi:8,dec:1,gmin:0,gmax:12,need:"cco",val:()=>scoVal},
+  sci:{lab:"sCI",u:"L/min/m² STAT",c:"--co",lo:2.5,hi:4.0,dec:1,gmin:0,gmax:12,need:"cco",val:()=>scoVal/bsa()},
+  sv:{lab:"SV",u:"mL/beat",c:"--sv",lo:60,hi:100,dec:0,gmin:0,gmax:160,need:"flow",val:()=>deriv().sv},
+  svi:{lab:"SVI",u:"mL/beat/m²",c:"--sv",lo:33,hi:47,dec:0,gmin:0,gmax:80,need:"flow",val:()=>deriv().svi},
+  svv:{lab:"SVV",u:"%",c:"--svv",lo:0,hi:13,dec:0,gmin:0,gmax:50,lowGood:1,need:"acumen",val:()=>drv.svv},
+  ppv:{lab:"PPV",u:"%",c:"--ppv",lo:0,hi:13,dec:0,gmin:0,gmax:50,lowGood:1,need:"acumen",val:()=>drv.ppv},
+  svr:{lab:"SVR",u:"dyn·s/cm⁵",c:"--svr",lo:800,hi:1200,dec:0,gmin:0,gmax:2400,need:"flow",val:()=>deriv().svr},
+  svri:{lab:"SVRI",u:"dyn·s/cm⁵·m²",c:"--svr",lo:1970,hi:2390,dec:0,gmin:0,gmax:4000,need:"flow",val:()=>deriv().svri},
+  map:{lab:"MAP",u:"mmHg",c:"--map",lo:65,hi:100,dec:0,gmin:0,gmax:160,need:"acumen",val:()=>drv.map},
+  pr:{lab:"PR",u:"bpm",c:"--pr",lo:60,hi:100,dec:0,gmin:0,gmax:200,need:"flow",val:()=>drv.pr},
+  cvp:{lab:"CVP",u:"mmHg",c:"--cvp",lo:2,hi:10,dec:0,gmin:0,gmax:30,need:"cco",val:()=>drv.cvp},
+  scvo2:{lab:"ScvO₂",u:"%",c:"--scvo2",lo:65,hi:75,dec:0,gmin:0,gmax:99,need:"oximetry",val:()=>drv.scvo2},
+  hpi:{lab:"HPI",u:"",c:"--hpi",lo:0,hi:85,dec:0,gmin:0,gmax:100,lowGood:1,need:"adv",val:()=>drv.hpi},
+};
+let keyParams=["ci","sco","scvo2","svv"];
+const ALLKEYS=["co","ci","sco","sci","sv","svi","svv","ppv","svr","svri","map","pr","cvp","scvo2","hpi"];
+function statusClass(k){const p=P[k],v=p.val();
+  if(k==="hpi")return v>=drv.hpiThr?"bad":v>=drv.hpiThr*0.7?"warn":"good";
+  if(p.lowGood)return v<=p.hi?"good":v<=p.hi*1.5?"warn":"bad";
+  if(v>=p.lo&&v<=p.hi)return "good";const span=p.hi-p.lo;return (v<p.lo-span*0.5||v>p.hi+span*0.5)?"bad":"warn";}
+const SCN={
+  postop:{name:"Stable Post-op",co:5.2,map:82,pr:78,cvp:8,svv:9,ppv:8,scvo2:72,hpi:18,sys:118,dia:64,temp:37.0,mode:"FloTrac",keys:["ci","sco","scvo2","svv"]},
+  hypov:{name:"Hypovolemia",co:3.6,map:66,pr:108,cvp:3,svv:22,ppv:20,scvo2:62,hpi:78,sys:96,dia:58,temp:36.6,mode:"FloTrac",keys:["ci","sco","svv","ppv"]},
+  sepsis:{name:"Vasoplegia / Sepsis",co:8.6,map:58,pr:122,cvp:5,svv:16,ppv:15,scvo2:78,hpi:72,sys:92,dia:40,temp:38.9,mode:"Swan",keys:["ci","svr","scvo2","svv"]},
+  cardiogenic:{name:"Cardiogenic / LV failure",co:3.0,map:62,pr:104,cvp:16,svv:8,ppv:8,scvo2:52,hpi:88,sys:88,dia:54,temp:36.4,mode:"Swan",keys:["ci","sco","scvo2","sv"]},
+};
+function loadScn(k){const s=SCN[k];if(!s)return;Object.assign(drv,{co:s.co,map:s.map,pr:s.pr,cvp:s.cvp,svv:s.svv,ppv:s.ppv,scvo2:s.scvo2,hpi:s.hpi,sys:s.sys,dia:s.dia,temp:s.temp,mode:s.mode});
+  ccoAvg=drv.co;scoVal=drv.co;keyParams=s.keys.slice();drv.scn=k;cancelTrans();syncFac();buildKeybox();buildTiles();buildCockpit();applyMode();}
+
+/* ===== canvases ===== */
+const artC=byId("artC"),ax=artC.getContext("2d"),trendC=byId("trendC"),tx=trendC.getContext("2d");
+let DPR=1,artW=0,artH=0,trW=0,trH=0;
+function sz(c,ctx){const r=c.parentElement.getBoundingClientRect();DPR=clamp(window.devicePixelRatio||1,1,2);c.width=Math.max(1,r.width*DPR);c.height=Math.max(1,r.height*DPR);ctx.setTransform(DPR,0,0,DPR,0,0);return r;}
+function layout(){const a=sz(artC,ax);artW=a.width;artH=a.height;const t=sz(trendC,tx);trW=t.width;trH=t.height;sizeGlobes();}
+
+/* ART waveform */
+let artBuf=[],tAbs=0,cardPhase=0;
+function artN(pe){const up=0.13,notch=0.31,dmin=0.5;let n;if(pe<up)n=Math.pow(Math.sin(pe/up*Math.PI/2),0.82);else if(pe<notch){const k=(pe-up)/(notch-up);n=1-(1-dmin)*Math.pow(k,0.85);}else if(pe<notch+0.022)n=dmin-0.05*Math.sin((pe-notch)/0.022*Math.PI);else n=(dmin+0.08)*Math.exp(-(pe-notch-0.022)*2.7);return clamp(n,0,1.05);}
+function drawART(dt){const len=60/Math.max(20,drv.pr);cardPhase+=dt/len;if(cardPhase>=1)cardPhase-=1;
+  artBuf.push(drv.dia+(drv.sys-drv.dia)*artN(cardPhase));const maxN=Math.floor(artW);while(artBuf.length>maxN)artBuf.shift();
+  ax.fillStyle="#0a0d12";ax.fillRect(0,0,artW,artH);ax.strokeStyle="#19232e";ax.lineWidth=1;for(let gy=0;gy<artH;gy+=Math.max(18,artH/4)){ax.beginPath();ax.moveTo(0,gy);ax.lineTo(artW,gy);ax.stroke();}
+  ax.strokeStyle="#ff4d4d";ax.lineWidth=1.6;ax.beginPath();for(let i=0;i<artBuf.length;i++){const y=artH*0.94-clamp(artBuf[i]/200,0,1)*artH*0.86;i===0?ax.moveTo(i,y):ax.lineTo(i,y);}ax.stroke();}
+
+/* trend */
+const TREND=[];let trendTimer=0;
+function pushTrend(){const row={t:tAbs};ALLKEYS.forEach(k=>row[k]=P[k].val());TREND.push(row);if(TREND.length>900)TREND.shift();}
+function drawTrend(){tx.fillStyle="#000";tx.fillRect(0,0,trW,trH);tx.strokeStyle="#0f1820";tx.lineWidth=1;for(let gx=0;gx<trW;gx+=trW/8){tx.beginPath();tx.moveTo(gx,0);tx.lineTo(gx,trH);tx.stroke();}
+  const plot=keyParams.slice(0,5),band=trH/plot.length;
+  plot.forEach((k,idx)=>{const p=P[k],top=idx*band;let mn=p.lo,mx=p.hi;for(const r of TREND){mn=Math.min(mn,r[k]);mx=Math.max(mx,r[k]);}const pad=(mx-mn)*0.2||1;mn-=pad;mx+=pad;
+    const yT=v=>top+band*0.88-clamp((v-mn)/(mx-mn),0,1)*band*0.78;
+    tx.fillStyle="rgba(70,201,90,0.08)";tx.fillRect(0,yT(p.hi),trW,Math.max(1,yT(p.lo)-yT(p.hi)));
+    tx.strokeStyle="#1c2530";tx.beginPath();tx.moveTo(0,top);tx.lineTo(trW,top);tx.stroke();
+    tx.fillStyle=cssv("--dim");tx.font="600 10px Segoe UI";tx.textAlign="left";tx.fillText(Math.round(mx),4,top+12);tx.fillText(Math.round(mn),4,top+band-6);
+    if(TREND.length>1&&paramAvailable(k).ok){tx.strokeStyle=cssv(p.c);tx.lineWidth=2;tx.beginPath();for(let i=0;i<TREND.length;i++){const x=i/(TREND.length-1)*trW;const y=yT(TREND[i][k]);i===0?tx.moveTo(x,y):tx.lineTo(x,y);}tx.stroke();
+      const ly=yT(TREND[TREND.length-1][k]);tx.fillStyle=cssv(p.c);tx.beginPath();tx.arc(trW-3,ly,3,0,7);tx.fill();}
+    else if(!paramAvailable(k).ok){tx.fillStyle="#5e7488";tx.font="12px Segoe UI";tx.textAlign="left";tx.fillText(paramAvailable(k).msg,trW/2-40,top+band/2);}});}
+
+/* tabular */
+function valAt(tc,k){if(!TREND.length)return P[k].val();if(tc>=TREND[TREND.length-1].t)return P[k].val();let best=TREND[0];for(const r of TREND){if(r.t<=tc)best=r;else break;}return best[k];}
+function drawTabular(){const inc=drv.tabInc,rows=keyParams.slice(0,5),times=[];for(let i=7;i>=0;i--)times.push(tAbs-i*inc);
+  let html='<table class="tab"><tr><td class="pl"></td>'+times.map(tc=>`<td class="time">${fmtClock(tc)}</td>`).join("")+'</tr>';
+  rows.forEach(k=>{const p=P[k],ok=paramAvailable(k).ok;html+=`<tr><td class="pl" style="color:${cssv(p.c)}">${p.lab}<br><span style="font-size:10px;color:#5e7488">${p.u}</span></td>`+times.map(tc=>`<td>${ok?valAt(tc,k).toFixed(p.dec):'– –'}</td>`).join("")+'</tr>';});
+  html+='</table>';byId("tabTable").innerHTML=html;}
+document.querySelectorAll("#tabBar button").forEach(b=>b.addEventListener("click",()=>{drv.tabInc=+b.dataset.inc;document.querySelectorAll("#tabBar button").forEach(x=>x.classList.toggle("on",x===b));}));
+function fmtClock(t){const d=new Date(Date.now()-(tAbs-t)*1000);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")+":"+String(d.getSeconds()).padStart(2,"0");}
+
+/* tiles */
+function buildTiles(){const c=byId("tiles");c.innerHTML=keyParams.map(k=>{const p=P[k];
+  return `<div class="tile" data-k="${k}"><span class="src">IQ Sensor</span><span class="bell">🔕</span><span class="tval" id="tv_${k}">--</span><div class="tname"><span id="tl_${k}">${p.lab}</span><span class="tu">${p.u}</span></div></div>`;}).join("")+'<div id="addTile">+</div>';
+  c.querySelectorAll(".tile").forEach(t=>{t.addEventListener("click",()=>openTileOrOxi(t.dataset.k));});
+  byId("addTile").addEventListener("click",()=>{byId("fac").classList.add("open");});}
+function openTileOrOxi(k){selTile=k;if(k==="scvo2"&&drv.sensors.oximetry){openOxi();}else openCfg(k);}
+let selTile="ci";
+function updateTiles(){keyParams.forEach(k=>{const p=P[k],tv=byId("tv_"+k),tl=byId("tl_"+k);if(!tv)return;const av=paramAvailable(k);
+  if(!av.ok){tv.textContent="– –";tv.className="tval neutral";tv.style.fontSize="20px";if(tl)tl.textContent=av.msg;}
+  else{tv.style.fontSize="";tv.textContent=p.val().toFixed(p.dec);tv.className="tval "+statusClass(k);if(tl)tl.textContent=p.lab;}
+  const tile=tv.closest(".tile");if(tile){tile.classList.toggle("alarm",av.ok&&statusClass(k)==="bad");tile.classList.toggle("sel",k===selTile);}});}
+
+/* cockpit globes (Fig 4-10 zoned) */
+function zones(k){const p=P[k],z=[],push=(a,b,c)=>{if(b>a)z.push([a,b,c]);};
+  if(p.lowGood){const y=p.hi+(p.gmax-p.hi)*0.4;push(p.gmin,p.hi,"good");push(p.hi,y,"warn");push(y,p.gmax,"bad");}
+  else{const c=(p.hi-p.lo)*0.6;push(p.gmin,Math.max(p.gmin,p.lo-c),"bad");push(Math.max(p.gmin,p.lo-c),p.lo,"warn");push(p.lo,p.hi,"good");push(p.hi,Math.min(p.gmax,p.hi+c),"warn");push(Math.min(p.gmax,p.hi+c),p.gmax,"bad");}
+  return z;}
+function buildCockpit(){const c=byId("cockpitView");c.innerHTML=keyParams.map(k=>`<div class="globe" data-k="${k}"><span class="gtag">IQ Sensor</span><span class="gbell">🔕</span><canvas id="gc_${k}"></canvas></div>`).join("");
+  c.querySelectorAll(".globe").forEach(g=>g.addEventListener("click",()=>openTileOrOxi(g.dataset.k)));sizeGlobes();}
+function sizeGlobes(){keyParams.forEach(k=>{const cv=byId("gc_"+k);if(!cv||!cv.parentElement)return;const r=cv.parentElement.getBoundingClientRect();cv.width=Math.max(1,r.width*DPR);cv.height=Math.max(1,r.height*DPR);cv.getContext("2d").setTransform(DPR,0,0,DPR,0,0);});}
+function drawCockpit(){keyParams.forEach(k=>{const cv=byId("gc_"+k);if(!cv)return;const g=cv.getContext("2d");const w=cv.width/DPR,h=cv.height/DPR;g.clearRect(0,0,w,h);
+  const cx=w/2,cy=h*0.55,r=Math.min(w*0.42,h*0.40),a0=Math.PI*0.7,a1=Math.PI*2.3,sweep=a1-a0,p=P[k],v=p.val();
+  const fr=x=>clamp((x-p.gmin)/(p.gmax-p.gmin),0,1);
+  g.lineWidth=Math.max(10,r*0.20);g.lineCap="butt";
+  const av=paramAvailable(k);
+  if(!av.ok){g.strokeStyle="#172029";g.beginPath();g.arc(cx,cy,r,a0,a1);g.stroke();g.fillStyle="#fff";g.textAlign="center";g.font="700 "+Math.round(r*0.32)+"px Segoe UI";g.fillText(p.lab,cx,cy);g.fillStyle="#7f9bb3";g.font=Math.round(r*0.17)+"px Segoe UI";g.fillText(av.msg,cx,cy+r*0.34);cv.parentElement.classList.remove("alarm");return;}
+  zones(k).forEach(z=>{g.strokeStyle=({good:"#37c24a",warn:"#f0c020",bad:"#e8303a"})[z[2]];g.beginPath();g.arc(cx,cy,r,a0+sweep*fr(z[0]),a0+sweep*fr(z[1]));g.stroke();});
+  // scale numbers
+  g.fillStyle="#9fb0bf";g.font="600 11px Segoe UI";g.textAlign="center";g.textBaseline="middle";
+  const marks=[p.gmin,p.lowGood?null:p.lo,p.hi,p.gmax].filter(x=>x!==null);
+  marks.forEach(m=>{const an=a0+sweep*fr(m),rr=r+Math.max(12,r*0.22);g.fillText((p.dec?m.toFixed(p.dec):Math.round(m))+"",cx+Math.cos(an)*rr,cy+Math.sin(an)*rr);});
+  // needle (white wedge)
+  const va=a0+sweep*fr(v);g.strokeStyle="#ffffff";g.lineWidth=Math.max(10,r*0.20)+4;g.beginPath();g.arc(cx,cy,r,va-0.04,va+0.04);g.stroke();
+  // center
+  const sc=statusClass(k),vc=sc==="bad"?"#ff5a5a":sc==="warn"?"#f5c542":"#ffffff";
+  g.fillStyle=vc;g.font="800 "+Math.round(r*0.72)+"px Segoe UI";g.textBaseline="alphabetic";g.fillText(v.toFixed(p.dec),cx,cy+r*0.16);
+  g.fillStyle="#fff";g.font="700 "+Math.round(r*0.26)+"px Segoe UI";g.fillText(p.lab,cx,cy+r*0.52);
+  g.fillStyle="#9fb0bf";g.font=Math.round(r*0.18)+"px Segoe UI";g.fillText(p.u,cx,cy+r*0.74);
+  cv.parentElement.classList.toggle("alarm",sc==="bad"&&(k==="hpi"||k==="map"||k==="ci"));});}
+
+/* HPI gauge */
+function drawHPI(){const cv=byId("hpiGauge"),g=cv.getContext("2d");g.clearRect(0,0,240,240);const cx=120,cy=125,r=92,v=drv.hpi/100;
+  if(!sensorsOK("adv")){g.lineWidth=18;g.strokeStyle="#16202b";g.beginPath();g.arc(cx,cy,r,Math.PI*0.75,Math.PI*2.25);g.stroke();g.fillStyle="#8aa0b4";g.textAlign="center";g.font="700 16px Segoe UI";g.fillText("HPI unavailable",cx,cy-6);g.font="12px Segoe UI";g.fillText("Connect Swan CCO +",cx,cy+18);g.fillText("Acumen IQ arterial sensor",cx,cy+36);byId("hpiBanner").classList.remove("show");return;}
+  g.lineWidth=18;g.strokeStyle="#16202b";g.beginPath();g.arc(cx,cy,r,Math.PI*0.75,Math.PI*2.25);g.stroke();
+  const col=drv.hpi>=drv.hpiThr?cssv("--bad"):drv.hpi>=drv.hpiThr*0.7?cssv("--warn"):cssv("--co");
+  g.strokeStyle=col;g.beginPath();g.arc(cx,cy,r,Math.PI*0.75,Math.PI*0.75+Math.PI*1.5*v);g.stroke();
+  g.fillStyle=col;g.font="800 56px Segoe UI";g.textAlign="center";g.fillText(Math.round(drv.hpi),cx,cy+14);
+  g.fillStyle=cssv("--dim");g.font="700 14px Segoe UI";g.fillText("HPI",cx,cy+40);g.font="11px Segoe UI";g.fillText("threshold "+drv.hpiThr,cx,cy+78);
+  byId("hpiBanner").classList.toggle("show",drv.hpi>=drv.hpiThr);const d=deriv();const set=(b,val,lo,hi)=>{const e=byId(b);if(e)e.style.width=clamp((val-lo)/(hi-lo)*100,2,100)+"%";};
+  byId("cv_map").textContent=Math.round(drv.map);set("cb_map",drv.map,40,120);byId("cv_dpdt").textContent=Math.round(d.dpdt);set("cb_dpdt",d.dpdt,200,1200);
+  byId("cv_ea").textContent=d.ea.toFixed(1);set("cb_ea",d.ea,0.3,2);byId("cv_svv").textContent=Math.round(drv.svv);set("cb_svv",drv.svv,2,30);
+  byId("cv_co").textContent=drv.co.toFixed(1);set("cb_co",drv.co,2,10);byId("cv_pr").textContent=Math.round(drv.pr);set("cb_pr",drv.pr,40,160);}
+
+/* GDT */
+let gdt={param:"ci",lo:2.5,hi:4.0,t0:null,inT:0,total:0,hist:[]};
+function buildGdtSel(){byId("gdtParam").innerHTML=ALLKEYS.map(k=>`<option value="${k}">${P[k].lab}</option>`).join("");byId("gdtParam").value=gdt.param;byId("gdtLo").value=gdt.lo;byId("gdtHi").value=gdt.hi;}
+function gdtReset(){gdt.param=byId("gdtParam").value;gdt.lo=+byId("gdtLo").value;gdt.hi=+byId("gdtHi").value;gdt.t0=tAbs;gdt.inT=0;gdt.total=0;gdt.hist=[];}
+function gdtTick(dt){if(gdt.t0===null)return;const v=P[gdt.param].val(),ok=v>=gdt.lo&&v<=gdt.hi;gdt.total+=dt;if(ok)gdt.inT+=dt;gdt.hist.push({v,ok});if(gdt.hist.length>600)gdt.hist.shift();}
+function drawGDT(){const p=P[gdt.param];byId("gdtCur").textContent=p.val().toFixed(p.dec);byId("gdtCurU").textContent=p.lab+" "+p.u;byId("gdtTit").textContent=(gdt.total>0?Math.round(gdt.inT/gdt.total*100):0)+"%";
+  const el=gdt.t0!==null?tAbs-gdt.t0:0;byId("gdtElapsed").textContent=Math.floor(el/60)+":"+String(Math.floor(el%60)).padStart(2,"0");
+  const cv=byId("gdtC");if(cv.width!==cv.clientWidth)cv.width=cv.clientWidth;cv.height=150;const g=cv.getContext("2d"),w=cv.width,h=cv.height;g.fillStyle="#000";g.fillRect(0,0,w,h);if(gdt.hist.length<2)return;
+  let mn=gdt.lo,mx=gdt.hi;for(const r of gdt.hist){mn=Math.min(mn,r.v);mx=Math.max(mx,r.v);}const pad=(mx-mn)*0.2||1;mn-=pad;mx+=pad;const yT=v=>h-8-clamp((v-mn)/(mx-mn),0,1)*(h-16);
+  g.fillStyle="rgba(70,201,90,0.12)";g.fillRect(0,yT(gdt.hi),w,Math.max(1,yT(gdt.lo)-yT(gdt.hi)));g.strokeStyle=cssv(p.c);g.lineWidth=2;g.beginPath();gdt.hist.forEach((r,i)=>{const x=i/(gdt.hist.length-1)*w,y=yT(r.v);i===0?g.moveTo(x,y):g.lineTo(x,y);});g.stroke();}
+
+/* views */
+let view="mon";
+function setView(v){view=v;
+  byId("trendC").style.display=(v==="mon")?"block":"none";
+  byId("tabArea").style.display=(v==="tabular")?"block":"none";
+  byId("cockpitView").classList.toggle("show",v==="cockpit");
+  byId("hpiView").classList.toggle("show",v==="hpi");byId("gdtView").classList.toggle("show",v==="gdt");
+  const showSide=(v==="mon"||v==="tabular");byId("artRow").style.display=showSide?"flex":"none";byId("tiles").style.display=showSide?"flex":"none";
+  layout();if(v==="cockpit")sizeGlobes();}
+const SCREENS=["mon","cockpit","tabular"];
+byId("nb_screen").addEventListener("click",()=>{let i=SCREENS.indexOf(view);i=(i<0?0:(i+1)%SCREENS.length);setView(SCREENS[i]);});
+
+/* alarms / status */
+function activeAlarms(){const out=[];keyParams.forEach(k=>{if(!paramAvailable(k).ok)return;if(statusClass(k)==="bad"){const p=P[k],v=p.val();const dir=(p.lowGood||v>p.hi)?"above high":"below low";out.push("Acumen IQ sensor "+p.lab+" is "+dir+" limit");}});return out;}
+let silenced=false;
+function updateStatus(){const al=activeAlarms();const on=al.length>0&&!silenced;
+  byId("status").classList.toggle("alarm",on);byId("nb_alarm").classList.toggle("active",on);
+  byId("alarmLab").textContent=on?"Alarm":(silenced?"Silenced":"Alarms");
+  byId("noteTxt").textContent=on?("Alarm: "+al[0]):(drv.mode==="Swan"?"Venous Oximetry — connect oximetry cable for venous oximetry monitoring":drv.mode==="ClearSight"?"ClearSight — non-invasive finger cuff active":"FloTrac — arterial pressure-based monitoring");
+  byId("hrIco").textContent=Math.round(drv.pr);byId("snLab").textContent=drv.patId;}
+
+/* mode */
+function applyMode(){byId("modeBtnLab").textContent=drv.mode;byId("artSrc").textContent=drv.mode==="ClearSight"?"ClearSight":"IQ Sensor";byId("artLab").textContent=(drv.mode==="ClearSight"?"BP":"ART")+" mmHg";}
+
+/* progressive transition */
+let trans=null;
+function startTrans(scn,dur){const s=SCN[scn];if(!s)return;const ks=["co","map","pr","cvp","svv","ppv","scvo2","hpi","sys","dia","temp"];const from={},to={};ks.forEach(k=>{from[k]=drv[k];to[k]=s[k];});trans={from,to,ks,dur:Math.max(1,dur),el:0};updateTransUI();}
+function tickTrans(dt){if(!trans)return;trans.el+=dt;const e=(t=>t*t*(3-2*t))(clamp(trans.el/trans.dur,0,1));trans.ks.forEach(k=>drv[k]=trans.from[k]+(trans.to[k]-trans.from[k])*e);syncFac();if(trans.el>=trans.dur)trans=null;updateTransUI();}
+function cancelTrans(){if(trans){trans=null;updateTransUI();}}
+function updateTransUI(){const p=byId("tr_prog");if(!p)return;if(!trans){p.textContent="No transition running.";return;}p.innerHTML="▶ "+Math.round(trans.el/trans.dur*100)+"% · "+Math.max(0,Math.round(trans.dur-trans.el))+"s left";}
+
+/* tile/globe target cfg */
+let cfgKey=null;
+function openCfg(k){cfgKey=k;const p=P[k];byId("cfg_title").textContent=p.lab+" — Target Range";byId("cfg_lo").value=p.lo;byId("cfg_hi").value=p.hi;byId("cfgModal").style.display="flex";}
+byId("cfg_apply").addEventListener("click",()=>{if(cfgKey){P[cfgKey].lo=+byId("cfg_lo").value;P[cfgKey].hi=+byId("cfg_hi").value;}byId("cfgModal").style.display="none";});
+byId("cfg_cancel").addEventListener("click",()=>byId("cfgModal").style.display="none");byId("cfg_x").addEventListener("click",()=>byId("cfgModal").style.display="none");
+
+/* oximetry in-vivo calibration */
+function sqiBars(){const n=clamp(Math.round(drv.sqi),1,4);return "▮".repeat(n)+"▯".repeat(4-n);}
+let oxiBaseOK=false,oxiDrawn=false;
+function openOxi(){oxiBaseOK=false;oxiDrawn=false;byId("oxi_baseSt").textContent="";byId("oxi_drawSt").textContent="";byId("oxi_draw").disabled=true;byId("oxi_cal").disabled=true;byId("oxi_sqi").textContent=sqiBars();byId("oxi_hgb").value=drv.hgb;byId("oxi_lab").value=Math.round(drv.scvo2);byId("oxi_msg").className="omsg";byId("oxi_msg").textContent=drv.oxiCal?"Currently calibrated. Recalibrate as needed (q24h).":"Not calibrated — complete steps to display SvO₂.";byId("oxiModal").classList.add("open");}
+byId("oxi_x").addEventListener("click",()=>byId("oxiModal").classList.remove("open"));
+byId("oxi_close2").addEventListener("click",()=>byId("oxiModal").classList.remove("open"));
+byId("oxi_base").addEventListener("click",()=>{if(drv.sqi>2){byId("oxi_msg").className="omsg warn";byId("oxi_msg").textContent="Unstable signal (SQI "+Math.round(drv.sqi)+"). Reposition catheter; calibrate at SQI 1–2.";return;}oxiBaseOK=true;byId("oxi_baseSt").textContent="✓ baseline OK";byId("oxi_draw").disabled=false;byId("oxi_msg").className="omsg";byId("oxi_msg").textContent="Baseline established. Proceed to draw.";});
+byId("oxi_draw").addEventListener("click",()=>{if(!oxiBaseOK)return;oxiDrawn=true;byId("oxi_drawSt").textContent="✓ 2 mL sample sent to lab";byId("oxi_cal").disabled=false;byId("oxi_msg").textContent="Enter co-oximeter lab values, then Calibrate.";});
+byId("oxi_cal").addEventListener("click",()=>{if(!oxiDrawn)return;drv.scvo2=clamp(+byId("oxi_lab").value,30,99);drv.hgb=clamp(+byId("oxi_hgb").value,4,20);drv.oxiCal=true;drv.lastCalMin=0;byId("oxi_msg").className="omsg";byId("oxi_msg").textContent="✓ Calibrated. ScvO₂ "+Math.round(drv.scvo2)+"% now displayed.";syncFac();});
+byId("oxi_recat").addEventListener("click",()=>{drv.oxiCal=false;oxiBaseOK=false;oxiDrawn=false;byId("oxi_baseSt").textContent="";byId("oxi_drawSt").textContent="";byId("oxi_draw").disabled=true;byId("oxi_cal").disabled=true;byId("oxi_msg").className="omsg warn";byId("oxi_msg").textContent="New catheter — SvO₂ requires calibration.";});
+
+/* patient data */
+function openPatient(){byId("pat_name").value=drv.patName;byId("pat_id").value=drv.patId;byId("pat_age").value=drv.age;byId("pat_sex").value=drv.sex;byId("pat_ht").value=drv.ht;byId("pat_wt").value=drv.wt;byId("pat_hgb").value=drv.hgb;byId("pat_bsa").textContent=bsa().toFixed(2);byId("patientModal").classList.add("open");}
+["pat_ht","pat_wt"].forEach(id=>byId(id).addEventListener("input",()=>{const h=+byId("pat_ht").value||170,w=+byId("pat_wt").value||80;byId("pat_bsa").textContent=(0.007184*Math.pow(h,0.725)*Math.pow(w,0.425)).toFixed(2);}));
+byId("pat_apply").addEventListener("click",()=>{drv.patName=byId("pat_name").value;drv.patId=byId("pat_id").value;drv.age=+byId("pat_age").value||0;drv.sex=byId("pat_sex").value;drv.ht=+byId("pat_ht").value||170;drv.wt=+byId("pat_wt").value||80;drv.hgb=clamp(+byId("pat_hgb").value||11.5,4,20);byId("patientModal").classList.remove("open");});
+byId("pat_x").addEventListener("click",()=>byId("patientModal").classList.remove("open"));byId("pat_close2").addEventListener("click",()=>byId("patientModal").classList.remove("open"));
+
+/* sensors */
+document.querySelectorAll("[data-sensor]").forEach(t=>t.addEventListener("click",()=>{const k=t.dataset.sensor;drv.sensors[k]=!drv.sensors[k];t.classList.toggle("on",drv.sensors[k]);}));
+byId("f_sqi").addEventListener("input",e=>{drv.sqi=+e.target.value;byId("f_sqi_v").textContent=drv.sqi;});
+byId("f_oxi").addEventListener("click",openOxi);
+
+/* keybox */
+function buildKeybox(){const b=byId("keybox");b.innerHTML=ALLKEYS.map(k=>`<div class="tog ${keyParams.includes(k)?'on':''}" data-k="${k}">${P[k].lab}</div>`).join("");
+  b.querySelectorAll(".tog").forEach(t=>t.addEventListener("click",()=>{const k=t.dataset.k,i=keyParams.indexOf(k);if(i>=0){if(keyParams.length>1)keyParams.splice(i,1);}else{if(keyParams.length<5)keyParams.push(k);}t.classList.toggle("on",keyParams.includes(k));buildTiles();buildCockpit();}));}
+
+/* side panel */
+const SIDE_TXT={afm:"<b>Assisted Fluid Management (AFM)</b><br>Recommends fluid bolus timing based on SVV/SV response. Current SVV indicates the patient is "+(drv.svv>13?"likely fluid-responsive — consider a bolus.":"not clearly fluid-responsive."),
+  dvc:"",events:"<b>Events &amp; Intervention</b><br>Log an intervention (fluid bolus, pressor change, position) to annotate the trend. (Sim placeholder — annotations not persisted.)",
+  frt:""};
+function openTool(t){document.querySelectorAll("#side .stool").forEach(b=>b.classList.toggle("on",b.dataset.tool===t));
+  if(t==="gdt"){setView("gdt");byId("sContent").classList.remove("show");return;}
+  if(t==="hpi"){setView("hpi");byId("sContent").classList.remove("show");return;}
+  const sc=byId("sContent");sc.classList.add("show");
+  if(t==="dvc"){const d=deriv();sc.innerHTML=`<b>Derived Value Calculator</b><br>BSA ${d.bsa.toFixed(2)} m²<br>CI ${d.ci.toFixed(1)} · SV ${d.sv.toFixed(0)} · SVI ${d.svi.toFixed(0)}<br>SVR ${d.svr.toFixed(0)} · SVRI ${d.svri.toFixed(0)}`;}
+  else if(t==="frt"){const resp=drv.svv>13||drv.ppv>13;sc.innerHTML=`<b>Fluid Responsiveness Test</b><br>SVV ${drv.svv}% · PPV ${drv.ppv}%<br>Passive-leg-raise predicted ΔSV: <b>${resp?'+14% — fluid responsive':'+5% — not responsive'}</b>`;}
+  else sc.innerHTML=SIDE_TXT[t]||"";}
+document.querySelectorAll("#side .stool").forEach(b=>b.addEventListener("click",()=>openTool(b.dataset.tool)));
+
+/* facilitator binding */
+function bindR(id,key,vid,fl){const e=byId(id),v=byId(vid);e.addEventListener("input",()=>{cancelTrans();drv[key]=fl?parseFloat(e.value):parseInt(e.value,10);v.textContent=fl?drv[key].toFixed(1):drv[key];});}
+bindR("f_co","co","f_co_v",true);bindR("f_map","map","f_map_v");bindR("f_pr","pr","f_pr_v");bindR("f_cvp","cvp","f_cvp_v");bindR("f_svv","svv","f_svv_v");bindR("f_ppv","ppv","f_ppv_v");bindR("f_scvo2","scvo2","f_scvo2_v");bindR("f_hpi","hpi","f_hpi_v");bindR("f_sys","sys","f_sys_v");bindR("f_dia","dia","f_dia_v");bindR("f_temp","temp","f_temp_v",true);
+byId("f_hpithr").addEventListener("input",e=>{drv.hpiThr=+e.target.value;byId("f_hpithr_v").textContent=drv.hpiThr;});
+byId("f_ht").addEventListener("input",e=>drv.ht=+e.target.value||170);byId("f_wt").addEventListener("input",e=>drv.wt=+e.target.value||80);
+byId("f_mode").addEventListener("change",e=>{drv.mode=e.target.value;applyMode();});
+function syncFac(){const S=(id,val,fl)=>{const e=byId(id);if(e)e.value=val;const vv=byId(id+"_v");if(vv)vv.textContent=fl?(+val).toFixed(1):Math.round(val);};
+  S("f_co",drv.co,true);S("f_map",drv.map);S("f_pr",drv.pr);S("f_cvp",drv.cvp);S("f_svv",drv.svv);S("f_ppv",drv.ppv);S("f_scvo2",drv.scvo2);S("f_hpi",drv.hpi);S("f_sys",drv.sys);S("f_dia",drv.dia);S("f_temp",drv.temp,true);byId("f_mode").value=drv.mode;}
+document.querySelectorAll(".scn[data-scn]").forEach(b=>b.addEventListener("click",()=>loadScn(b.dataset.scn)));
+/* ===== CT Surgery stepped scenarios ===== */
+const CTSCN={
+  sce1:{name:"SCE 1 · Acute Type A aortic dissection",steps:[
+    {label:"Step 1/3 — Hypertensive, tachycardic",st:{co:5.5,map:120,pr:104,cvp:6,svv:10,ppv:9,scvo2:70,hpi:40,sys:188,dia:96,temp:36.8,mode:"FloTrac",keys:["ci","svr","svv","hpi"]}},
+    {label:"Step 2/3 — Controlled (impulse + afterload)",st:{co:5.0,map:85,pr:62,cvp:7,svv:9,ppv:8,scvo2:70,hpi:15,sys:116,dia:70,temp:36.8,mode:"FloTrac",keys:["ci","svr","svv","hpi"]}},
+    {label:"Step 3/3 — Rupture → tamponade",st:{co:3.2,map:60,pr:118,cvp:18,svv:14,ppv:13,scvo2:55,hpi:92,sys:78,dia:50,temp:36.6,mode:"FloTrac",keys:["ci","svr","scvo2","cvp"]}},
+  ]},
+  sce2:{name:"SCE 2 · POD0 MVR/CABG bleeding → tamponade",steps:[
+    {label:"Step 1/2 — Bleeding / coagulopathy (POD0)",st:{co:3.6,map:63,pr:86,cvp:7,svv:18,ppv:16,scvo2:57,hpi:72,sys:102,dia:55,temp:35.9,mode:"Swan",keys:["ci","svr","scvo2","svv"]}},
+    {label:"Step 2/2 — Tamponade",st:{co:3.1,map:66,pr:86,cvp:17,svv:12,ppv:12,scvo2:54,hpi:90,sys:74,dia:66,temp:35.9,mode:"Swan",keys:["ci","svr","scvo2","cvp"]}},
+  ]},
+  sce3:{name:"SCE 3 · Maze — pacing optimization",steps:[
+    {label:"Step 1/3 — Accelerated junctional, low CI",st:{co:3.6,map:68,pr:62,cvp:11,svv:12,ppv:11,scvo2:59,hpi:60,sys:100,dia:65,temp:36.6,mode:"Swan",keys:["ci","svr","scvo2","sv"]}},
+    {label:"Step 2/3 — AV-paced & optimized (CI ↑)",st:{co:4.8,map:78,pr:86,cvp:10,svv:9,ppv:8,scvo2:66,hpi:25,sys:112,dia:62,temp:36.8,mode:"Swan",keys:["ci","svr","scvo2","svv"]}},
+    {label:"Step 3/3 — Morning, hypertensive",st:{co:5.0,map:95,pr:88,cvp:9,svv:8,ppv:7,scvo2:68,hpi:20,sys:150,dia:78,temp:37.0,mode:"Swan",keys:["ci","svr","scvo2","svv"]}},
+  ]},
+  sce4:{name:"SCE 4 · Post-TAVR complete heart block",steps:[
+    {label:"Step 1/4 — Stable post-TAVR",st:{co:5.0,map:89,pr:72,cvp:7,svv:9,ppv:8,scvo2:70,hpi:18,sys:128,dia:70,temp:36.8,mode:"FloTrac",keys:["ci","svr","scvo2","svv"]}},
+    {label:"Step 2/4 — New complete heart block",st:{co:3.0,map:55,pr:38,cvp:9,svv:10,ppv:9,scvo2:58,hpi:85,sys:78,dia:44,temp:36.8,mode:"FloTrac",keys:["ci","svr","scvo2","hpi"]}},
+    {label:"Step 3/4 — Paced, capturing (CI ↑)",st:{co:4.6,map:80,pr:70,cvp:8,svv:9,ppv:8,scvo2:68,hpi:25,sys:112,dia:64,temp:36.8,mode:"FloTrac",keys:["ci","svr","scvo2","svv"]}},
+    {label:"Step 4/4 — Loss of capture",st:{co:3.0,map:56,pr:38,cvp:9,svv:10,ppv:9,scvo2:58,hpi:85,sys:80,dia:46,temp:36.8,mode:"FloTrac",keys:["ci","svr","scvo2","hpi"]}},
+  ]},
+};
+let ctId="",ctStepHS=0;
+function ctApplyHS(){const sc=CTSCN[ctId],ind=byId("ctStepHS");if(!sc){if(ind)ind.textContent="No CT scenario loaded.";return;}
+  const stp=sc.steps[ctStepHS],st=stp.st;
+  Object.assign(drv,{co:st.co,map:st.map,pr:st.pr,cvp:st.cvp,svv:st.svv,ppv:st.ppv,scvo2:st.scvo2,hpi:st.hpi,sys:st.sys,dia:st.dia,temp:st.temp,mode:st.mode||drv.mode});
+  ccoAvg=drv.co;scoVal=drv.co;if(st.keys)keyParams=st.keys.slice();cancelTrans();syncFac();buildKeybox();buildTiles();buildCockpit();applyMode();
+  if(ind)ind.innerHTML="<b>"+sc.name+"</b><br>"+stp.label;}
+function ctLoadHS(id){ctId=id;ctStepHS=0;const ind=byId("ctStepHS");if(id)ctApplyHS();else if(ind)ind.textContent="No CT scenario loaded.";}
+{const s=byId("ctScnHS");if(s)s.addEventListener("change",()=>ctLoadHS(s.value));
+ const n=byId("ctNextHS");if(n)n.addEventListener("click",()=>{const sc=CTSCN[ctId];if(sc&&ctStepHS<sc.steps.length-1){ctStepHS++;ctApplyHS();}});
+ const p=byId("ctPrevHS");if(p)p.addEventListener("click",()=>{const sc=CTSCN[ctId];if(sc&&ctStepHS>0){ctStepHS--;ctApplyHS();}});
+ const r=byId("ctResetHS");if(r)r.addEventListener("click",()=>{if(ctId){ctStepHS=0;ctApplyHS();}});}
+byId("tr_go").addEventListener("click",()=>startTrans(byId("tr_target").value,+byId("tr_dur").value||120));
+
+/* nav */
+const fac=byId("fac");function toggleFac(){fac.classList.toggle("open");}
+byId("nb_settings").addEventListener("click",toggleFac);byId("facToggle").addEventListener("click",toggleFac);byId("fac_close").addEventListener("click",toggleFac);byId("nb_mode").addEventListener("click",toggleFac);
+byId("nb_side").addEventListener("click",()=>{byId("side").classList.toggle("open");byId("nb_side").classList.toggle("on",byId("side").classList.contains("open"));});
+byId("nb_alarm").addEventListener("click",()=>{silenced=!silenced;});
+byId("nb_zero").addEventListener("click",()=>{const z=byId("nb_zero");z.classList.add("on");setTimeout(()=>z.classList.remove("on"),900);});
+byId("nb_patient").addEventListener("click",openPatient);
+["nb_voice","nb_gesture","nb_help"].forEach(id=>byId(id).addEventListener("click",()=>{byId("noteTxt").textContent=id==="nb_help"?"Help — facilitator-driven training simulator (not a medical device).":(id==="nb_voice"?"Voice control not available in simulator.":"Gesture control not available in simulator.");}));
+window.addEventListener("keydown",e=>{if(["INPUT","SELECT"].includes(e.target.tagName))return;const k=e.key.toLowerCase();if(k==="f")toggleFac();if(k==="h"){byId("nav").style.display=byId("nav").style.display==="none"?"flex":"none";byId("status").style.display=byId("status").style.display==="none"?"flex":"none";byId("facToggle").style.display=byId("facToggle").style.display==="none"?"block":"none";layout();}});
+setInterval(()=>{const d=new Date();byId("clk").firstChild.textContent=String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");byId("dte").textContent=(d.getMonth()+1)+"/"+d.getDate()+"/"+d.getFullYear();},1000);
+
+/* loop */
+let lastTs=performance.now(),uiTimer=0;
+function frame(ts){const dt=Math.min(0.05,(ts-lastTs)/1000);lastTs=ts;tAbs+=dt;statTick(dt);tickTrans(dt);gdtTick(dt);
+  if(byId("artRow").style.display!=="none")drawART(dt);
+  trendTimer+=dt;if(trendTimer>=1){trendTimer=0;pushTrend();}
+  uiTimer+=dt;if(uiTimer>=0.4){uiTimer=0;
+    byId("artBP").textContent=Math.round(drv.sys)+"/"+Math.round(drv.dia);byId("artMean").textContent=Math.round(drv.map);byId("prVal").textContent=Math.round(drv.pr);
+    updateTiles();updateStatus();
+    if(view==="mon")drawTrend();else if(view==="cockpit")drawCockpit();else if(view==="tabular")drawTabular();else if(view==="hpi")drawHPI();else if(view==="gdt")drawGDT();}
+  requestAnimationFrame(frame);}
+
+/* boot */
+window.addEventListener("resize",layout);
+buildKeybox();buildTiles();buildCockpit();buildGdtSel();byId("gdtRun").addEventListener("click",gdtReset);
+const tb=document.querySelector('#tabBar button[data-inc="300"]');if(tb)tb.classList.add("on");
+loadScn("postop");layout();setView("mon");requestAnimationFrame(frame);
+</script>
+</body>
+</html>

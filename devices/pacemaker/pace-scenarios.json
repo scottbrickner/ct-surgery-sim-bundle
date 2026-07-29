@@ -1,0 +1,488 @@
+[
+  {
+    "key": "pod3_vwire_demand_backup",
+    "name": "PACE 1 · Demand backup — is this failure or normal?",
+    "steps": [
+      {
+        "label": "Step 1/3 — Baseline on demand backup",
+        "coach": "POD 3 CABG on telemetry; the V wire is on the generator in demand backup set at 50. The patient is comfortable in their own sinus rhythm in the high 70s and there are no pacing spikes on the monitor. Have the learner explain what they're seeing.",
+        "set": {
+          "rhythm": "sinus",
+          "aRate": 78,
+          "vRate": 78,
+          "vThr": 1.5,
+          "vSig": 9,
+          "aThr": 1.5,
+          "aSig": 2.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Rate drifts below the backup rate",
+        "coach": "Over the next while the patient's sinus rate drifts down into the mid-40s — now below the backup rate. Watch what the generator does and confirm each paced beat captures.",
+        "set": {
+          "rhythm": "sbrady",
+          "aRate": 46,
+          "vRate": 46
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Recovery",
+        "coach": "The patient's own rate recovers into the 70s. Confirm the generator appropriately steps back and the patient is riding their own rhythm again.",
+        "set": {
+          "rhythm": "sinus",
+          "aRate": 72,
+          "vRate": 72
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pod2_capped_wires_new_chb",
+    "name": "PACE 2 · Capped wires, new heart block — recognize & escalate",
+    "steps": [
+      {
+        "label": "Step 1/3 — Stable, wires capped",
+        "coach": "POD 2 valve repair on telemetry. The epicardial wires are capped and coiled at the bedside, not connected to a generator. The patient is stable in sinus rhythm. This is your baseline.",
+        "set": {
+          "rhythm": "sinus",
+          "aRate": 76,
+          "vRate": 76,
+          "aThr": 1.2,
+          "vThr": 1.8,
+          "aSig": 2,
+          "vSig": 6
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — New complete heart block, symptomatic",
+        "coach": "The patient suddenly feels lightheaded. The monitor now shows complete heart block with a slow ventricular escape in the high 30s and the blood pressure is dropping. What is your priority, and what can you do right now while help is coming?",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 84,
+          "vRate": 38
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Epicardial pacing initiated",
+        "coach": "The wires are connected to a generator and pacing is started. Confirm you are getting consistent capture and the patient's perfusion is improving, and keep the transfer to a higher level of care moving.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 84,
+          "vRate": 38
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pod3_threshold_drift_loc",
+    "name": "PACE 3 · Spikes without capture — is it loss of capture or a broken wire?",
+    "steps": [
+      {
+        "label": "Step 1/3 — Solid capture earlier in the shift",
+        "coach": "POD 3 on demand backup. Earlier the capture threshold was low and every pacing spike was followed by a QRS — clean 1:1 capture.",
+        "set": {
+          "rhythm": "sbrady",
+          "aRate": 50,
+          "vRate": 50,
+          "vThr": 1.5,
+          "vSig": 8,
+          "aThr": 1.5,
+          "aSig": 2.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Intermittent spikes with no QRS",
+        "coach": "Later the strip shows pacing spikes that sometimes are NOT followed by a QRS when the rate dips. The patient is asymptomatic because their own rhythm mostly covers them. What is this, and how is it different from a fractured wire?",
+        "set": {
+          "rhythm": "sbrady",
+          "aRate": 49,
+          "vRate": 49,
+          "vThr": 4
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — After a safe output is set",
+        "coach": "Once output is set to a safe margin above the measured threshold, confirm every spike now captures 1:1. Note the rising-threshold trend for the team.",
+        "set": {
+          "rhythm": "sbrady",
+          "aRate": 49,
+          "vRate": 49,
+          "vThr": 4
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pod3_underlying_rhythm_check",
+    "name": "PACE 4 · What's underneath? — unmasking the rhythm before wire removal",
+    "steps": [
+      {
+        "label": "Step 1/3 — Fully paced and stable",
+        "coach": "POD 3 CABG in stepdown, DDD-paced at 80 and hemodynamically stable. The team wants to know the underlying rhythm before pulling the wires this afternoon.",
+        "set": {
+          "rhythm": "avb1",
+          "aRate": 52,
+          "vRate": 52,
+          "aThr": 1,
+          "vThr": 1.5,
+          "aSig": 2.5,
+          "vSig": 8
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Unmasking the intrinsic rhythm",
+        "coach": "Gradually bring the paced rate down while you watch the ECG and the arterial line, and let the patient's own rhythm surface — don't just unplug the wires. What rhythm and rate appear underneath?",
+        "set": {
+          "rhythm": "avb1",
+          "aRate": 52,
+          "vRate": 52
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Assessed, rate restored",
+        "coach": "With the underlying rhythm visible, judge whether it's adequate and stable, then restore the ordered rate and report your findings to the team for the removal decision.",
+        "set": {
+          "rhythm": "avb1",
+          "aRate": 52,
+          "vRate": 52
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pod4_capture_threshold_drift",
+    "name": "PACE 5 · Routine threshold check finds a rising threshold",
+    "steps": [
+      {
+        "label": "Step 1/3 — Routine check begins",
+        "coach": "POD 4 in stepdown, V-paced at 60. You're doing a routine capture-threshold check. Yesterday the threshold was about 2 mA.",
+        "set": {
+          "rhythm": "sbrady",
+          "aRate": 55,
+          "vRate": 55,
+          "vThr": 2,
+          "vSig": 7,
+          "aThr": 1,
+          "aSig": 2.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — The threshold has climbed",
+        "coach": "As you test, capture is lost until you get up around 5 mA — the threshold has risen. Find it precisely, then set a safe output. Where does a 5 mA threshold put you on the repositioning conversation?",
+        "set": {
+          "rhythm": "sbrady",
+          "aRate": 55,
+          "vRate": 55,
+          "vThr": 5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Output set, trend flagged",
+        "coach": "With output set to a safe margin above 5 mA, confirm consistent capture, document the trend, and flag the rising threshold to the team.",
+        "set": {
+          "rhythm": "sbrady",
+          "aRate": 55,
+          "vRate": 55,
+          "vThr": 5
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pcu_undersensing_competition",
+    "name": "PACE 6 · Competing spikes — fixing undersensing",
+    "steps": [
+      {
+        "label": "Step 1/3 — Spikes competing with the patient's beats",
+        "coach": "PCU, V-paced at 60. The monitor shows pacing spikes landing on and just after the patient's own QRS complexes. The patient has frequent PVCs and a fairly small R wave. What's the danger here?",
+        "set": {
+          "rhythm": "pvc",
+          "aRate": 62,
+          "vRate": 62,
+          "vSig": 4,
+          "vThr": 1.5,
+          "aThr": 1,
+          "aSig": 2.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Correcting the sensitivity",
+        "coach": "Find the sensing threshold and adjust so the generator reliably sees the patient's own beats and stops competing. Which direction does sensitivity go when the R wave is small?",
+        "set": {
+          "rhythm": "pvc",
+          "aRate": 62,
+          "vRate": 62,
+          "vSig": 4
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Competition resolved",
+        "coach": "Confirm the generator now inhibits on the patient's intrinsic beats and the competing spikes are gone. Keep watching for recurrence.",
+        "set": {
+          "rhythm": "pvc",
+          "aRate": 62,
+          "vRate": 62,
+          "vSig": 4
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pod0_avr_dependent_chb",
+    "name": "PACE 7 · Fresh AVR, fully dependent — thresholds & AV synchrony",
+    "steps": [
+      {
+        "label": "Step 1/3 — Arrival, no escape",
+        "coach": "A fresh POD 0 AVR arrives in CTICU in complete heart block with no ventricular escape — 100% paced and fully dependent. Before you touch anything, what backup do you want at the bedside?",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 85,
+          "vRate": 0,
+          "aThr": 1,
+          "vThr": 1.5,
+          "aSig": 2.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Threshold testing on a dependent patient",
+        "coach": "Establish the ventricular capture threshold and set a safe output margin, then confirm the generator is sensing the patient's own P waves. Keep transcutaneous backup ready while you test — this patient has nothing to fall back on.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 85,
+          "vRate": 0
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Restore AV synchrony",
+        "coach": "With the sinus node intact and the block below it, set the device so each sensed P triggers a paced ventricular beat. Confirm AV synchrony and watch the hemodynamic response.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 85,
+          "vRate": 0
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "cticu_loc_vs_fracture_emergency",
+    "name": "PACE 8 · Sudden loss of capture — capture failure vs. broken wire",
+    "steps": [
+      {
+        "label": "Step 1/4 — Baseline, capturing well",
+        "coach": "CTICU, dependent, V-paced with solid 1:1 capture. This is your baseline.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0,
+          "vThr": 2,
+          "leadV": true
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/4 — Abrupt loss of capture, spikes still present",
+        "coach": "Abruptly the paced beats stop capturing — you still see pacing spikes but no QRS follows them, and the blood pressure is falling. What is your immediate move in a fully dependent patient?",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0,
+          "vThr": 15,
+          "leadV": true
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/4 — Now the spikes are gone",
+        "coach": "Now even the pacing spikes have disappeared. What does the loss of spikes tell you the problem is — and will raising output fix it? Get a bridge going.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0,
+          "vThr": 15,
+          "leadV": false
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 4/4 — Circuit restored",
+        "coach": "The ventricular circuit is restored and, with adequate output, capture returns. Set a safe margin and reassess the patient.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0,
+          "vThr": 2,
+          "leadV": true
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pod1_aflutter_rap",
+    "name": "PACE 9 · New atrial flutter — overdrive pacing to convert",
+    "steps": [
+      {
+        "label": "Step 1/3 — New regular narrow tachycardia",
+        "coach": "POD 1 CABG suddenly goes into a regular narrow-complex tachycardia around 150. The atrial-wire electrogram shows organized sawtooth flutter waves near 300. Confirm exactly what this rhythm is before you consider overdrive.",
+        "set": {
+          "rhythm": "aflutter",
+          "vRate": 150,
+          "aSig": 2,
+          "vSig": 8
+        },
+        "connectionFault": null,
+        "rationale": "aRate omitted: flutter atrial rate ~300 is inherent to the aflutter key and exceeds the 0–180 aRate slider."
+      },
+      {
+        "label": "Step 2/3 — Set up and deliver RAP",
+        "coach": "With the order confirmed and a defibrillator on the patient, deliver a rapid atrial burst just above the flutter's atrial rate for a brief run through the atrial wires. Watch the monitor closely as you pace.",
+        "set": {
+          "rhythm": "aflutter",
+          "vRate": 150
+        },
+        "connectionFault": null,
+        "rationale": "RAP burst is learner-operated; no RAP field exists in schema."
+      },
+      {
+        "label": "Step 3/3 — Converts to sinus",
+        "coach": "The atria capture and, when you stop the burst, the patient breaks to sinus rhythm. Confirm a stable rhythm and rate and reassess. (If instead it had accelerated or degenerated into AF, you would stop, support the patient, and notify.)",
+        "set": {
+          "rhythm": "sinus",
+          "aRate": 78,
+          "vRate": 78
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "cticu_oversensing_pauses",
+    "name": "PACE 10 · Pauses with no spikes — oversensing in a dependent patient",
+    "steps": [
+      {
+        "label": "Step 1/3 — Baseline paced, patient rewarming",
+        "coach": "CTICU, dependent, V-paced with good capture. The patient is being actively rewarmed and is starting to shiver.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0,
+          "vThr": 1.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Pauses where paced beats should be",
+        "coach": "The monitor now shows pauses where you'd expect paced beats — the generator keeps inhibiting and no spikes appear, while this dependent patient needs every beat. How is this different from a fractured wire, and what's your rescue?",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0,
+          "oversV": true
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Rescued and source treated",
+        "coach": "With sensitivity set so the noise no longer inhibits it — or asynchronous pacing running — the generator paces consistently again. Treat the shivering and secure the connections so it doesn't recur.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "cticu_v_cable_disconnect",
+    "name": "PACE 11 · Pacing just stopped — find the disconnected cable",
+    "steps": [
+      {
+        "label": "Step 1/3 — Baseline, capturing",
+        "coach": "CTICU, dependent, V-paced with solid capture. Baseline before the event.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0,
+          "vThr": 1.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Pacing stops, no spikes at all",
+        "coach": "Pacing suddenly stops — no spikes at all — even though the generator is on with adequate output set. Something in the circuit is open, and the patient is dependent. Work it end to end and get a bridge ready.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0
+        },
+        "connectionFault": "disconnect_v_cable"
+      },
+      {
+        "label": "Step 3/3 — Reconnected at the generator",
+        "coach": "The ventricular cable was unseated at the generator port; once it's reconnected and confirmed with a gentle tug, pacing and capture return. Set a safe margin and document.",
+        "set": {
+          "rhythm": "chb",
+          "aRate": 80,
+          "vRate": 0
+        },
+        "connectionFault": null
+      }
+    ]
+  },
+  {
+    "key": "pod0_asystole_underlying_check",
+    "name": "PACE 12 · Check the underlying rhythm — post-op asystole",
+    "steps": [
+      {
+        "label": "Step 1/3 — Handoff: no underlying rhythm",
+        "coach": "Fresh post-op in the unit, fully paced. Handoff endorses that when the pacer was briefly tested in the OR the patient had NO underlying rhythm — asystole. You're asked to reassess whether any underlying rhythm has returned. How will you do that safely?",
+        "set": {
+          "rhythm": "asystole",
+          "vRate": 0,
+          "vThr": 1.5
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 2/3 — Explore safely",
+        "coach": "With continuous ECG and arterial monitoring and transcutaneous pacing plus a defibrillator ready, GRADUALLY step the paced rate down — or use a brief Pause — to look for any intrinsic rhythm. Do NOT unplug the bridging cables. What do you see, and what's your plan if nothing appears?",
+        "set": {
+          "rhythm": "asystole",
+          "vRate": 0
+        },
+        "connectionFault": null
+      },
+      {
+        "label": "Step 3/3 — Persistent asystole, restore pacing",
+        "coach": "No underlying rhythm emerges — the patient remains fully dependent. Promptly restore the paced rate, confirm capture, keep backup pacing immediately available, and document continued pacemaker dependence.",
+        "set": {
+          "rhythm": "asystole",
+          "vRate": 0
+        },
+        "connectionFault": null
+      }
+    ]
+  }
+]

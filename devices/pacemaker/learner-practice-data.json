@@ -1,0 +1,675 @@
+{
+  "meta": {
+    "schema": "pacemaker-practice-data",
+    "version": "1.0",
+    "purpose": "Data contract for the 5392 self-directed learner Practice Mode (Threshold Trainer + Troubleshooter). Consumed by ?role=practice. Field names match the engine / PACE scenario schema.",
+    "feedbackModes": {
+      "training": "Inline coaching — live nudges during the run + end debrief; unlimited hints.",
+      "validation": "Self-assessment — silent during the run; scorecard + best-practice debrief at end; only a validation pass counts toward skill sign-off."
+    },
+    "engineRanges": {
+      "aThr": [
+        0.1,
+        20
+      ],
+      "vThr": [
+        0.1,
+        25
+      ],
+      "aSig": [
+        0.2,
+        10
+      ],
+      "vSig": [
+        0.5,
+        20
+      ]
+    },
+    "notes": "Practice mode only sets existing scenario fields (rhythm,aRate,vRate,aThr,vThr,aSig,vSig,leadA,leadV,oversA,oversV,batt,connectionFault). Output & sensitivity are learner-operated device knobs, never scenario data."
+  },
+  "thresholdTrainer": {
+    "drills": [
+      {
+        "id": "v_stim",
+        "channel": "V",
+        "kind": "stimulation",
+        "label": "Ventricular capture threshold"
+      },
+      {
+        "id": "a_stim",
+        "channel": "A",
+        "kind": "stimulation",
+        "label": "Atrial capture threshold"
+      },
+      {
+        "id": "v_sense",
+        "channel": "V",
+        "kind": "sensing",
+        "label": "Ventricular sensing threshold"
+      },
+      {
+        "id": "a_sense",
+        "channel": "A",
+        "kind": "sensing",
+        "label": "Atrial sensing threshold"
+      }
+    ],
+    "randomization": {
+      "captureThresholdMa": [
+        {
+          "band": [
+            0.5,
+            2.5
+          ],
+          "weight": 0.55,
+          "teaches": "good wire, routine margin"
+        },
+        {
+          "band": [
+            2.5,
+            5
+          ],
+          "weight": 0.25,
+          "teaches": "acceptable-high, still fine"
+        },
+        {
+          "band": [
+            5,
+            10
+          ],
+          "weight": 0.15,
+          "teaches": "reposition territory — recognize + flag"
+        },
+        {
+          "band": [
+            10,
+            15
+          ],
+          "weight": 0.05,
+          "teaches": "bad wire — recognize, do not just crank output"
+        }
+      ],
+      "pWaveSignalMv": [
+        {
+          "band": [
+            1.5,
+            4
+          ],
+          "weight": 0.7,
+          "teaches": "normal atrial signal"
+        },
+        {
+          "band": [
+            0.6,
+            1.5
+          ],
+          "weight": 0.3,
+          "teaches": "small P — sensing matters"
+        }
+      ],
+      "rWaveSignalMv": [
+        {
+          "band": [
+            5,
+            14
+          ],
+          "weight": 0.7,
+          "teaches": "normal R"
+        },
+        {
+          "band": [
+            2,
+            5
+          ],
+          "weight": 0.3,
+          "teaches": "small R — undersensing risk"
+        }
+      ],
+      "underlyingRhythmByDrill": {
+        "v_stim": [
+          "sbrady",
+          "avb1",
+          "chb"
+        ],
+        "a_stim": [
+          "sbrady",
+          "avb1"
+        ],
+        "v_sense": [
+          "sinus",
+          "sbrady",
+          "pvc"
+        ],
+        "a_sense": [
+          "sinus",
+          "sbrady"
+        ]
+      }
+    },
+    "tolerances": {
+      "captureThresholdMa": 0.5,
+      "sensingThresholdMv": 1,
+      "note": "Identification is judged against the hidden ground-truth value the engine used."
+    },
+    "marginRules": {
+      "stimulationOutputMultiplier": {
+        "trained": 2,
+        "acceptableRange": [
+          2,
+          2.5
+        ],
+        "overAt": 2.6,
+        "ideal": 2,
+        "source": "LOCAL TRAINING STANDARD: set output to 2x threshold (DOUBLE, not triple). Rationale: a tighter margin unmasks a rising threshold / lead dislodgement sooner and preserves battery. Manufacturer allows 2-3x; we train to double. Coach a learner who cranks to 3x+ toward doubling instead."
+      },
+      "sensitivityMaxFraction": {
+        "value": 0.5,
+        "source": "Medtronic 5392: set sensitivity to 1/2 (or less) of the sensing threshold. Lower mV = more sensitive."
+      }
+    },
+    "scenarioFrames": [
+      {
+        "drill": "v_stim",
+        "frame": "POD 2, V-paced. Verify the ventricular capture threshold and set a safe output before the team rounds."
+      },
+      {
+        "drill": "v_stim",
+        "frame": "Threshold looked higher on the last check — reconfirm ventricular capture and set your margin."
+      },
+      {
+        "drill": "a_stim",
+        "frame": "Dual-chamber setup — confirm the atrial capture threshold and set a safe output."
+      },
+      {
+        "drill": "v_sense",
+        "frame": "The patient has their own rhythm — confirm the generator senses the ventricle before you leave it on demand."
+      },
+      {
+        "drill": "v_sense",
+        "frame": "Small-looking R waves on the strip — find the ventricular sensing threshold and set a safe sensitivity."
+      },
+      {
+        "drill": "a_sense",
+        "frame": "Confirm atrial sensing so tracking behaves before you hand off."
+      }
+    ]
+  },
+  "faultActionMap": {
+    "loss_of_capture": {
+      "label": "Loss of capture",
+      "recognitionCorrect": "Loss of capture (pacing spikes present, no capture)",
+      "recognitionDistractors": [
+        "Lead fracture",
+        "Oversensing",
+        "Normal demand inhibition",
+        "Failure to sense"
+      ],
+      "correctActions": [
+        "Increase output to 2x the capture threshold (double, local training standard)",
+        "Ensure backup if the patient is dependent"
+      ],
+      "deviceDetect": "capture restored when output >= vThr/aThr (spike now followed by a paced complex)",
+      "safety": [
+        "Confirm the patient is not stranded without capture while troubleshooting"
+      ],
+      "escalateWhen": "output at device maximum still without capture, or the threshold is >10 mA / climbing fast -> notify provider and plan alternative pacing (see escalationGuidance)",
+      "teaching": "Spikes ARE present — the impulse fires but doesn't capture. Doubling output (or finding a rising threshold) fixes it; contrast with fracture where spikes vanish. If maxed output won't capture, stop cranking and escalate."
+    },
+    "lead_fracture": {
+      "label": "Lead fracture",
+      "recognitionCorrect": "Lead fracture / broken wire (no pacing spikes)",
+      "recognitionDistractors": [
+        "Loss of capture",
+        "Oversensing",
+        "Cable disconnected at generator",
+        "Battery depleted"
+      ],
+      "correctActions": [
+        "Recognize it is not learner-fixable at the bedside",
+        "Escalate for wire replacement",
+        "Bridge with transcutaneous pacing if dependent"
+      ],
+      "deviceDetect": "no output path exists; raising output / going async does NOT restore capture",
+      "safety": [
+        "Do not waste time cranking output; get a transcutaneous bridge for a dependent patient"
+      ],
+      "teaching": "No spikes = output isn't reaching the heart. A fracture is inside the wire — unlike a cable disconnect, the learner can't reconnect it."
+    },
+    "cable_disconnect": {
+      "label": "Disconnected cable at generator",
+      "recognitionCorrect": "Cable disconnected at the generator (open circuit, no spikes)",
+      "recognitionDistractors": [
+        "Lead fracture",
+        "Loss of capture",
+        "Oversensing",
+        "Battery depleted"
+      ],
+      "correctActions": [
+        "Work the circuit generator->cable->terminal->wire",
+        "Reconnect the cable at the generator port (verify click + gentle tug)"
+      ],
+      "deviceDetect": "connectionFault cleared -> circuit closed -> output/spikes resume",
+      "safety": [
+        "Transcutaneous bridge for a dependent patient while you find the open point"
+      ],
+      "teaching": "Looks like a fracture (no spikes) but is FIXABLE — the learner reconnects at the generator. This is why cable-disconnect and fracture are distinct mechanics."
+    },
+    "undersensing": {
+      "label": "Undersensing / competition",
+      "recognitionCorrect": "Undersensing — competitive pacing (spikes marching into intrinsic beats)",
+      "recognitionDistractors": [
+        "Oversensing",
+        "Loss of capture",
+        "Normal pacing",
+        "Lead fracture"
+      ],
+      "correctActions": [
+        "Increase sensitivity (LOWER the mV number) toward ~1/2 the R-wave",
+        "Confirm the generator now inhibits on intrinsic beats"
+      ],
+      "deviceDetect": "sensitivity setting <= signal amplitude -> intrinsic beats sensed -> competition stops",
+      "safety": [
+        "Competition risks R-on-T -> VT/VF; correct promptly"
+      ],
+      "escalateWhen": "sensitivity at its most-sensitive limit (mV floor) and the device still won't sense the intrinsic signal -> notify provider; the signal may be too small (wire issue) and need repositioning/alternative pacing",
+      "teaching": "Device fails to see the patient's beats and paces on top. Lower mV = more sensitive. Opposite fix to oversensing. If you reach the sensitivity limit and it still can't sense, escalate."
+    },
+    "oversensing": {
+      "label": "Oversensing",
+      "recognitionCorrect": "Oversensing — inappropriate inhibition (pauses, no spikes when needed)",
+      "recognitionDistractors": [
+        "Undersensing",
+        "Lead fracture",
+        "Loss of capture",
+        "Cable disconnected"
+      ],
+      "correctActions": [
+        "Decrease sensitivity (RAISE the mV number) or pace asynchronously",
+        "Treat the noise source (shivering, loose connections)"
+      ],
+      "deviceDetect": "noise no longer inhibits (sensitivity raised) OR async mode -> consistent pacing resumes",
+      "safety": [
+        "In a dependent patient, oversensing pauses are life-threatening — rescue first (async), fine-tune after"
+      ],
+      "escalateWhen": "sensitivity at its least-sensitive limit and/or async still not delivering reliable pacing, or the noise source can't be removed -> notify provider and plan alternative pacing",
+      "teaching": "Device is fooled by noise and inhibits when the patient needs pacing. No spikes, like a fracture — but the patient is dependent and the strip shows inhibition, not open circuit. If limits are reached without a stable rescue, escalate."
+    },
+    "dependence_no_pacing": {
+      "label": "Needs pacing now",
+      "recognitionCorrect": "Symptomatic bradycardia / dependence requiring pacing",
+      "recognitionDistractors": [
+        "Stable, monitor only",
+        "Oversensing",
+        "Loss of capture",
+        "Undersensing"
+      ],
+      "correctActions": [
+        "Recognize instability",
+        "Call for help / escalate",
+        "Initiate pacing per order or bridge transcutaneously"
+      ],
+      "deviceDetect": "pacing initiated with capture -> adequate paced rate restored",
+      "safety": [
+        "Transcutaneous bridge + ACLS bradycardia pathway if unstable"
+      ],
+      "teaching": "The fault is the patient, not the device. Recognize the need, escalate, and (within scope) initiate pacing."
+    },
+    "battery": {
+      "label": "Battery failing",
+      "recognitionCorrect": "Low / depleted battery",
+      "recognitionDistractors": [
+        "Lead fracture",
+        "Loss of capture",
+        "Oversensing",
+        "Normal operation"
+      ],
+      "correctActions": [
+        "Recognize the battery alarm/indicator",
+        "Replace battery/generator without interrupting a dependent patient"
+      ],
+      "deviceDetect": "battery restored -> pacing maintained without a gap",
+      "safety": [
+        "Have a replacement ready before interrupting pacing in a dependent patient"
+      ],
+      "teaching": "Plan the swap so a dependent patient never loses pacing."
+    },
+    "aflutter_rap": {
+      "label": "Atrial flutter — overdrive pacing",
+      "recognitionCorrect": "Atrial flutter",
+      "recognitionDistractors": [
+        "Atrial fibrillation",
+        "Sinus tachycardia",
+        "VT",
+        "Junctional tachycardia"
+      ],
+      "correctActions": [
+        "Confirm flutter (not AF)",
+        "Confirm order + defibrillator on the patient",
+        "Deliver RAP 20-30 ppm above the atrial rate for a brief hold"
+      ],
+      "deviceDetect": "RAP delivered via atrial wires; observe conversion to sinus vs proarrhythmia",
+      "safety": [
+        "RAP will not convert AF; defibrillator immediately available; watch for AF/VF induction"
+      ],
+      "teaching": "Advanced, physician-directed. Recognition + safe setup matter as much as the delivery."
+    },
+    "underlying_rhythm_check": {
+      "label": "Assess underlying rhythm (dependent patient)",
+      "recognitionCorrect": "Pacemaker-dependent — assess underlying rhythm SAFELY (do not unplug cables)",
+      "recognitionDistractors": [
+        "Safe to unplug the bridging cables to check",
+        "No need to reassess — leave it paced",
+        "Increase output to test underlying rhythm",
+        "Oversensing"
+      ],
+      "correctActions": [
+        "Gradually step the paced RATE down (or use a brief PAUSE) while watching the monitor",
+        "Keep continuous ECG + arterial monitoring and transcutaneous pacing/defib ready",
+        "Restore pacing promptly if no underlying rhythm returns; NEVER unplug the bridging cables"
+      ],
+      "deviceDetect": "paced rate reduced gradually OR Pause used (NOT a cable disconnect); pacing restored after the check",
+      "safety": [
+        "Dependent/asystole patient: unplugging cables removes instant restore capability — never do it; backup pacing ready; restore immediately if asystole persists"
+      ],
+      "escalateWhen": "n/a (this is a safe assessment maneuver, not a fault) — but if underlying asystole persists, confirm continued dependence and keep backup pacing immediately available",
+      "teaching": "The safe way to look for a returning underlying rhythm in a dependent patient is to step the rate down gradually or use Pause under full monitoring — NOT to unplug the bridging cables, which strands a dependent patient. Post-op asystole = plan to stay paced."
+    }
+  },
+  "escalationGuidance": {
+    "purpose": "Surface as an inline coach rec (training) and in the debrief whenever the learner has exhausted device + wire troubleshooting. Reinforces knowing WHEN to stop adjusting and get help.",
+    "triggers": [
+      "Output at the device maximum without consistent capture",
+      "Capture threshold in/above the reposition-replace band (>10 mA) or climbing fast across checks",
+      "Sensitivity adjusted to its limit and the sensing problem persists (still under- or over-sensing)",
+      "Repeated loss of capture despite doubling output and completing connection/circuit checks",
+      "Oversensing that cannot be rescued or whose noise source cannot be removed"
+    ],
+    "recommendedActions": [
+      "Notify the provider / EP that device and wire troubleshooting is exhausted",
+      "Plan for alternative pacing: transcutaneous pacing NOW as a bridge; anticipate transvenous pacing or new epicardial wires",
+      "Keep transcutaneous pacing + a defibrillator ready; do not leave a dependent patient"
+    ],
+    "note": "This is the 'don't keep cranking' lesson: at max output / sensitivity limits with an unresolved capture or sensing problem, escalation + an alternative-pacing plan is the correct next step, not further device adjustment."
+  },
+  "troubleshooter": {
+    "curatedCaseKeys": [
+      "pod3_vwire_demand_backup",
+      "pod2_capped_wires_new_chb",
+      "pod3_threshold_drift_loc",
+      "pod3_underlying_rhythm_check",
+      "pod4_capture_threshold_drift",
+      "pcu_undersensing_competition",
+      "pod0_avr_dependent_chb",
+      "cticu_loc_vs_fracture_emergency",
+      "pod1_aflutter_rap",
+      "cticu_oversensing_pauses",
+      "cticu_v_cable_disconnect",
+      "pod0_asystole_underlying_check"
+    ],
+    "curatedNote": "Draw the 11 PACE cases in random order; re-randomize their hidden thresholds within band each run so a familiar case still plays differently.",
+    "generator": {
+      "rhythms": [
+        "sinus",
+        "sbrady",
+        "avb1",
+        "mobitz2",
+        "chb",
+        "pvc",
+        "aflutter",
+        "afib",
+        "asystole"
+      ],
+      "faults": [
+        "loss_of_capture",
+        "lead_fracture",
+        "cable_disconnect",
+        "undersensing",
+        "oversensing",
+        "dependence_no_pacing",
+        "battery",
+        "aflutter_rap",
+        "underlying_rhythm_check"
+      ],
+      "locContexts": [
+        "telemetry",
+        "stepdown",
+        "icu"
+      ],
+      "validityMatrix": {
+        "loss_of_capture": {
+          "rhythms": [
+            "sbrady",
+            "avb1",
+            "mobitz2",
+            "chb"
+          ],
+          "locWeights": {
+            "telemetry": 1,
+            "stepdown": 2,
+            "icu": 2
+          }
+        },
+        "lead_fracture": {
+          "rhythms": [
+            "chb",
+            "asystole",
+            "mobitz2"
+          ],
+          "locWeights": {
+            "telemetry": 0,
+            "stepdown": 1,
+            "icu": 3
+          }
+        },
+        "cable_disconnect": {
+          "rhythms": [
+            "chb",
+            "asystole",
+            "sbrady"
+          ],
+          "locWeights": {
+            "telemetry": 0,
+            "stepdown": 1,
+            "icu": 3
+          }
+        },
+        "undersensing": {
+          "rhythms": [
+            "sinus",
+            "sbrady",
+            "pvc",
+            "afib",
+            "avb1"
+          ],
+          "locWeights": {
+            "telemetry": 1,
+            "stepdown": 2,
+            "icu": 1
+          }
+        },
+        "oversensing": {
+          "rhythms": [
+            "chb",
+            "asystole"
+          ],
+          "locWeights": {
+            "telemetry": 0,
+            "stepdown": 1,
+            "icu": 3
+          }
+        },
+        "dependence_no_pacing": {
+          "rhythms": [
+            "chb",
+            "mobitz2",
+            "asystole"
+          ],
+          "locWeights": {
+            "telemetry": 2,
+            "stepdown": 2,
+            "icu": 1
+          }
+        },
+        "battery": {
+          "rhythms": [
+            "chb",
+            "sbrady",
+            "asystole"
+          ],
+          "locWeights": {
+            "telemetry": 1,
+            "stepdown": 1,
+            "icu": 2
+          }
+        },
+        "aflutter_rap": {
+          "rhythms": [
+            "aflutter"
+          ],
+          "locWeights": {
+            "telemetry": 0,
+            "stepdown": 1,
+            "icu": 3
+          }
+        },
+        "underlying_rhythm_check": {
+          "rhythms": [
+            "asystole",
+            "chb"
+          ],
+          "locWeights": {
+            "telemetry": 0,
+            "stepdown": 1,
+            "icu": 3
+          }
+        }
+      },
+      "rules": [
+        "Spawn only fault x rhythm pairs listed in validityMatrix; drop (and log) anything else.",
+        "Set dependence via vRate 0 (chb/asystole) so failed pacing = no escape.",
+        "For aflutter, omit aRate (inherent ~300 exceeds the 0-180 slider) and set vRate ~150 for 2:1 — same rule as PACE-9.",
+        "Express cable disconnect ONLY via connectionFault, never leadA/leadV.",
+        "Re-randomize hidden thresholds/signals within the Threshold Trainer bands."
+      ]
+    }
+  },
+  "mcqBank": {
+    "note": "Recognition + action stems per fault; options are built from faultActionMap (recognitionCorrect + distractors, correctActions + plausible wrong actions). Device-action decision points are auto-detected by the engine instead of MCQ.",
+    "recognitionStem": "Look at the monitor and the device. What is happening?",
+    "actionStem": "What is your priority action?",
+    "wrongActionPool": [
+      "Increase output to maximum immediately",
+      "Turn sensitivity all the way down (least sensitive)",
+      "Disconnect the wires to check the underlying rhythm",
+      "Silence the alarm and continue monitoring",
+      "Do nothing — this is normal",
+      "Switch to a faster paced rate"
+    ]
+  },
+  "rubrics": {
+    "threshold": [
+      {
+        "key": "procedure",
+        "label": "Correct procedure",
+        "weight": 0.25,
+        "passWhen": "rate set appropriately before testing; correct channel; non-pacing for sensing, pacing for stimulation"
+      },
+      {
+        "key": "identification",
+        "label": "Threshold identified",
+        "weight": 0.3,
+        "passWhen": "identified value within tolerance of the hidden ground-truth"
+      },
+      {
+        "key": "margin",
+        "label": "Safe margin set",
+        "weight": 0.3,
+        "passWhen": "output = 2x threshold (double; local training standard, not 3x) OR sensitivity <= 1/2 signal (sensing)"
+      },
+      {
+        "key": "safety",
+        "label": "Safety & recognition",
+        "weight": 0.15,
+        "passWhen": "no dependent patient stranded; recognized/flagged a high or bad-wire threshold; sensitivity not left undersensing"
+      }
+    ],
+    "troubleshoot": [
+      {
+        "key": "recognition",
+        "label": "Correct recognition",
+        "weight": 0.3,
+        "passWhen": "picked the correct problem (faultActionMap.recognitionCorrect)"
+      },
+      {
+        "key": "priority_action",
+        "label": "Correct priority action",
+        "weight": 0.3,
+        "passWhen": "chose the correct first action(s)"
+      },
+      {
+        "key": "execution",
+        "label": "Correct execution on device",
+        "weight": 0.25,
+        "passWhen": "engine detected the correct device action (capture/sensing/async/circuit)"
+      },
+      {
+        "key": "safety",
+        "label": "Safety",
+        "weight": 0.15,
+        "passWhen": "recognized dependence, used a bridge, avoided harmful actions (e.g., competition)"
+      }
+    ],
+    "passingRule": {
+      "threshold": "identification AND margin must pass, with no safety fail",
+      "troubleshoot": "recognition AND priority_action AND execution must pass, with no safety fail",
+      "overallPercent": "weighted sum of category scores (pass=1, partial=0.5, fail=0) x 100"
+    }
+  },
+  "attemptsLog": {
+    "recordType": "pacemaker-skill-attempt",
+    "recordShape": {
+      "recordType": "pacemaker-skill-attempt",
+      "attemptId": "string",
+      "module": "'threshold' | 'troubleshoot'",
+      "caseId": "string (drill id, PACE key, or generated id)",
+      "caseLabel": "string (human-readable)",
+      "mode": "'training' | 'validation'",
+      "learnerName": "string",
+      "learnerEmail": "string (@med.usc.edu)",
+      "overallPercent": "number | null",
+      "categories": "ScoreCategory[] { key,label,status:'pass'|'partial'|'fail',detail }",
+      "passed": "boolean (mode==='validation' && isSkillPassed)",
+      "recordedAt": "ISO string"
+    },
+    "storageKey": "pacemaker-sim:skill-tracking",
+    "storageNote": "Separate localStorage key, never shared with any sync/state key; try/catch safe; degrades to in-memory. Mirrors vasoactive skillTracking.ts.",
+    "identity": {
+      "emailPattern": "^[^\\s@]+@med\\.usc\\.edu$",
+      "capturedBefore": "validation runs (optional for training)"
+    },
+    "exports": {
+      "perAttempt": [
+        "json",
+        "csv (one row per scored category)"
+      ],
+      "sharedWorkbook": {
+        "filenameXlsx": "Pacemaker-Sim-Skill-Tracking.xlsx",
+        "filenameCsv": "Pacemaker-Sim-Skill-Tracking.csv",
+        "headerRow": [
+          "Recorded At",
+          "Learner Name",
+          "Learner Email",
+          "Module",
+          "Case",
+          "Mode",
+          "Overall %",
+          "Passed",
+          "Attempt ID"
+        ],
+        "buildDecision": "xlsx requires vendoring SheetJS (breaks strict no-deps; acceptable as an inlined helper per CLAUDE.md QR exception) OR append CSV rows (zero-dep). Pick one; JSON/CSV per-attempt + Teams plumbing are dep-free either way."
+      },
+      "teamsFolder": "Port zoll/vasoactive teamsFolder.js — File System Access API, pick the 5 West Knowledge Hub channel's Files folder once, remember handle in IndexedDB, silent appends; Chromium-only, download fallback.",
+      "telemetry": "Optional Power Automate/Dataverse POST, flag-gated, off by default (offline-safe)."
+    }
+  }
+}
