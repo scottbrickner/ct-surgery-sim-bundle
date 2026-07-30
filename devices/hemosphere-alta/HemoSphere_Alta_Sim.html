@@ -325,7 +325,7 @@
 
 <script type="module">
 import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
-import { createDeviceSync } from '../../sync/deviceSync.js';
+import { createDeviceSync, isValidSnapshot } from '../../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -714,14 +714,16 @@ const fsUrlParams=new URLSearchParams(location.search);
 const FS_ROLE=fsUrlParams.get("role")==="learner"?"learner":"facilitator";
 if(FS_ROLE==="learner")document.body.classList.add("learner");
 
+let sessionMode="training"; // 'training' | 'validation' - no local UI here, the console is the source of truth; carried/relayed so the pacemaker's Phase 5 bridge sees it regardless of which device it joins alongside
 function onRemoteSnapshot(snapshot){
-  if(!snapshot||!runner)return;
+  if(!isValidSnapshot(snapshot)||!runner)return;
   const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
   runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
+  if(snapshot.mode==="training"||snapshot.mode==="validation")sessionMode=snapshot.mode;
   if(navChanged)renderFlagshipUI();else applyEngineValuesLight(runner.state);
 }
 const deviceSync=createDeviceSync({
-  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state}:null,
+  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode}:null,
   onRemoteSnapshot,
   relayUrl:fsUrlParams.get("relay")||"",
   relayCode:fsUrlParams.get("code")||"",
@@ -743,6 +745,7 @@ const syncCopyBtn=byId("sync_copyLink");if(syncCopyBtn)syncCopyBtn.addEventListe
 if(fsUrlParams.get("relay"))byId("sync_relayUrl").value=fsUrlParams.get("relay");
 window.ctSharedEngine.syncPushNow=()=>deviceSync.pushNow();window.ctSharedEngine.syncHeartbeatNow=()=>deviceSync.heartbeatNow();window.ctSharedEngine.syncSetRelay=(url,code)=>deviceSync.setRelay(url,code); // testing hooks only - see sync/deviceSync.js
 window.ctSharedEngine.getSyncStatus=()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay});
+window.ctSharedEngine.getSessionMode=()=>sessionMode;
 setInterval(()=>{
   const st=byId("sync_status");if(st)st.textContent=deviceSync.isLinked()?"● Linked — showing a synced patient with at least one other window/device.":"Same-machine sync active — open another window/tab of this page (or IntelliVue) and they'll show the same patient live.";
   const rst=byId("sync_relayStatus");if(rst&&deviceSync.relay.url)rst.textContent=(deviceSync.relay.ws&&deviceSync.relay.ws.readyState===1?"● Connected":"Connecting…")+" — code "+deviceSync.relay.code+", "+deviceSync.peerCount()+" peer(s) in room.";

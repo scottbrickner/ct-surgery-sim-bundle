@@ -44,6 +44,24 @@ export function shouldPush(nextSnapshotStr, lastSentStr) {
  * to itself) or for data identical to what we last sent/received (avoids
  * redundant re-renders from the heartbeat).
  */
+/**
+ * Does a decoded remote message actually look like this project's
+ * {partIndex, stepIndex, state, mode?} snapshot shape? The pacemaker's own
+ * pre-existing dashboard<->learner pairing reads the identical ?relay=/?code=
+ * URL params this module does (see CLAUDE.md's "pacer bridge mechanics"
+ * notes) - if a user ever points both systems at the same relay room, each
+ * would otherwise receive the other's differently-shaped messages over the
+ * SAME room and could corrupt its own state trying to merge them. Not
+ * enforced by createDeviceSync itself (which stays a generic opaque-JSON
+ * transport) - every onRemoteSnapshot in this project calls this first.
+ */
+export function isValidSnapshot(snapshot) {
+  return !!snapshot
+    && typeof snapshot.partIndex === 'number'
+    && typeof snapshot.stepIndex === 'number'
+    && snapshot.state !== null && typeof snapshot.state === 'object';
+}
+
 export function shouldApplyRemote(msg, { winId, lastSyncStr }) {
   if (!msg || typeof msg.data !== 'string') return false;
   if (msg.win === winId) return false;

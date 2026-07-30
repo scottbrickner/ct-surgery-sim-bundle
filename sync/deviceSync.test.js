@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { genCode, shouldPush, shouldApplyRemote } from './deviceSync.js';
+import { genCode, shouldPush, shouldApplyRemote, isValidSnapshot } from './deviceSync.js';
 
 test('genCode returns a 6-character code drawn only from the unambiguous alphabet', () => {
   for (let i = 0; i < 200; i++) {
@@ -47,4 +47,26 @@ test('shouldApplyRemote rejects malformed/missing messages', () => {
   assert.equal(shouldApplyRemote(null, { winId: 'abc123', lastSyncStr: null }), false);
   assert.equal(shouldApplyRemote({ win: 'other' }, { winId: 'abc123', lastSyncStr: null }), false); // no .data
   assert.equal(shouldApplyRemote({ win: 'other', data: 42 }, { winId: 'abc123', lastSyncStr: null }), false); // .data not a string
+});
+
+test('isValidSnapshot accepts a well-formed {partIndex, stepIndex, state} snapshot', () => {
+  assert.equal(isValidSnapshot({ partIndex: 0, stepIndex: -1, state: { hr: 90 } }), true);
+  assert.equal(isValidSnapshot({ partIndex: 1, stepIndex: 3, state: {}, mode: 'training' }), true); // mode is optional
+});
+
+test('isValidSnapshot rejects a message from an unrelated system sharing the same relay room', () => {
+  // shape of the pacemaker's OWN pre-existing sync message ({win, data}), which a bridge
+  // consumer could receive if a user points both systems at the same relay code - see
+  // CLAUDE.md's "pacer bridge mechanics" notes for why this collision is real, not hypothetical.
+  assert.equal(isValidSnapshot({ win: 'abc', data: '{"s":{},"P":{},"conn":{},"N":{}}' }), false);
+});
+
+test('isValidSnapshot rejects missing/malformed fields', () => {
+  assert.equal(isValidSnapshot(null), false);
+  assert.equal(isValidSnapshot(undefined), false);
+  assert.equal(isValidSnapshot({}), false);
+  assert.equal(isValidSnapshot({ partIndex: 0, stepIndex: -1 }), false); // no state
+  assert.equal(isValidSnapshot({ partIndex: '0', stepIndex: -1, state: {} }), false); // partIndex not a number
+  assert.equal(isValidSnapshot({ partIndex: 0, stepIndex: -1, state: null }), false); // state is null
+  assert.equal(isValidSnapshot({ partIndex: 0, stepIndex: -1, state: 'not-an-object' }), false);
 });

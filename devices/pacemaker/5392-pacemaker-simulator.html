@@ -2406,7 +2406,82 @@ function applyRole(){
 }
 
 applyRole(); syncFac(); render(); requestAnimationFrame(loop);
+
+/* ========= Shared engine bridge (Phase 5) =========
+   Read/write hooks for a separate <script type="module"> block below (its own scope, added
+   after this script closes) to join the monitors' shared physiology bus via sync/deviceSync.js.
+   Deliberately NOT this file's own sync/relay system (SYNC_KEY/'sim5392'/relay.* above) - that
+   remains this device's own dashboard<->learner pairing, completely untouched by this bridge.
+   captured mirrors the exact ventricular loss-of-capture condition already computed in
+   computeAnnunConditions() (line ~1302), just phrased as the positive case + power/self-test/
+   pause gates that function's early-return already handles differently (it returns [] rather
+   than asserting captured=true, which isn't the same thing for a bridge consumer). */
+function pacerCapturedNow(){
+  const f=MODES[S.mode];
+  return !!(S.power && T>=S.selfTestUntil && !S.paused && f.pV && S.vOut>0 && vLeadOk() && P.batt!=='depleted' && S.vOut>=P.vThr);
+}
+window.__pacerBridge={
+  getState:()=>({
+    mode: S.power?S.mode:'off',
+    rate: S.rate,
+    outputMa: S.vOut,
+    sensitivityMv: Number.isFinite(vSensMv())?vSensMv():999, // 999 stands in for ASYNC (Infinity isn't JSON-safe)
+    captured: pacerCapturedNow(),
+  }),
+  getNotifyMode:()=>N.mode,
+  /** Only accepts the shared session's binary training/validation - never overwrites a local 'custom' selection with anything else. */
+  setNotifyMode:(m)=>{ if(m!=='training'&&m!=='validation')return; N.mode=m; applyNotifyUI(); },
+  /**
+   * Testing-only: fast-forwards the device clock T by simulating `steps` real DT-length
+   * ticks (same effect as that many real frames elapsing - not a shortcut around any gate,
+   * genuinely advances the same state machine loop() itself would). Needed because T only
+   * normally advances via requestAnimationFrame, which this environment's automated,
+   * always-hidden tab suspends entirely (confirmed in Phase 2) - same rationale as the
+   * shared engine's tickNow(). Does not affect real users on a normal foreground tab.
+   */
+  __testAdvanceClock:(steps)=>{ for(let i=0;i<(steps||1);i++)step(); },
+};
 })();
+</script>
+<script type="module">
+// Joins the shared CT-surgery physiology bus (see devices/intellivue's and hemosphere-alta's
+// matching integration blocks) as an OVERLAY contributor, not a scenario driver - this device
+// has no runner/scenario of its own. It waits to receive a snapshot from a monitor or the
+// facilitator console (partIndex/stepIndex/state), patches only state.pacer into it from
+// window.__pacerBridge's live capture status, and pushes the merged result back. Until a peer
+// has broadcast at least once, there's nothing to overlay onto, so nothing is sent - this
+// device is a follower/contributor, never the shared session's origin.
+import { createDeviceSync, isValidSnapshot } from '../../sync/deviceSync.js';
+const bridgeUrlParams=new URLSearchParams(location.search);
+let lastSnapshot=null;
+function onRemoteSnapshot(snapshot){
+  // Extra important here specifically: this device's OWN pre-existing dashboard<->learner
+  // pairing (above) reads the identical ?relay=/?code= URL params this bridge does - if a
+  // user ever points both at the same relay room, this guard is what keeps that system's
+  // differently-shaped {win,data} messages from corrupting lastSnapshot. See CLAUDE.md.
+  if(!isValidSnapshot(snapshot))return;
+  lastSnapshot=snapshot;
+  if(window.__pacerBridge&&(snapshot.mode==="training"||snapshot.mode==="validation")){
+    window.__pacerBridge.setNotifyMode(snapshot.mode);
+  }
+}
+const pacerDeviceSync=createDeviceSync({
+  getSnapshot:()=>{
+    if(!lastSnapshot||!window.__pacerBridge)return null;
+    return {...lastSnapshot,state:{...lastSnapshot.state,pacer:window.__pacerBridge.getState()}};
+  },
+  onRemoteSnapshot,
+  relayUrl:bridgeUrlParams.get("relay")||"",
+  relayCode:bridgeUrlParams.get("code")||"",
+});
+// Testing/introspection hook, same rationale as the monitors' window.ctSharedEngine.
+window.ctPacerBridgeSync={
+  getLastSnapshot:()=>lastSnapshot,
+  getSyncStatus:()=>({linked:pacerDeviceSync.isLinked(),peers:pacerDeviceSync.peerCount(),relay:pacerDeviceSync.relay}),
+  pushNow:()=>pacerDeviceSync.pushNow(),
+  heartbeatNow:()=>pacerDeviceSync.heartbeatNow(),
+  setRelay:(url,code)=>pacerDeviceSync.setRelay(url,code),
+};
 </script>
 </body>
 </html>
