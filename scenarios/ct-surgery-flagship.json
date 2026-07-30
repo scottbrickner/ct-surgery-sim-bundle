@@ -22,7 +22,7 @@
       "teachingFocus": "Two RNs settling a fresh post-op CT surgery patient into bed — line/drip/vent verification and baseline assessment. No engine transition in this part; it's an assessment/orientation exercise, not a scripted deterioration.",
       "initialState": {
         "minute": 0,
-        "rhythm": "Underlying rhythm not assessed (patient is AV paced and captured)",
+        "rhythm": "Sinus Rhythm",
         "hr": 90,
         "bp": { "sbp": 102, "dbp": 65, "map": 77 },
         "co": 4.2,
@@ -38,7 +38,7 @@
       "steps": [],
       "sourceNotes": [
         "bp.map (77) is ESTIMATED via the standard (SBP+2*DBP)/3 formula because the source case study gives no charted MAP for this part (unlike Parts 2-3, which give an explicit parenthetical MAP) — treat as an approximation, not transcribed data.",
-        "rhythm (intrinsic/underlying) is not stated in the source — the patient is AV paced and captured, so the effective displayed rhythm will read 'Paced (DDD)' regardless, via getEffectiveRhythm().",
+        "rhythm is set to a placeholder 'Sinus Rhythm' since the source doesn't state the intrinsic/underlying rhythm — this value is never actually shown while pacer.captured stays true (getEffectiveRhythm() returns 'Paced (DDD)' regardless); it only matters if a future edit sets captured to false before the arrest step.",
         "pa.{systolic,diastolic}, svr, svri, svv, ppv, hpi are not given in the source for this part — left at engine defaults.",
         "Neuro/resp/GI/GU/skin assessment findings from the case study (RASS -2, ETT 23cm at the lip, vent AC/12/500/PEEP8/FiO2 100%, iNO 20ppm, OGT, Foley 50mL/hr, dermabond + LPWT dressing) are not modeled as physiology-engine fields — they're narrative/assessment content for the facilitator, not monitor-displayed numbers.",
         "Line detail (RIJ CCO PA cath 45cm, dual-lumen cordis, R radial a-line, L AC 18ga PIV) is likewise narrative context, not an engine field."
@@ -50,7 +50,7 @@
       "teachingFocus": "Same patient, several hours later. Expected learner action: recognize tamponade physiology from the vital-sign trend plus the false-reassurance sign of stopped chest-tube output, and call for emergent sternotomy.",
       "initialState": {
         "minute": 0,
-        "rhythm": "Underlying rhythm not assessed (patient remains AV paced and captured)",
+        "rhythm": "Sinus Rhythm",
         "hr": 90,
         "bp": { "sbp": 110, "dbp": 70, "map": 73 },
         "pa": { "systolic": 38, "diastolic": 12 },
@@ -108,6 +108,7 @@
         }
       ],
       "sourceNotes": [
+        "rhythm is set to a placeholder 'Sinus Rhythm' for the same reason as Part 1 — never actually shown while pacer.captured is true, up until the arrest step explicitly overrides both rhythm and captured.",
         "rr, temp, co/ci/svr/svri/svv/ppv/scvo2/hpi, and chest-tube mL totals are not restated in the source for this part — left at engine defaults. Each part is authored from its own independent 'Start of scenario' snapshot per the source, so Part 1's ending values are deliberately NOT carried forward. Facilitator should override live if a specific number matters for the class.",
         "'atMinute: 8' on the arrest step is documentation only (matches the source's 'At 8 min, patient goes into cardiac arrest') — the engine does not enforce absolute scenario-clock timing beyond the preceding ramp step's own 5-minute duration; the facilitator triggers the arrest step manually via Next when ready.",
         "The arrest step sets pacer.captured to false — modeling the pacer<->ECG feedback loop from BUILD_PROMPT.md §3.1 (loss of capture reveals the underlying rhythm). The source's 'HR – PEA (150 bpm st)' is read as the ECG showing organized electrical activity at 150 with no pulse, i.e. the pacer is no longer effectively capturing at that point, not that PEA is a distinct paced morphology."

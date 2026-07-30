@@ -227,6 +227,21 @@
       <button class="scn" data-scn="hypov"><b>Hypovolemia</b><span>↑SVV/PPV, ↓CO/CI, rising HPI.</span></button>
       <button class="scn" data-scn="sepsis"><b>Vasoplegia / Sepsis</b><span>↑CO, ↓SVR, ↓MAP, ↓ScvO₂.</span></button>
       <button class="scn" data-scn="cardiogenic"><b>Cardiogenic / LV failure</b><span>↓CO/CI, ↑SVR, ↓ScvO₂, high HPI.</span></button></div>
+    <div class="grp"><div class="gl">Shared Flagship Scenario (cross-device engine)</div>
+      <div style="display:flex;gap:6px">
+        <button class="scn" id="fs_part1" style="flex:1;text-align:center">Part 1</button>
+        <button class="scn" id="fs_part2" style="flex:1;text-align:center">Part 2</button>
+        <button class="scn" id="fs_part3" style="flex:1;text-align:center">Part 3</button>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button class="scn" id="fs_prev" style="flex:1;text-align:center">‹ Prev</button>
+        <button class="scn" id="fs_next" style="flex:1;text-align:center">Next ›</button>
+        <button class="scn" id="fs_reset" style="flex:1;text-align:center">Reset</button>
+      </div>
+      <div class="hint" id="fs_part" style="margin-top:6px">Loading shared engine…</div>
+      <div class="hint" id="fs_step"></div>
+      <div class="hint" id="fs_coach"></div>
+    </div>
     <div class="grp"><div class="gl">CT Surgery scenarios (stepped)</div>
       <select id="ctScnHS" style="width:100%;margin-bottom:6px">
         <option value="">— select CT scenario —</option>
@@ -295,8 +310,8 @@
     <div style="display:flex;gap:8px;margin-top:10px"><button id="pat_apply" class="go">Apply</button><button id="pat_close2">Cancel</button></div>
   </div></div></div>
 
-<script>
-"use strict";
+<script type="module">
+import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -594,6 +609,88 @@ window.addEventListener("resize",layout);
 buildKeybox();buildTiles();buildCockpit();buildGdtSel();byId("gdtRun").addEventListener("click",gdtReset);
 const tb=document.querySelector('#tabBar button[data-inc="300"]');if(tb)tb.classList.add("on");
 loadScn("postop");layout();setView("mon");requestAnimationFrame(frame);
+
+/* ---------------- Shared physiology engine (Phase 2) ---------------- */
+// Same pattern as IntelliVue_Sim_Monitor.html: additive wiring, none of this
+// file's existing local scenarios/sliders/CT-stepped-pack above were touched.
+// Requires this page to be served over http:// (see ../../serve.js) - browsers
+// block ES module imports under file://.
+//
+// SVR/SVRI and CI are NOT force-matched to the engine's authored values here -
+// this device always computes them live from MAP/CVP/CO via deriv(), same as a
+// real HemoSphere Alta (there is no field to directly enter an SVR on the real
+// device either). The flagship case's authored svr:1900 for Part 3 will NOT
+// exactly match what this tile shows (~1020, from 80*(63-12)/4.0) - that
+// mismatch traces back to the source case study itself, whose stated SVR
+// doesn't reconcile against its own stated MAP/CVP/CO through the standard
+// formula. Preserving this device's live derivation is more faithful to how
+// a real monitor behaves than adding an override field it wouldn't have.
+function applyEngineValuesLight(es){
+  drv.co=es.co;drv.map=es.bp.map;drv.pr=es.hr;drv.cvp=es.cvp;drv.svv=es.svv;drv.ppv=es.ppv;
+  drv.scvo2=es.scvo2;drv.hpi=es.hpi;drv.sys=es.bp.sbp;drv.dia=es.bp.dbp;if(es.temp)drv.temp=es.temp;
+}
+function applyEngineStateFull(es){
+  cancelTrans(); // the shared engine owns transitions while the flagship scenario drives state
+  drv.mode="Swan"; // PA catheter is present throughout this case - unlocks SVR/HPI/ScvO2
+  drv.sensors.cco=true;drv.sensors.acumen=true;drv.sensors.oximetry=true;drv.oxiCal=true;
+  applyEngineValuesLight(es);
+  ccoAvg=drv.co;scoVal=drv.co; // snap the easing averages immediately rather than drifting in over several seconds
+  syncFac();applyMode();
+}
+
+let runner=null;
+async function initFlagshipScenario(){
+  const resp=await fetch("../../scenarios/ct-surgery-flagship.json");
+  if(!resp.ok)throw new Error("HTTP "+resp.status);
+  const scenario=await resp.json();
+  runner=createRunner(scenario);
+  renderFlagshipUI();
+}
+initFlagshipScenario().catch(err=>{
+  console.error("Flagship scenario engine failed to load:",err);
+  const el=byId("fs_part");if(el)el.textContent="Shared engine unavailable — serve over http://, not file:// (see serve.js).";
+});
+
+function renderFlagshipUI(){
+  if(!runner)return;
+  const part=runner.scenario.parts[runner.partIndex];
+  const step=runner.stepIndex>=0?part.steps[runner.stepIndex]:null;
+  byId("fs_part").innerHTML="<b>"+part.title+"</b>";
+  byId("fs_step").textContent=step?step.id:"(part start)";
+  byId("fs_coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
+  applyEngineStateFull(runner.state);
+}
+byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());renderFlagshipUI();});
+byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);renderFlagshipUI();});
+byId("fs_reset").addEventListener("click",()=>{runner=srReset(runner);renderFlagshipUI();});
+byId("fs_part1").addEventListener("click",()=>{runner=srJumpToPart(runner,"part1-bedside-settlein");renderFlagshipUI();});
+byId("fs_part2").addEventListener("click",()=>{runner=srJumpToPart(runner,"part2-tamponade-arrest");renderFlagshipUI();});
+byId("fs_part3").addEventListener("click",()=>{runner=srJumpToPart(runner,"part3-ecmo-cannulation");renderFlagshipUI();});
+
+// Facilitator drivers also nudge the shared engine so a manual override during a
+// flagship scenario rebases any in-flight ramp instead of being silently overwritten
+// by the next tick.
+const ENGINE_OVERRIDE_MAP={f_co:"co",f_map:"bp.map",f_cvp:"cvp",f_svv:"svv",f_ppv:"ppv",f_scvo2:"scvo2",f_hpi:"hpi",f_sys:"bp.sbp",f_dia:"bp.dbp",f_temp:"temp",f_pr:"hr"};
+function setEnginePath(obj,path,value){const[h,...r]=path.split(".");if(!r.length){obj[h]=value;return;}obj[h]=obj[h]||{};setEnginePath(obj[h],r.join("."),value);}
+for(const id in ENGINE_OVERRIDE_MAP){const el=byId(id);if(!el)continue;
+  el.addEventListener("input",()=>{if(!runner)return;const patch={};setEnginePath(patch,ENGINE_OVERRIDE_MAP[id],parseFloat(el.value));runner=srOverride(runner,patch);});}
+
+// Independent rAF loop for live-ticking an in-flight ramp, mirroring this file's
+// own frame() pattern rather than growing frame() itself.
+function flagshipTick(ts){
+  if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}
+  requestAnimationFrame(flagshipTick);
+}
+requestAnimationFrame(flagshipTick);
+
+// Read-only introspection hook, same purpose as IntelliVue's - used by verification
+// tooling today, and the attachment point Phase 3's sync layer will read from.
+window.ctSharedEngine={
+  getRunner:()=>runner,
+  getState:()=>runner&&runner.state,
+  getDeviceState:()=>drv,
+  tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}return runner&&runner.state;},
+};
 </script>
 </body>
 </html>

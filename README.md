@@ -8,7 +8,15 @@ Training simulation only. Not for clinical use.
 
 ## Status
 
-**Phase 0 and Phase 1 complete.** Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema, with the flagship 3-part case authored against it — but **the devices are not wired to the engine yet** (that's Phase 2). Each device HTML file still runs its own local state today; `engine/` and `scenarios/` exist alongside them as standalone, fully-tested modules, not yet imported by anything. See `docs/BUILD_PROMPT.md` §9 for what Phase 2 onward looks like.
+**Phases 0-2 complete.** Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema, with the flagship 3-part case authored against it. **Phase 2 wired IntelliVue and HemoSphere Alta to that engine** — both now import `engine/physiology.js` + `engine/scenarioRunner.js` as real ES modules and drive their displays from a new "Shared Flagship Scenario" facilitator-panel section (Part 1/2/3 jump, Next/Prev/Reset, live coach text), instead of only their own pre-existing local scenario packs (which are untouched and still work exactly as before). **The pacemaker is not wired yet** and **the two monitors don't sync with each other or the pacemaker yet** — both are Phase 3 (BroadcastChannel/relay sync + generalized pop-out windows).
+
+**Breaking change from Phase 1: these two device files can no longer be opened by double-click (`file://`).** Browsers block ES module imports (and `fetch`) from local files — each `file://` page is treated as its own opaque origin. Serve the repo root over `http://` instead: `node serve.js` (see below). Everything on each page that doesn't touch the shared engine still works fine either way; only the new "Shared Flagship Scenario" panel section requires the server.
+
+Two known, deliberate display simplifications from Phase 2 (documented in code comments where they occur):
+- Neither device force-displays the engine's authored `ci`/`svr`/`svri` — both always compute Cardiac Index and (on HemoSphere) SVR/SVRI live from CO/height/weight or MAP/CVP/CO, matching how the real devices actually work (there's no field to manually enter an SVR on a real HemoSphere Alta either). The flagship case's authored `svr: 1900` for Part 3 won't match HemoSphere's own computed ~1020 — that traces back to an inconsistency in the source case study itself (its stated SVR doesn't reconcile with its own stated MAP/CVP/CO via the standard formula), not a wiring bug.
+- IntelliVue has no literal "PEA" waveform (rhythm is a fixed enum). The engine's effective-rhythm output is mapped to the closest real device rhythm (`PEA` → `sinus_tach`), with pulselessness conveyed by the flat 0/0 arterial pressure rather than a distinct waveform.
+
+See `docs/BUILD_PROMPT.md` §9 for what Phase 3 onward looks like.
 
 ## Structure
 
@@ -42,9 +50,18 @@ docs/
   references/                          # case study + device manuals + formulary, pulled in for the build session's convenience (some gitignored, see below)
 ```
 
-## Running it today (post-Phase-1, pre-Phase-2)
+## Running it today (post-Phase-2, pre-Phase-3)
 
-Each device HTML file is still fully standalone — open any one directly in a browser, no server or build step needed. They don't talk to each other or to `engine/` yet; that wiring is Phase 2. The relay (`relay/server.js`) is the pacemaker sim's existing pairing mechanism; running it (`npm install && node server.js` inside `relay/`) lets a second pacemaker-sim window/device join over WebSocket, but the two monitor sims don't yet participate in that channel.
+Serve the repo root and open a device over `http://` (required as of Phase 2 — see above):
+
+```bash
+node serve.js
+# then open:
+# http://localhost:8080/devices/intellivue/IntelliVue_Sim_Monitor.html
+# http://localhost:8080/devices/hemosphere-alta/HemoSphere_Alta_Sim.html
+```
+
+Open the Facilitator panel (gear icon, or press `F`) → "Shared Flagship Scenario" to drive either device through the flagship case. IntelliVue and HemoSphere Alta each run their own independent copy of the engine right now — driving one does NOT move the other yet; that's what Phase 3's sync layer adds. The pacemaker sim (`devices/pacemaker/`) is unchanged from Phase 0 and still fully standalone (`file://` still works for it, since it wasn't touched); its relay (`relay/server.js`) is the pairing mechanism Phase 3 will extend to the monitors: `npm install && node server.js` inside `relay/` lets a second pacemaker-sim window/device join over WebSocket.
 
 To run the engine/scenario test suite (no install needed — zero dependencies):
 

@@ -180,6 +180,21 @@
       <button class="scn" data-scn="sepsis"><b>Septic Shock (PA cath)</b><span>↑CO/↓SVR, PAP shown.</span></button>
       <button class="scn" data-scn="neuro"><b>Neuro / ↑ ICP</b><span>ICP/CPP shown, Cushing.</span></button>
     </div>
+    <div class="grp"><div class="gl">Shared Flagship Scenario (cross-device engine)</div>
+      <div class="btnrow">
+        <button class="act" id="fs_part1">Part 1</button>
+        <button class="act" id="fs_part2">Part 2</button>
+        <button class="act" id="fs_part3">Part 3</button>
+      </div>
+      <div class="btnrow" style="margin-top:5px">
+        <button class="act" id="fs_prev">‹ Prev</button>
+        <button class="act" id="fs_next">Next ›</button>
+        <button class="act" id="fs_reset">Reset</button>
+      </div>
+      <div class="gl" id="fs_part" style="margin-top:6px;font-weight:400">Loading shared engine…</div>
+      <div class="gl" id="fs_step" style="font-weight:400;color:#dce8f2"></div>
+      <div class="hint" id="fs_coach"></div>
+    </div>
     <div class="grp"><div class="gl">CT Surgery scenarios (stepped)</div>
       <select id="ctScnIV" style="width:100%;margin-bottom:6px">
         <option value="">— select CT scenario —</option>
@@ -425,8 +440,9 @@
   </div>
 </div></div>
 
-<script>
-"use strict";
+<script type="module">
+import { getEffectiveRhythm } from '../../engine/physiology.js';
+import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -999,6 +1015,98 @@ byId("ws_calc").addEventListener("click",()=>{byId("calcModal").classList.add("o
 /* ---------------- Boot ---------------- */
 window.addEventListener("resize",layout);
 loadScenario("baseline");requestAnimationFrame(frame);requestAnimationFrame(wedgePreview);requestAnimationFrame(wsDraw);
+
+/* ---------------- Shared physiology engine (Phase 2) ---------------- */
+// Devices become VIEWS over the shared engine (engine/physiology.js + scenarioRunner.js)
+// rather than owning their own scenario state. This block is additive: none of the
+// file's existing local scenarios/sliders/CT-stepped-pack above were touched. Requires
+// this page to be served over http:// (see serve.js) - browsers block ES module imports
+// under file://, so opening this file by double-click will show "Shared engine unavailable"
+// below but everything else on the page still works exactly as before.
+const RHYTHM_MAP={
+  "Paced (DDD)":"paced_v","Paced (DDI)":"paced_v","Paced (VVI)":"paced_v","Paced (VOO)":"paced_v","Paced (AOO)":"paced_v",
+  "PEA":"sinus_tach", // organized activity w/o a pulse - shown as its underlying morphology; pulselessness comes through via flat ART pressure (sys/dia -> 0), not a distinct waveform
+  "Sinus Tachycardia":"sinus_tach","Sinus Bradycardia":"sinus_brady","Sinus Rhythm":"sinus","Atrial Fibrillation":"afib",
+};
+function mapEngineRhythm(effRhythm){const m=RHYTHM_MAP[effRhythm];if(!m){console.warn("Flagship engine: no device rhythm mapping for",JSON.stringify(effRhythm),"- falling back to sinus");return"sinus";}return m;}
+
+// Cheap per-frame update during a live ramp: only the numeric fields the render loop
+// already samples live. Deliberately does NOT call layout() - layout()->paintBg() does a
+// full canvas fillRect, which would blank the scrolling waveform trace on every tick.
+function applyEngineValuesLight(es){
+  state.hr=es.hr;state.sys=es.bp.sbp;state.dia=es.bp.dbp;state.cvp=es.cvp;
+  state.paSys=es.pa.systolic;state.paDia=es.pa.diastolic;state.spo2=es.spo2;
+  if(es.rr)state.rr=es.rr;if(es.temp)state.temp=es.temp;state.co=es.co;
+  state.rhythm=mapEngineRhythm(getEffectiveRhythm(es));
+  state.nbpSys=Math.round(state.sys);state.nbpDia=Math.round(state.dia);
+  rrSec=60/Math.max(20,state.hr);updateCO();
+}
+// Discrete navigation (Next/Prev/Reset/jump): also surface the relevant tiles and
+// refresh controls/canvas layout once - matches how loadScenario()/ctApplyIV() already
+// call layout() once per discrete scenario change, not per frame.
+function applyEngineStateFull(es){
+  cancelTrans(); // the shared engine owns transitions while the flagship scenario drives state
+  state.show.abp=true;state.show.cvp=true;state.show.pap=true;state.show.coci=true;
+  applyEngineValuesLight(es);
+  syncControls();refreshClinicalUI();refreshToggleUI();layout();
+}
+
+let runner=null;
+async function initFlagshipScenario(){
+  const resp=await fetch("../../scenarios/ct-surgery-flagship.json");
+  if(!resp.ok)throw new Error("HTTP "+resp.status);
+  const scenario=await resp.json();
+  runner=createRunner(scenario);
+  renderFlagshipUI();
+}
+initFlagshipScenario().catch(err=>{
+  console.error("Flagship scenario engine failed to load:",err);
+  const el=byId("fs_part");if(el)el.textContent="Shared engine unavailable — serve over http://, not file:// (see serve.js).";
+});
+
+function renderFlagshipUI(){
+  if(!runner)return;
+  const part=runner.scenario.parts[runner.partIndex];
+  const step=runner.stepIndex>=0?part.steps[runner.stepIndex]:null;
+  byId("fs_part").innerHTML="<b>"+part.title+"</b>";
+  byId("fs_step").textContent=step?step.id:"(part start)";
+  byId("fs_coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
+  applyEngineStateFull(runner.state);
+}
+byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());renderFlagshipUI();});
+byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);renderFlagshipUI();});
+byId("fs_reset").addEventListener("click",()=>{runner=srReset(runner);renderFlagshipUI();});
+byId("fs_part1").addEventListener("click",()=>{runner=srJumpToPart(runner,"part1-bedside-settlein");renderFlagshipUI();});
+byId("fs_part2").addEventListener("click",()=>{runner=srJumpToPart(runner,"part2-tamponade-arrest");renderFlagshipUI();});
+byId("fs_part3").addEventListener("click",()=>{runner=srJumpToPart(runner,"part3-ecmo-cannulation");renderFlagshipUI();});
+
+// Facilitator vital-sign sliders also nudge the shared engine (in addition to their
+// existing local-state binding above) so a manual override during a flagship scenario
+// rebases any in-flight ramp instead of being silently overwritten by the next tick.
+const ENGINE_OVERRIDE_MAP={f_hr:"hr",f_sys:"bp.sbp",f_dia:"bp.dbp",f_cvp:"cvp",f_pasys:"pa.systolic",f_padia:"pa.diastolic",f_rr:"rr",f_co:"co",f_temp:"temp"};
+function setEnginePath(obj,path,value){const[h,...r]=path.split(".");if(!r.length){obj[h]=value;return;}obj[h]=obj[h]||{};setEnginePath(obj[h],r.join("."),value);}
+for(const id in ENGINE_OVERRIDE_MAP){const el=byId(id);if(!el)continue;
+  el.addEventListener("input",()=>{if(!runner)return;const patch={};setEnginePath(patch,ENGINE_OVERRIDE_MAP[id],parseFloat(el.value));runner=srOverride(runner,patch);});}
+
+// Independent rAF loop for live-ticking an in-flight ramp - same pattern this file
+// already uses for wedgePreview()/wsDraw() (parallel loops rather than growing frame()).
+function flagshipTick(ts){
+  if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}
+  requestAnimationFrame(flagshipTick);
+}
+requestAnimationFrame(flagshipTick);
+
+// Read-only introspection hook for the shared engine - used by verification tooling
+// today, and will double as the attachment point Phase 3's sync layer reads from.
+// tickNow(ts) manually drives one tick at an explicit timestamp, bypassing
+// requestAnimationFrame - useful for automated testing in environments (e.g. a
+// backgrounded/hidden automation tab) where rAF is suspended by the browser.
+window.ctSharedEngine={
+  getRunner:()=>runner,
+  getState:()=>runner&&runner.state,
+  getDeviceState:()=>state,
+  tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}return runner&&runner.state;},
+};
 </script>
 </body>
 </html>
