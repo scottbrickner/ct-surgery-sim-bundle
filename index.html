@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CT Surgery Sim Bundle</title>
+<style>
+  :root{ --bg:#0a0d12; --panel:#0e1420; --line:#1c2836; --txt:#eef2f6; --dim:#8aa0b4; --accent:#2f9ad6; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;min-height:100%;background:var(--bg);font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:var(--txt);}
+  #app{max-width:760px;margin:0 auto;padding:36px 20px 60px;}
+  h1{font-size:22px;margin:0 0 4px;font-weight:800;}
+  .sub{color:var(--dim);font-size:13.5px;margin-bottom:8px;}
+  .disclaimer{font-size:12px;color:#ff9a9a;background:#2a0e0e;border:1px solid #5a1a1a;border-radius:6px;padding:8px 12px;margin:14px 0 28px;}
+  ol{padding-left:20px;font-size:14px;line-height:1.7;color:#cdd9e4;}
+  ol li{margin-bottom:6px;}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px;}
+  @media(max-width:560px){.cards{grid-template-columns:1fr;}}
+  a.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;text-decoration:none;color:var(--txt);transition:border-color .15s;}
+  a.card:hover{border-color:var(--accent);}
+  a.card .k{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:4px;}
+  a.card .t{font-size:15px;font-weight:700;margin-bottom:4px;}
+  a.card .d{font-size:12.5px;color:var(--dim);line-height:1.5;}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:28px 0 4px;font-weight:700;}
+  code{background:#0a121b;border:1px solid #2a3a4a;border-radius:4px;padding:1px 5px;font-size:12.5px;}
+  footer{margin-top:36px;font-size:11.5px;color:#5e7488;line-height:1.6;}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>CT Surgery Sim Bundle</h1>
+  <div class="sub">Bundled, cross-syncing training simulation for a CT (cardiothoracic) surgery nursing class — Philips IntelliVue, Edwards HemoSphere Alta, and a Medtronic 5392 temporary pacemaker, driven by one shared physiology engine.</div>
+  <div class="disclaimer">Training simulation only. Not for clinical use.</div>
+
+  <h2>Setup order matters</h2>
+  <ol>
+    <li>Open the <b>Facilitator Console</b> first — that's the source of truth for the flagship case.</li>
+    <li>Open <b>IntelliVue</b> and <b>HemoSphere Alta</b> next — they sync to the console automatically on this machine (zero setup), or via the console's relay link for a separate device.</li>
+    <li>Open the <b>Pacemaker</b> last, if this session uses it — it only overlays its live capture state onto a session that already exists, so it needs a monitor or the console open first.</li>
+  </ol>
+
+  <div class="cards">
+    <a class="card" href="facilitator/console.html">
+      <div class="k">Facilitator</div>
+      <div class="t">Console</div>
+      <div class="d">Drive the scenario, override any parameter, connect devices. Not shown to learners.</div>
+    </a>
+    <a class="card" href="devices/intellivue/IntelliVue_Sim_Monitor.html">
+      <div class="k">Monitor</div>
+      <div class="t">IntelliVue</div>
+      <div class="d">Philips IntelliVue MX-series patient monitor.</div>
+    </a>
+    <a class="card" href="devices/hemosphere-alta/HemoSphere_Alta_Sim.html">
+      <div class="k">Monitor</div>
+      <div class="t">HemoSphere Alta</div>
+      <div class="d">Edwards HemoSphere Alta hemodynamic monitor.</div>
+    </a>
+    <a class="card" href="devices/pacemaker/5392-pacemaker-simulator.html">
+      <div class="k">Device</div>
+      <div class="t">Pacemaker</div>
+      <div class="d">Medtronic 5392 dual-chamber temporary pacemaker. Fully interactive — hand this to a learner.</div>
+    </a>
+  </div>
+
+  <h2>Notes</h2>
+  <div class="sub">This page and the links above require being served over <code>http(s)://</code> — the shared engine uses real ES module imports, which browsers block under <code>file://</code>. If you're reading this, you're already being served correctly.</div>
+
+  <footer>
+    Full build spec: <code>docs/BUILD_PROMPT.md</code>. Governing conventions: <code>CLAUDE.md</code>. Repo: <a href="https://github.com/scottbrickner/ct-surgery-sim-bundle" style="color:var(--accent)">github.com/scottbrickner/ct-surgery-sim-bundle</a>.
+  </footer>
+</div>
+</body>
+</html>

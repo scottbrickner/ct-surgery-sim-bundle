@@ -8,7 +8,17 @@ Training simulation only. Not for clinical use.
 
 ## Status
 
-**Phases 0-5 complete.** Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema. Phase 2 wired IntelliVue and HemoSphere Alta to that engine. Phase 3 made the two wired devices actually talk to each other via `sync/deviceSync.js`. Phase 4 added `facilitator/console.html`, a dedicated control page for the instructor's own laptop.
+**Phases 0-5 complete, Phase 6 partially complete — deploy configs and docs are done, actual cloud provisioning is not (and can't be done by an AI agent — see below).**
+
+**What Phase 6 added**: a root [`index.html`](index.html) landing page (the bare site root used to 404 — now it explains the setup order and links to all four surfaces; this is also the page that would actually get embedded in Teams/SharePoint), a repo-root [`netlify.toml`](netlify.toml) reusing the pacemaker's original SharePoint-embedding CSP (`frame-ancestors`) for the static device files, and a rewritten [`relay/README-deploy.md`](relay/README-deploy.md) with Azure App Service as the primary, step-by-step documented path (the relay code itself needed zero changes — `server.js` already reads `process.env.PORT`, which Azure sets automatically).
+
+**What Phase 6 has NOT done, and can't**: actually create the Azure Web App or the Netlify site. Both need an account, credentials, and a billing/procurement decision only you (or Keck IT) can make — not something I have access to or should attempt to work around. Follow `relay/README-deploy.md` and the Netlify steps below when you're ready, or hand them to whoever manages Keck's Azure/Netlify accounts.
+
+Everything already built (Phases 0-5) works fully today without any of this — same-machine BroadcastChannel sync needs zero deployment at all; the relay is only needed once the class spans genuinely separate devices.
+
+---
+
+Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema. Phase 2 wired IntelliVue and HemoSphere Alta to that engine. Phase 3 made the two wired devices actually talk to each other via `sync/deviceSync.js`. Phase 4 added `facilitator/console.html`, a dedicated control page for the instructor's own laptop. Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema. Phase 2 wired IntelliVue and HemoSphere Alta to that engine. Phase 3 made the two wired devices actually talk to each other via `sync/deviceSync.js`. Phase 4 added `facilitator/console.html`, a dedicated control page for the instructor's own laptop.
 
 **Phase 5 wired the pacemaker into the shared engine — the pacer<->ECG feedback loop is real, not simulated-for-demo.** The pacemaker joins the same `sync/deviceSync.js` bus as an *overlay contributor*, not a scenario driver: it has no runner/flagship-case concept of its own, so it waits to receive a snapshot from a monitor or the console, patches only `state.pacer` into it from its own live, derived capture status (reusing the exact same loss-of-capture boolean logic the device's own annunciator system already relied on — not a re-derivation that could drift from it), and pushes the merged result back. Concretely verified in-browser: powering the real device on, connecting the V lead, and getting capture shows `Paced (DDD)` on IntelliVue; then raising the ventricular threshold above the output — the actual facilitator fault-injection control, not a shortcut — induces a real loss of capture, and IntelliVue's rhythm reverts to the intrinsic rhythm live, within about a push cycle (140ms in real use).
 
@@ -26,11 +36,13 @@ Known, deliberate simplifications (documented in code comments where they occur)
 - The sync payload is deliberately narrow (`{partIndex, stepIndex, state, mode}` — never `activeRamp`, since its timestamp is `performance.now()`-relative and meaningless across windows/devices). Whichever device is actively driving a ramp ticks it locally and broadcasts each already-interpolated snapshot; a follower device never runs its own ramp math, just displays incoming numbers. This also means, right now, any device (including the pacemaker's overlay) can move the shared state — there's no facilitator "lock," matching the pacemaker sim's own precedent of not needing one in practice.
 - Training/Validation mode currently only has a real visual effect on the pacemaker (it has real, simulator-added coaching annunciators to hide). IntelliVue and HemoSphere Alta's alarm/annunciator text is standard real-monitor behavior, not a simulator-added teaching layer — suppressing it under "Validation" would reduce fidelity rather than help, so it deliberately doesn't.
 
-See `docs/BUILD_PROMPT.md` §9 for what Phase 6 (Azure relay hosting, Teams-embeddable deploy, polish) looks like.
+See `docs/BUILD_PROMPT.md` §9 for the full phased plan.
 
 ## Structure
 
 ```
+index.html                             # root landing page — links to all four surfaces, would be what gets embedded in Teams/SharePoint
+netlify.toml                           # static-site deploy config, reuses the SharePoint-embedding CSP from the pacemaker's original Netlify deploy
 engine/
   physiology.js                      # shared state model + pure transition functions (createState, applyInstant, rampState, getEffectiveRhythm)
   scenarioRunner.js                  # timeline navigation (next/prev/reset/jumpToPart) + ramp ticking + facilitator overrides
@@ -59,13 +71,13 @@ devices/
 relay/
   server.js                            # WebSocket relay (Node + ws) — room-by-code, rebroadcasts JSON state to peers
   package.json
-  README-deploy.md                     # deploy notes (written against Render; target for this project is Azure App Service, see BUILD_PROMPT.md §8.2)
+  README-deploy.md                     # deploy notes — Azure App Service is the primary documented path (BUILD_PROMPT.md §8.2), step-by-step; Render/Railway/Fly as local-dev alternatives
 docs/
   BUILD_PROMPT.md                      # the full spec — read this first
   references/                          # case study + device manuals + formulary, pulled in for the build session's convenience (some gitignored, see below)
 ```
 
-## Running it today (post-Phase-5, pre-Phase-6)
+## Running it today (locally)
 
 Serve the repo root over `http://` (required for all three devices as of Phase 5):
 
@@ -95,6 +107,16 @@ cd engine && node --test
 cd ../scenarios && node --test
 cd ../sync && node --test
 ```
+
+## Deploying for real classroom use
+
+Two independent pieces, both optional until the class spans more than one device/machine:
+
+**The static site** (console + monitors + pacemaker) — deploy to **Netlify** (not GitHub Pages: Pages can't set custom HTTP headers, and the SharePoint-embedding CSP needs one). Connect this GitHub repo in the Netlify dashboard, publish directory `.`, no build command — `netlify.toml` at the repo root handles the rest. `relay/` is not part of this deploy (Netlify's static hosting can't run a persistent WebSocket process); Netlify will simply serve `relay/server.js` as an inert text file alongside everything else, which is harmless but worth knowing.
+
+**The relay** (only needed for cross-device sync, e.g. the pacer on an iPad) — see `relay/README-deploy.md`. Azure App Service is the documented target; the code needs zero changes.
+
+Neither of these has been provisioned yet — that needs your (or Keck IT's) Azure/Netlify account access, which isn't something I can act on. Everything in Phases 0-5 already works fully without either: same-machine BroadcastChannel sync needs nothing deployed at all.
 
 ## Source projects
 

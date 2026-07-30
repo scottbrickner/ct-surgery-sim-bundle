@@ -1,0 +1,27 @@
+# Netlify configuration — CT Surgery Sim Bundle (static assets only)
+#
+# This deploys the console, both monitors, the pacemaker, and their shared
+# engine/scenarios/sync modules as plain static files - no build step, same
+# as running serve.js locally. It does NOT deploy relay/server.js (that's a
+# persistent Node/WebSocket process; Netlify's static hosting can't run it -
+# see relay/README-deploy.md, target is Azure App Service).
+#
+# The CSP header below is reused verbatim from the pacemaker sim's own prior
+# Netlify deploy (5392-netlify/netlify.toml, from before this bundle existed)
+# per BUILD_PROMPT.md's "reuse the existing iframe CSP pattern" decision -
+# not a fresh security review, a deliberate continuation of an already-agreed
+# policy. Adjust the SharePoint/Microsoft domains below if Keck's tenant
+# setup differs from what that prior deploy assumed.
+
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    # Allow this site to be embedded inside SharePoint Online / Teams pages
+    # (and itself). Direct access to the URL is unaffected.
+    Content-Security-Policy = "frame-ancestors 'self' https://*.sharepoint.com https://*.sharepoint.us https://*.microsoftonline.com https://teams.microsoft.com"
