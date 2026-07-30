@@ -75,9 +75,14 @@ test('getEffectiveRhythm shows the intrinsic rhythm on loss of capture (pacer on
   assert.equal(getEffectiveRhythm(s), 'Sinus Bradycardia');
 });
 
-test('getEffectiveRhythm shows the paced rhythm when the pacer is on and capturing', () => {
-  const s = createState({ rhythm: 'Sinus Bradycardia', pacer: { mode: 'DDD', captured: true } });
+test('getEffectiveRhythm shows the paced rhythm when the pacer is on, capturing, and its rate is at or above the intrinsic rate', () => {
+  const s = createState({ hr: 70, rhythm: 'Sinus Bradycardia', pacer: { mode: 'DDD', captured: true, rate: 80 } });
   assert.equal(getEffectiveRhythm(s), 'Paced (DDD)');
+});
+
+test('getEffectiveRhythm shows the intrinsic rhythm when captured but demand-inhibited (intrinsic rate exceeds the programmed pacer rate)', () => {
+  const s = createState({ hr: 90, rhythm: 'Sinus Rhythm', pacer: { mode: 'VVI', captured: true, rate: 60 } });
+  assert.equal(getEffectiveRhythm(s), 'Sinus Rhythm');
 });
 
 test('getEffectiveHR shows the intrinsic HR when the pacer is off', () => {
@@ -93,4 +98,14 @@ test('getEffectiveHR shows the intrinsic HR on loss of capture (pacer on, not ca
 test('getEffectiveHR shows the pacer\'s programmed rate when on and capturing (pacer rate exceeds intrinsic)', () => {
   const s = createState({ hr: 70, pacer: { mode: 'VVI', captured: true, rate: 80 } });
   assert.equal(getEffectiveHR(s), 80);
+});
+
+test('getEffectiveHR shows the pacer\'s programmed rate when it exactly equals the intrinsic rate (boundary, still paces)', () => {
+  const s = createState({ hr: 70, pacer: { mode: 'VVI', captured: true, rate: 70 } });
+  assert.equal(getEffectiveHR(s), 70);
+});
+
+test('getEffectiveHR shows the intrinsic HR when captured but demand-inhibited (intrinsic rate exceeds the programmed pacer rate)', () => {
+  const s = createState({ hr: 90, pacer: { mode: 'VVI', captured: true, rate: 50 } });
+  assert.equal(getEffectiveHR(s), 90);
 });

@@ -113,15 +113,30 @@ export function rampState(fromState, targetPatch, fraction) {
 }
 
 /**
- * What the ECG should actually display. If the pacer is on and capturing,
- * that's a paced rhythm (with spikes, on the device side). Otherwise - pacer
- * off, or on but NOT capturing (loss of capture) - the underlying intrinsic
- * rhythm shows through. This is the pacer<->IntelliVue feedback loop called
- * for in BUILD_PROMPT.md's architecture decisions; Phase 2 wires IntelliVue's
- * ECG selection to call this instead of reading state.rhythm directly.
+ * Demand-inhibition: a demand pacer only actually paces when the intrinsic
+ * rate falls below its programmed rate - if the intrinsic rate is faster, the
+ * pacer senses those native beats and sits inhibited (never fires), so the
+ * intrinsic rhythm/rate shows through even though the pacer is on and would
+ * otherwise be capturing. "Captured" (state.pacer.captured) is a separate,
+ * hardware-level concept - whether a delivered pacing spike would actually
+ * depolarize the myocardium (output mA vs threshold) - and says nothing about
+ * whether the pacer is currently being asked to fire at all. A paced rhythm
+ * only shows when BOTH are true: capable of capturing, AND actually pacing
+ * (intrinsic rate not fast enough to inhibit it).
+ */
+function isPacing(state) {
+  return state.pacer.mode !== 'off' && state.pacer.captured && state.pacer.rate >= state.hr;
+}
+
+/**
+ * What the ECG should actually display. See isPacing() for the full
+ * capture-vs-demand-inhibition precedence. This is the pacer<->IntelliVue
+ * feedback loop called for in BUILD_PROMPT.md's architecture decisions;
+ * Phase 2 wires IntelliVue's ECG selection to call this instead of reading
+ * state.rhythm directly.
  */
 export function getEffectiveRhythm(state) {
-  if (state.pacer.mode !== 'off' && state.pacer.captured) {
+  if (isPacing(state)) {
     return `Paced (${state.pacer.mode})`;
   }
   return state.rhythm;
@@ -129,20 +144,14 @@ export function getEffectiveRhythm(state) {
 
 /**
  * What the HR should actually read. Mirrors getEffectiveRhythm()'s precedence
- * exactly: while the pacer is on and capturing, the patient's observed rate
- * IS the pacer's programmed rate (every captured beat lands exactly on the
- * paced interval) - not whatever the intrinsic/authored state.hr says.
- *
- * KNOWN LIMITATION - does not model demand-inhibition: a captured pacer
- * programmed BELOW the intrinsic rate would, on a real device, sit inhibited
- * and let the faster intrinsic rhythm show through instead. This always
- * returns the paced rate whenever captured is true, regardless of how it
- * compares to state.hr. Fine for "pacer rate exceeds intrinsic" (the common
- * teaching case), wrong for "intrinsic exceeds a lower pacer rate" - revisit
- * if a scenario needs to teach demand-inhibition specifically.
+ * exactly (see isPacing()): while the pacer is actually pacing, the patient's
+ * observed rate IS the pacer's programmed rate (every captured beat lands
+ * exactly on the paced interval) - not whatever the intrinsic/authored
+ * state.hr says. Once the intrinsic rate rises above the programmed pacer
+ * rate, the pacer is inhibited and the intrinsic rate shows through instead.
  */
 export function getEffectiveHR(state) {
-  if (state.pacer.mode !== 'off' && state.pacer.captured) {
+  if (isPacing(state)) {
     return state.pacer.rate;
   }
   return state.hr;
