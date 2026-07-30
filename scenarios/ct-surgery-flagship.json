@@ -1,0 +1,169 @@
+{
+  "id": "ct-surgery-flagship",
+  "title": "CABGx3 + MVR + MAZE — Cardiogenic Shock, Tamponade, and ECMO",
+  "patient": {
+    "name": "Mike O'Phenolate",
+    "age": 64,
+    "sex": "M",
+    "history": [
+      "Atrial fibrillation",
+      "Type 2 diabetes",
+      "Hypertension",
+      "Heart failure, EF 30%",
+      "Former smoker (quit 10 years)"
+    ],
+    "procedure": "CABGx3 + mitral valve replacement (MVR) + MAZE procedure; difficult separation from cardiopulmonary bypass",
+    "presentation": "Presented to an outside hospital ED 3 days prior with chest pain; left heart catheterization showed diffuse 3-vessel disease; transferred to Keck Hospital for surgery."
+  },
+  "parts": [
+    {
+      "id": "part1-bedside-settlein",
+      "title": "SIM 1: Bedside settle-in",
+      "teachingFocus": "Two RNs settling a fresh post-op CT surgery patient into bed — line/drip/vent verification and baseline assessment. No engine transition in this part; it's an assessment/orientation exercise, not a scripted deterioration.",
+      "initialState": {
+        "minute": 0,
+        "rhythm": "Underlying rhythm not assessed (patient is AV paced and captured)",
+        "hr": 90,
+        "bp": { "sbp": 102, "dbp": 65, "map": 77 },
+        "co": 4.2,
+        "ci": 1.9,
+        "scvo2": 60,
+        "spo2": 98,
+        "rr": 12,
+        "temp": 36.2,
+        "drips": { "epi": 2, "levo": 7, "milrinone": 0.25, "propofol": 75, "fentanyl": 50 },
+        "chestTubes": { "rPleural": 15, "rMediastinal": 25, "blake": 50, "lPleural": 50, "lMediastinal": 50 },
+        "pacer": { "mode": "DDD", "rate": 90, "outputMa": 9, "sensitivityMv": 1.5, "captured": true }
+      },
+      "steps": [],
+      "sourceNotes": [
+        "bp.map (77) is ESTIMATED via the standard (SBP+2*DBP)/3 formula because the source case study gives no charted MAP for this part (unlike Parts 2-3, which give an explicit parenthetical MAP) — treat as an approximation, not transcribed data.",
+        "rhythm (intrinsic/underlying) is not stated in the source — the patient is AV paced and captured, so the effective displayed rhythm will read 'Paced (DDD)' regardless, via getEffectiveRhythm().",
+        "pa.{systolic,diastolic}, svr, svri, svv, ppv, hpi are not given in the source for this part — left at engine defaults.",
+        "Neuro/resp/GI/GU/skin assessment findings from the case study (RASS -2, ETT 23cm at the lip, vent AC/12/500/PEEP8/FiO2 100%, iNO 20ppm, OGT, Foley 50mL/hr, dermabond + LPWT dressing) are not modeled as physiology-engine fields — they're narrative/assessment content for the facilitator, not monitor-displayed numbers.",
+        "Line detail (RIJ CCO PA cath 45cm, dual-lumen cordis, R radial a-line, L AC 18ga PIV) is likewise narrative context, not an engine field."
+      ]
+    },
+    {
+      "id": "part2-tamponade-arrest",
+      "title": "Scenario 2: Tamponade → Arrest",
+      "teachingFocus": "Same patient, several hours later. Expected learner action: recognize tamponade physiology from the vital-sign trend plus the false-reassurance sign of stopped chest-tube output, and call for emergent sternotomy.",
+      "initialState": {
+        "minute": 0,
+        "rhythm": "Underlying rhythm not assessed (patient remains AV paced and captured)",
+        "hr": 90,
+        "bp": { "sbp": 110, "dbp": 70, "map": 73 },
+        "pa": { "systolic": 38, "diastolic": 12 },
+        "cvp": 8,
+        "spo2": 97,
+        "drips": { "epi": 2, "levo": 5, "milrinone": 0.25, "propofol": 50, "fentanyl": 50 },
+        "pacer": { "mode": "DDD", "rate": 90, "outputMa": 9, "sensitivityMv": 1.5, "captured": true }
+      },
+      "steps": [
+        {
+          "id": "recent-events",
+          "type": "discussion",
+          "prompt": "Recent events since Part 1",
+          "note": "Patient received 2 units PRBC, 1 FFP, and 1 platelet unit for continued sanguineous chest-tube drainage. No chest-tube drainage in the last hour — the classic false-reassurance sign: output has stopped because the patient is tamponading, not because bleeding has resolved."
+        },
+        {
+          "id": "tamponade-begins",
+          "type": "instant",
+          "set": { "hr": 100 },
+          "coach": "Patient begins to tamponade."
+        },
+        {
+          "id": "tamponade-onset",
+          "type": "ramp",
+          "durationMinutes": 5,
+          "target": {
+            "hr": 135,
+            "bp": { "sbp": 72, "dbp": 58, "map": 65 },
+            "pa": { "systolic": 45, "diastolic": 15 },
+            "cvp": 15
+          },
+          "coach": "Over the next 5 minutes: HR 100→135, BP 110/70→72/58, PA 38/12→45/15, CVP 8→15. Watch for the class to recognize tamponade physiology and call for emergent sternotomy."
+        },
+        {
+          "id": "arrest",
+          "type": "event",
+          "atMinute": 8,
+          "set": {
+            "rhythm": "PEA",
+            "hr": 150,
+            "bp": { "sbp": 0, "dbp": 0, "map": 0 },
+            "pa": { "systolic": 0, "diastolic": 0 },
+            "cvp": 0,
+            "spo2": 0,
+            "pacer": { "captured": false },
+            "flags": { "arrestActive": true }
+          },
+          "coach": "At minute 8 (if not already called), the patient arrests: PEA at 150 on the strip, no pulse. BP/PA/CVP flatline 0/0. Pulse ox inoperative."
+        },
+        {
+          "id": "sternotomy",
+          "type": "event",
+          "set": { "flags": { "sternotomyPerformed": true } },
+          "coach": "Bedside sternotomy performed — chest opened."
+        }
+      ],
+      "sourceNotes": [
+        "rr, temp, co/ci/svr/svri/svv/ppv/scvo2/hpi, and chest-tube mL totals are not restated in the source for this part — left at engine defaults. Each part is authored from its own independent 'Start of scenario' snapshot per the source, so Part 1's ending values are deliberately NOT carried forward. Facilitator should override live if a specific number matters for the class.",
+        "'atMinute: 8' on the arrest step is documentation only (matches the source's 'At 8 min, patient goes into cardiac arrest') — the engine does not enforce absolute scenario-clock timing beyond the preceding ramp step's own 5-minute duration; the facilitator triggers the arrest step manually via Next when ready.",
+        "The arrest step sets pacer.captured to false — modeling the pacer<->ECG feedback loop from BUILD_PROMPT.md §3.1 (loss of capture reveals the underlying rhythm). The source's 'HR – PEA (150 bpm st)' is read as the ECG showing organized electrical activity at 150 with no pulse, i.e. the pacer is no longer effectively capturing at that point, not that PEA is a distinct paced morphology."
+      ]
+    },
+    {
+      "id": "part3-ecmo-cannulation",
+      "title": "Scenario 3: ECMO Cannulation / Mechanical Circulatory Support",
+      "teachingFocus": "Post-sternotomy, tamponade is resolved but the patient remains persistently hypotensive. Discussion-driven: what mechanical support options are appropriate, and why.",
+      "initialState": {
+        "minute": 0,
+        "rhythm": "Sinus Tachycardia",
+        "hr": 140,
+        "bp": { "sbp": 78, "dbp": 60, "map": 63 },
+        "pa": { "systolic": 35, "diastolic": 18 },
+        "cvp": 12,
+        "co": 4.0,
+        "ci": 1.7,
+        "svr": 1900,
+        "spo2": 86,
+        "drips": { "epi": 10, "levo": 25, "vasopressin": 0.02, "propofol": 150, "fentanyl": 50, "milrinone": 0.125, "insulin": 5 },
+        "ivpb": "vancomycin",
+        "pacer": { "mode": "DDD", "rate": 90, "outputMa": 9, "sensitivityMv": 1.5, "captured": false },
+        "flags": { "arrestActive": false, "sternotomyPerformed": true, "ecmoCannulated": false }
+      },
+      "steps": [
+        {
+          "id": "mcs-options",
+          "type": "discussion",
+          "prompt": "Patient is requiring more support. What are the options?",
+          "note": "IABP: no — indirectly offloads the ventricle but does not directly increase CO/CI. Impella: maybe — will directly increase CO/CI, but cannot be placed at bedside. ECMO: yes, if the patient meets criteria — can be installed at bedside quickly, and allows rapid weaning of pressors."
+        },
+        {
+          "id": "ecmo-cannulated",
+          "type": "event",
+          "set": { "flags": { "ecmoCannulated": true } },
+          "coach": "ECMO cannulation performed at bedside."
+        },
+        {
+          "id": "vasoplegia-rv-failure",
+          "type": "discussion",
+          "prompt": "Branch discussion: vasoplegia with RV failure",
+          "note": "Multiple pressors started; not working even after adding 3–4 agents. Discuss methylene blue vs. Cyanokit (hydroxocobalamin) for vasoplegic shock."
+        },
+        {
+          "id": "transplant-extension",
+          "type": "discussion",
+          "prompt": "Extension prompt",
+          "note": "Consider what this same trajectory would look like for a heart transplant candidate instead."
+        }
+      ],
+      "sourceNotes": [
+        "pacer.captured is set to false here (demand-inhibited) since the intrinsic rate (140, sinus tachycardia) exceeds the pacer's set rate (90) — a DDD pacer in this situation is appropriately inhibited, not failing. getEffectiveRhythm() correctly surfaces the intrinsic 'Sinus Tachycardia' either way.",
+        "rr, temp, svri, ppv, hpi, and chest-tube totals are not restated in the source for this part — left at engine defaults.",
+        "This part is discussion-driven per BUILD_PROMPT.md §8.5 (debrief is purely live-facilitated) — none of the mechanical-support/vasoplegia/transplant content is engine-scored; it exists purely as facilitator talking points."
+      ]
+    }
+  ]
+}

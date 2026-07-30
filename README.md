@@ -8,11 +8,19 @@ Training simulation only. Not for clinical use.
 
 ## Status
 
-**Phase 0 complete** — this is a straight, unmodified port of three existing prototypes into one repo. Nothing has been wired together yet. Each device still runs its own local state; there is no shared physiology engine, no unified sync, and no consolidated scenario schema yet. See `docs/BUILD_PROMPT.md` §9 for what Phase 1 onward looks like.
+**Phase 0 and Phase 1 complete.** Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema, with the flagship 3-part case authored against it — but **the devices are not wired to the engine yet** (that's Phase 2). Each device HTML file still runs its own local state today; `engine/` and `scenarios/` exist alongside them as standalone, fully-tested modules, not yet imported by anything. See `docs/BUILD_PROMPT.md` §9 for what Phase 2 onward looks like.
 
 ## Structure
 
 ```
+engine/
+  physiology.js                      # shared state model + pure transition functions (createState, applyInstant, rampState, getEffectiveRhythm)
+  scenarioRunner.js                  # timeline navigation (next/prev/reset/jumpToPart) + ramp ticking + facilitator overrides
+  *.test.js                          # node --test unit tests (27 passing) — zero dependencies, no build step
+scenarios/
+  schema.md                          # documents the unified scenario JSON format
+  ct-surgery-flagship.json           # the 3-part flagship case, transcribed from docs/BUILD_PROMPT.md §4
+  ct-surgery-flagship.test.js        # end-to-end test running the actual flagship JSON through the runner (8 passing)
 devices/
   intellivue/
     IntelliVue_Sim_Monitor.html        # primary IntelliVue prototype — richest fidelity, has the 4-scenario CT pack
@@ -31,12 +39,19 @@ relay/
   README-deploy.md                     # deploy notes (written against Render; target for this project is Azure App Service, see BUILD_PROMPT.md §8.2)
 docs/
   BUILD_PROMPT.md                      # the full spec — read this first
-  references/                          # case study + device manuals + formulary, pulled in for the build session's convenience
+  references/                          # case study + device manuals + formulary, pulled in for the build session's convenience (some gitignored, see below)
 ```
 
-## Running it today (pre-Phase-1)
+## Running it today (post-Phase-1, pre-Phase-2)
 
-Each device HTML file is fully standalone — open any one directly in a browser, no server or build step needed. They don't talk to each other yet. The relay (`relay/server.js`) is the pacemaker sim's existing pairing mechanism; running it (`npm install && node server.js` inside `relay/`) lets a second pacemaker-sim window/device join over WebSocket, but the two monitor sims don't yet participate in that channel — that's Phase 1–3 work per the build prompt.
+Each device HTML file is still fully standalone — open any one directly in a browser, no server or build step needed. They don't talk to each other or to `engine/` yet; that wiring is Phase 2. The relay (`relay/server.js`) is the pacemaker sim's existing pairing mechanism; running it (`npm install && node server.js` inside `relay/`) lets a second pacemaker-sim window/device join over WebSocket, but the two monitor sims don't yet participate in that channel.
+
+To run the engine/scenario test suite (no install needed — zero dependencies):
+
+```bash
+cd engine && node --test
+cd ../scenarios && node --test
+```
 
 ## Source projects
 

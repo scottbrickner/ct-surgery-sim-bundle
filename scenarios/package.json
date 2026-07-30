@@ -1,0 +1,9 @@
+{
+  "name": "ct-surgery-sim-scenarios",
+  "private": true,
+  "type": "module",
+  "description": "Unified scenario data for the CT surgery sim bundle's shared physiology engine. See schema.md.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

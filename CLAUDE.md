@@ -6,7 +6,17 @@ Training simulation only, not for clinical use — enforce this framing in any U
 
 ## Where things stand
 
-Phase 0 (consolidation) is done: the three device prototypes and the pacemaker's relay code are copied in **unmodified** — see README.md for the exact file map. Nothing is wired together yet. Do not assume any cross-device behavior exists until you've built it in the phase that adds it.
+**Phase 0** (consolidation) is done: the three device prototypes and the pacemaker's relay code are copied in **unmodified** — see README.md for the exact file map.
+
+**Phase 1** (shared physiology engine + unified scenario schema) is done: `engine/physiology.js` + `engine/scenarioRunner.js` (35 passing `node --test` tests total, zero dependencies) and `scenarios/ct-surgery-flagship.json` (the transcribed 3-part case, validated by its own end-to-end test). Read `scenarios/schema.md` before authoring or editing scenario data.
+
+**Devices are still NOT wired to the engine.** `engine/` and `scenarios/` are standalone modules nothing imports yet — the three device HTML files still run their own local state exactly as ported in Phase 0. Do not assume any cross-device behavior, or any device reading from the shared engine, exists until Phase 2 builds it. Phase 2 is: wire IntelliVue + HemoSphere Alta to read/write `engine/physiology.js`'s state instead of their own local sliders (BUILD_PROMPT.md §9).
+
+A few things worth knowing before extending the engine further:
+- `engine/scenarioRunner.js`'s navigation is **replay-based, not incremental**: `prev()`/`jumpToPart()`/`reset()` all recompute state from a part's `initialState` by replaying its steps (`computeStateAt`), rather than trying to invert a ramp or undo a patch. `next()` relies on the same function for whatever step it's leaving, which is *why* it can cleanly force-settle an in-flight ramp to its target before advancing — there's no separate "settle" code path to keep in sync if you add a new step type.
+- Each scenario **part** has its own independent `initialState` — parts do NOT carry the previous part's ending state forward. This matches the source case study, which gives each part (SIM 1 / Scenario 2 / Scenario 3) its own fresh "Start of scenario" vitals after an off-screen time skip. If you add a 4th part, give it a complete `initialState`, don't assume it inherits Part 3's ending values.
+- `bp.map` is always an independently authored field, never derived from `sbp`/`dbp` via the textbook formula — see `engine/physiology.js`'s comment and `scenarios/schema.md` for why (the source case's charted MAPs don't match the formula).
+- The Part 2 `arrest` step sets `pacer.captured: false` alongside `rhythm: 'PEA'` — that's the pacer<->ECG feedback loop from BUILD_PROMPT.md §3.1 actually being exercised. If you add more arrest/capture-loss moments, remember `getEffectiveRhythm()` only reveals the intrinsic rhythm when `captured` is explicitly false; setting `rhythm` alone does nothing while `captured` stays true.
 
 ## Resolved decisions (do not re-litigate — see BUILD_PROMPT.md §8 for full reasoning)
 

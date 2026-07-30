@@ -1,0 +1,9 @@
+{
+  "name": "ct-surgery-sim-engine",
+  "private": true,
+  "type": "module",
+  "description": "Shared physiology engine + scenario runner for the CT surgery sim bundle. No dependencies, no build step - plain ES modules, importable directly by both Node (tests) and the browser device sims.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
