@@ -454,7 +454,7 @@
 </div></div>
 
 <script type="module">
-import { getEffectiveRhythm } from '../../engine/physiology.js';
+import { getEffectiveRhythm, getEffectiveHR } from '../../engine/physiology.js';
 import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot } from '../../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
@@ -1048,7 +1048,7 @@ function mapEngineRhythm(effRhythm){const m=RHYTHM_MAP[effRhythm];if(!m){console
 // already samples live. Deliberately does NOT call layout() - layout()->paintBg() does a
 // full canvas fillRect, which would blank the scrolling waveform trace on every tick.
 function applyEngineValuesLight(es){
-  state.hr=es.hr;state.sys=es.bp.sbp;state.dia=es.bp.dbp;state.cvp=es.cvp;
+  state.hr=getEffectiveHR(es);state.sys=es.bp.sbp;state.dia=es.bp.dbp;state.cvp=es.cvp;
   state.paSys=es.pa.systolic;state.paDia=es.pa.diastolic;state.spo2=es.spo2;
   if(es.rr)state.rr=es.rr;if(es.temp)state.temp=es.temp;state.co=es.co;
   state.rhythm=mapEngineRhythm(getEffectiveRhythm(es));

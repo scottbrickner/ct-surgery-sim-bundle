@@ -158,7 +158,7 @@
 </div>
 
 <script type="module">
-import { getEffectiveRhythm } from '../engine/physiology.js';
+import { getEffectiveRhythm, getEffectiveHR } from '../engine/physiology.js';
 import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot } from '../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
@@ -205,7 +205,7 @@ const READOUT_FIELDS=[
 function renderReadout(){
   const s=runner.state;
   const rows=READOUT_FIELDS.map(([k,label])=>{
-    const v=s[k];
+    const v=k==="hr"?getEffectiveHR(s):s[k];
     return `<div class="rd"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
   });
   rows.push(`<div class="rd"><div class="rl">BP</div><div class="rv" style="font-size:15px">${Math.round(s.bp.sbp)}/${Math.round(s.bp.dbp)}</div></div>`);

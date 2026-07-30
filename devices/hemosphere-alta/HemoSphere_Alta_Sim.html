@@ -58,7 +58,6 @@
   .tile{flex:1 1 0;background:#0a0d12;border:1px solid var(--line);border-radius:8px;padding:6px 12px;position:relative;cursor:pointer;display:flex;flex-direction:column;justify-content:center;min-height:0;}
   .tile.sel{border-color:#2f9ad6;box-shadow:0 0 0 1px #2f9ad6 inset;}
   .tile .src{position:absolute;top:6px;left:10px;font-size:10px;color:var(--dim);font-weight:600;}
-  .tile .bell{position:absolute;top:6px;right:10px;font-size:13px;color:#5e7488;}
   .tile .tval{font-size:54px;font-weight:800;line-height:.95;font-variant-numeric:tabular-nums;letter-spacing:-1px;text-align:right;}
   .tile .tname{text-align:right;font-size:15px;font-weight:700;} .tile .tname .tu{color:var(--dim);font-size:11px;font-weight:600;margin-left:3px;}
   .tval.good{color:#fff;} .tval.warn{color:var(--warn);} .tval.bad{color:var(--bad);} .tval.neutral{color:#fff;}
@@ -70,7 +69,6 @@
   .globe{background:#070a0f;border:1px solid #161d26;border-radius:10px;position:relative;cursor:pointer;min-height:200px;}
   .globe canvas{position:absolute;inset:0;width:100%;height:100%;}
   .globe .gtag{position:absolute;top:9px;left:11px;font-size:10px;color:var(--dim);font-weight:600;z-index:2;}
-  .globe .gbell{position:absolute;top:9px;right:11px;font-size:13px;color:#5e7488;z-index:2;}
   .globe.alarm{animation:al 1s steps(1) infinite;}
   /* tabular */
   #tabArea{background:#000;display:flex;flex-direction:column;}
@@ -326,6 +324,7 @@
 <script type="module">
 import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot } from '../../sync/deviceSync.js';
+import { getEffectiveHR } from '../../engine/physiology.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -413,7 +412,7 @@ function fmtClock(t){const d=new Date(Date.now()-(tAbs-t)*1000);return String(d.
 
 /* tiles */
 function buildTiles(){const c=byId("tiles");c.innerHTML=keyParams.map(k=>{const p=P[k];
-  return `<div class="tile" data-k="${k}"><span class="src">IQ Sensor</span><span class="bell">🔕</span><span class="tval" id="tv_${k}">--</span><div class="tname"><span id="tl_${k}">${p.lab}</span><span class="tu">${p.u}</span></div></div>`;}).join("")+'<div id="addTile">+</div>';
+  return `<div class="tile" data-k="${k}"><span class="src">IQ Sensor</span><span class="tval" id="tv_${k}">--</span><div class="tname"><span id="tl_${k}">${p.lab}</span><span class="tu">${p.u}</span></div></div>`;}).join("")+'<div id="addTile">+</div>';
   c.querySelectorAll(".tile").forEach(t=>{t.addEventListener("click",()=>openTileOrOxi(t.dataset.k));});
   byId("addTile").addEventListener("click",()=>{byId("fac").classList.add("open");});}
 function openTileOrOxi(k){selTile=k;if(k==="scvo2"&&drv.sensors.oximetry){openOxi();}else openCfg(k);}
@@ -428,7 +427,7 @@ function zones(k){const p=P[k],z=[],push=(a,b,c)=>{if(b>a)z.push([a,b,c]);};
   if(p.lowGood){const y=p.hi+(p.gmax-p.hi)*0.4;push(p.gmin,p.hi,"good");push(p.hi,y,"warn");push(y,p.gmax,"bad");}
   else{const c=(p.hi-p.lo)*0.6;push(p.gmin,Math.max(p.gmin,p.lo-c),"bad");push(Math.max(p.gmin,p.lo-c),p.lo,"warn");push(p.lo,p.hi,"good");push(p.hi,Math.min(p.gmax,p.hi+c),"warn");push(Math.min(p.gmax,p.hi+c),p.gmax,"bad");}
   return z;}
-function buildCockpit(){const c=byId("cockpitView");c.innerHTML=keyParams.map(k=>`<div class="globe" data-k="${k}"><span class="gtag">IQ Sensor</span><span class="gbell">🔕</span><canvas id="gc_${k}"></canvas></div>`).join("");
+function buildCockpit(){const c=byId("cockpitView");c.innerHTML=keyParams.map(k=>`<div class="globe" data-k="${k}"><span class="gtag">IQ Sensor</span><canvas id="gc_${k}"></canvas></div>`).join("");
   c.querySelectorAll(".globe").forEach(g=>g.addEventListener("click",()=>openTileOrOxi(g.dataset.k)));sizeGlobes();}
 function sizeGlobes(){keyParams.forEach(k=>{const cv=byId("gc_"+k);if(!cv||!cv.parentElement)return;const r=cv.parentElement.getBoundingClientRect();cv.width=Math.max(1,r.width*DPR);cv.height=Math.max(1,r.height*DPR);cv.getContext("2d").setTransform(DPR,0,0,DPR,0,0);});}
 function drawCockpit(){keyParams.forEach(k=>{const cv=byId("gc_"+k);if(!cv)return;const g=cv.getContext("2d");const w=cv.width/DPR,h=cv.height/DPR;g.clearRect(0,0,w,h);
@@ -640,7 +639,7 @@ loadScn("postop");layout();setView("mon");requestAnimationFrame(frame);
 // formula. Preserving this device's live derivation is more faithful to how
 // a real monitor behaves than adding an override field it wouldn't have.
 function applyEngineValuesLight(es){
-  drv.co=es.co;drv.map=es.bp.map;drv.pr=es.hr;drv.cvp=es.cvp;drv.svv=es.svv;drv.ppv=es.ppv;
+  drv.co=es.co;drv.map=es.bp.map;drv.pr=getEffectiveHR(es);drv.cvp=es.cvp;drv.svv=es.svv;drv.ppv=es.ppv;
   drv.scvo2=es.scvo2;drv.hpi=es.hpi;drv.sys=es.bp.sbp;drv.dia=es.bp.dbp;if(es.temp)drv.temp=es.temp;
 }
 function applyEngineStateFull(es){

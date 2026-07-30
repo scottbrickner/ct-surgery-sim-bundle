@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, applyInstant, rampState, getEffectiveRhythm } from './physiology.js';
+import { createState, applyInstant, rampState, getEffectiveRhythm, getEffectiveHR } from './physiology.js';
 
 test('createState fills in full defaults with no overrides', () => {
   const s = createState();
@@ -78,4 +78,19 @@ test('getEffectiveRhythm shows the intrinsic rhythm on loss of capture (pacer on
 test('getEffectiveRhythm shows the paced rhythm when the pacer is on and capturing', () => {
   const s = createState({ rhythm: 'Sinus Bradycardia', pacer: { mode: 'DDD', captured: true } });
   assert.equal(getEffectiveRhythm(s), 'Paced (DDD)');
+});
+
+test('getEffectiveHR shows the intrinsic HR when the pacer is off', () => {
+  const s = createState({ hr: 70, pacer: { mode: 'off', captured: false, rate: 80 } });
+  assert.equal(getEffectiveHR(s), 70);
+});
+
+test('getEffectiveHR shows the intrinsic HR on loss of capture (pacer on, not capturing)', () => {
+  const s = createState({ hr: 70, pacer: { mode: 'VVI', captured: false, rate: 80 } });
+  assert.equal(getEffectiveHR(s), 70);
+});
+
+test('getEffectiveHR shows the pacer\'s programmed rate when on and capturing (pacer rate exceeds intrinsic)', () => {
+  const s = createState({ hr: 70, pacer: { mode: 'VVI', captured: true, rate: 80 } });
+  assert.equal(getEffectiveHR(s), 80);
 });

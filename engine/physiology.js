@@ -126,3 +126,24 @@ export function getEffectiveRhythm(state) {
   }
   return state.rhythm;
 }
+
+/**
+ * What the HR should actually read. Mirrors getEffectiveRhythm()'s precedence
+ * exactly: while the pacer is on and capturing, the patient's observed rate
+ * IS the pacer's programmed rate (every captured beat lands exactly on the
+ * paced interval) - not whatever the intrinsic/authored state.hr says.
+ *
+ * KNOWN LIMITATION - does not model demand-inhibition: a captured pacer
+ * programmed BELOW the intrinsic rate would, on a real device, sit inhibited
+ * and let the faster intrinsic rhythm show through instead. This always
+ * returns the paced rate whenever captured is true, regardless of how it
+ * compares to state.hr. Fine for "pacer rate exceeds intrinsic" (the common
+ * teaching case), wrong for "intrinsic exceeds a lower pacer rate" - revisit
+ * if a scenario needs to teach demand-inhibition specifically.
+ */
+export function getEffectiveHR(state) {
+  if (state.pacer.mode !== 'off' && state.pacer.captured) {
+    return state.pacer.rate;
+  }
+  return state.hr;
+}
