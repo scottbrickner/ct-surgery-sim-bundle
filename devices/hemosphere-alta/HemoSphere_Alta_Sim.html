@@ -105,6 +105,8 @@
   .nb.alarmbtn{color:#ff6a6a;} .nb.alarmbtn.active{background:#b00000;color:#fff;animation:al 1s steps(1) infinite;}
   #navspace{flex:1 1 auto;}
   #facToggle{position:fixed;bottom:66px;right:10px;z-index:40;background:var(--accent);color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);opacity:.55;} #facToggle:hover{opacity:1;}
+  /* Pop-out learner display: hide every facilitator-only control, mirroring IntelliVue's body.learner pattern */
+  body.learner #fac,body.learner #facToggle,body.learner #nb_settings{display:none!important;}
   /* facilitator */
   #fac{position:fixed;top:0;right:0;height:100vh;width:360px;background:#0c131b;border-left:2px solid var(--accent);transform:translateX(100%);transition:transform .22s;z-index:60;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,.6);}
   #fac.open{transform:translateX(0);}
@@ -242,6 +244,16 @@
       <div class="hint" id="fs_step"></div>
       <div class="hint" id="fs_coach"></div>
     </div>
+    <div class="grp"><div class="gl">Cross-Device Sync</div>
+      <div class="hint" id="sync_status">Same-machine sync active — open another window/tab of this page (or IntelliVue) and they'll show the same patient live.</div>
+      <button class="scn" id="sync_openLearner" style="text-align:center;margin-top:6px">⧉ Open Learner Display</button>
+      <label class="row" style="margin-top:8px;flex-direction:column;align-items:stretch;gap:3px"><span style="font-size:11px;color:var(--dim)">Relay URL (for a separate device, e.g. iPad)</span><input type="text" id="sync_relayUrl" placeholder="wss://your-relay.onrender.com" style="background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;font-size:12px"></label>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <button class="scn" id="sync_connect" style="flex:1;text-align:center">Connect Relay</button>
+        <button class="scn" id="sync_copyLink" style="flex:1;text-align:center">Copy Learner Link</button>
+      </div>
+      <div class="hint" id="sync_relayStatus">Not connected to a relay — same-machine sync above still works with zero setup.</div>
+    </div>
     <div class="grp"><div class="gl">CT Surgery scenarios (stepped)</div>
       <select id="ctScnHS" style="width:100%;margin-bottom:6px">
         <option value="">— select CT scenario —</option>
@@ -312,6 +324,7 @@
 
 <script type="module">
 import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
+import { createDeviceSync } from '../../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -691,6 +704,48 @@ window.ctSharedEngine={
   getDeviceState:()=>drv,
   tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}return runner&&runner.state;},
 };
+
+/* ---------------- Cross-device sync + pop-out (Phase 3) ---------------- */
+// Same pattern as IntelliVue_Sim_Monitor.html - see that file's matching block
+// for the full rationale (routes over sync/deviceSync.js's BroadcastChannel/
+// relay bus, not IntelliVue_Tachy_DualScreen.html's raw postMessage).
+const fsUrlParams=new URLSearchParams(location.search);
+const FS_ROLE=fsUrlParams.get("role")==="learner"?"learner":"facilitator";
+if(FS_ROLE==="learner")document.body.classList.add("learner");
+
+function onRemoteSnapshot(snapshot){
+  if(!snapshot||!runner)return;
+  const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
+  runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
+  if(navChanged)renderFlagshipUI();else applyEngineValuesLight(runner.state);
+}
+const deviceSync=createDeviceSync({
+  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state}:null,
+  onRemoteSnapshot,
+  relayUrl:fsUrlParams.get("relay")||"",
+  relayCode:fsUrlParams.get("code")||"",
+});
+
+function learnerLink(){const base=location.href.split("?")[0].split("#")[0];const r=deviceSync.relay;
+  return base+"?role=learner"+(r.url?"&relay="+encodeURIComponent(r.url):"")+(r.code?"&code="+encodeURIComponent(r.code):"");}
+const openLearnerBtn=byId("sync_openLearner");if(openLearnerBtn)openLearnerBtn.addEventListener("click",()=>{window.open(learnerLink(),"ctsurgery_hemosphere_learner");});
+const syncConnectBtn=byId("sync_connect");if(syncConnectBtn)syncConnectBtn.addEventListener("click",()=>{
+  const url=(byId("sync_relayUrl").value||"").trim();
+  if(!/^wss?:\/\//i.test(url)){const st=byId("sync_relayStatus");if(st)st.textContent="Enter a relay URL first (wss://…).";return;}
+  const code=deviceSync.setRelay(url,fsUrlParams.get("code")||"");
+  const st=byId("sync_relayStatus");if(st)st.textContent="Connecting… session code "+code+".";
+});
+const syncCopyBtn=byId("sync_copyLink");if(syncCopyBtn)syncCopyBtn.addEventListener("click",()=>{
+  try{navigator.clipboard.writeText(learnerLink());}catch(e){}
+  const st=byId("sync_relayStatus");if(st)st.textContent="Learner link copied"+(deviceSync.relay.code?" — code "+deviceSync.relay.code:" — connect a relay first for a working cross-device link")+".";
+});
+if(fsUrlParams.get("relay"))byId("sync_relayUrl").value=fsUrlParams.get("relay");
+window.ctSharedEngine.syncPushNow=()=>deviceSync.pushNow();window.ctSharedEngine.syncHeartbeatNow=()=>deviceSync.heartbeatNow();window.ctSharedEngine.syncSetRelay=(url,code)=>deviceSync.setRelay(url,code); // testing hooks only - see sync/deviceSync.js
+window.ctSharedEngine.getSyncStatus=()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay});
+setInterval(()=>{
+  const st=byId("sync_status");if(st)st.textContent=deviceSync.isLinked()?"● Linked — showing a synced patient with at least one other window/device.":"Same-machine sync active — open another window/tab of this page (or IntelliVue) and they'll show the same patient live.";
+  const rst=byId("sync_relayStatus");if(rst&&deviceSync.relay.url)rst.textContent=(deviceSync.relay.ws&&deviceSync.relay.ws.readyState===1?"● Connected":"Connecting…")+" — code "+deviceSync.relay.code+", "+deviceSync.peerCount()+" peer(s) in room.";
+},1000);
 </script>
 </body>
 </html>

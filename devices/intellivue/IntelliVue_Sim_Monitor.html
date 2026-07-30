@@ -68,6 +68,8 @@
   #fac .scn.active{background:#1a7a3c;border-color:#27c259;box-shadow:inset 3px 0 0 #9fffc0;}
   #fac .lblrow{display:flex;align-items:center;gap:6px;margin:3px 0;font-size:12px;color:#cdd9e4;} #fac .lblrow input{flex:1;}
   #facToggle{position:fixed;bottom:52px;right:10px;z-index:40;background:#1d6aa0;color:#fff;border:none;border-radius:50%;width:44px;height:44px;font-size:19px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.5);opacity:.55;} #facToggle:hover{opacity:1;}
+  /* Pop-out learner display: hide every facilitator-only control, matching IntelliVue_Tachy_DualScreen.html's body.learner pattern */
+  body.learner #fac,body.learner #facToggle,body.learner #sk_fac{display:none!important;}
   .hint{font-size:10.5px;color:#6f8aa3;margin-top:5px;line-height:1.45;}
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:60;display:none;align-items:center;justify-content:center;} .modal.open{display:flex;}
   .win{background:#0d1925;border:1px solid #2f6f9a;border-radius:6px;width:680px;max-width:94vw;max-height:92vh;overflow:auto;box-shadow:0 8px 40px rgba(0,0,0,.7);}
@@ -194,6 +196,16 @@
       <div class="gl" id="fs_part" style="margin-top:6px;font-weight:400">Loading shared engine…</div>
       <div class="gl" id="fs_step" style="font-weight:400;color:#dce8f2"></div>
       <div class="hint" id="fs_coach"></div>
+    </div>
+    <div class="grp"><div class="gl">Cross-Device Sync</div>
+      <div class="hint" id="sync_status">Same-machine sync active — open another window/tab of this page (or HemoSphere Alta) and they'll show the same patient live.</div>
+      <div class="btnrow" style="margin-top:6px"><button class="act" id="sync_openLearner">⧉ Open Learner Display</button></div>
+      <div class="row2sel" style="margin-top:8px"><label>Relay URL (for a separate device, e.g. iPad)<input type="text" id="sync_relayUrl" placeholder="wss://your-relay.onrender.com" style="width:100%;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:4px;padding:5px;font-size:12px"></label></div>
+      <div class="btnrow" style="margin-top:4px">
+        <button class="act" id="sync_connect">Connect Relay</button>
+        <button class="act" id="sync_copyLink">Copy Learner Link</button>
+      </div>
+      <div class="hint" id="sync_relayStatus">Not connected to a relay — same-machine sync above still works with zero setup.</div>
     </div>
     <div class="grp"><div class="gl">CT Surgery scenarios (stepped)</div>
       <select id="ctScnIV" style="width:100%;margin-bottom:6px">
@@ -443,6 +455,7 @@
 <script type="module">
 import { getEffectiveRhythm } from '../../engine/physiology.js';
 import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
+import { createDeviceSync } from '../../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -1107,6 +1120,49 @@ window.ctSharedEngine={
   getDeviceState:()=>state,
   tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}return runner&&runner.state;},
 };
+
+/* ---------------- Cross-device sync + pop-out (Phase 3) ---------------- */
+// ?role=learner hides all facilitator controls (see body.learner CSS) - the same
+// pop-out pattern IntelliVue_Tachy_DualScreen.html established, generalized here
+// and routed over sync/deviceSync.js's BroadcastChannel/relay bus instead of that
+// file's raw postMessage, per CLAUDE.md "do not introduce a second transport."
+const fsUrlParams=new URLSearchParams(location.search);
+const FS_ROLE=fsUrlParams.get("role")==="learner"?"learner":"facilitator";
+if(FS_ROLE==="learner")document.body.classList.add("learner");
+
+function onRemoteSnapshot(snapshot){
+  if(!snapshot||!runner)return;
+  const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
+  runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
+  if(navChanged)renderFlagshipUI();else applyEngineValuesLight(runner.state);
+}
+const deviceSync=createDeviceSync({
+  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state}:null,
+  onRemoteSnapshot,
+  relayUrl:fsUrlParams.get("relay")||"",
+  relayCode:fsUrlParams.get("code")||"",
+});
+
+function learnerLink(){const base=location.href.split("?")[0].split("#")[0];const r=deviceSync.relay;
+  return base+"?role=learner"+(r.url?"&relay="+encodeURIComponent(r.url):"")+(r.code?"&code="+encodeURIComponent(r.code):"");}
+const openLearnerBtn=byId("sync_openLearner");if(openLearnerBtn)openLearnerBtn.addEventListener("click",()=>{window.open(learnerLink(),"ctsurgery_intellivue_learner");});
+const syncConnectBtn=byId("sync_connect");if(syncConnectBtn)syncConnectBtn.addEventListener("click",()=>{
+  const url=(byId("sync_relayUrl").value||"").trim();
+  if(!/^wss?:\/\//i.test(url)){const st=byId("sync_relayStatus");if(st)st.textContent="Enter a relay URL first (wss://…).";return;}
+  const code=deviceSync.setRelay(url,fsUrlParams.get("code")||"");
+  const st=byId("sync_relayStatus");if(st)st.textContent="Connecting… session code "+code+".";
+});
+const syncCopyBtn=byId("sync_copyLink");if(syncCopyBtn)syncCopyBtn.addEventListener("click",()=>{
+  try{navigator.clipboard.writeText(learnerLink());}catch(e){}
+  const st=byId("sync_relayStatus");if(st)st.textContent="Learner link copied"+(deviceSync.relay.code?" — code "+deviceSync.relay.code:" — connect a relay first for a working cross-device link")+".";
+});
+if(fsUrlParams.get("relay"))byId("sync_relayUrl").value=fsUrlParams.get("relay");
+window.ctSharedEngine.syncPushNow=()=>deviceSync.pushNow();window.ctSharedEngine.syncHeartbeatNow=()=>deviceSync.heartbeatNow();window.ctSharedEngine.syncSetRelay=(url,code)=>deviceSync.setRelay(url,code); // testing hooks only - see sync/deviceSync.js
+window.ctSharedEngine.getSyncStatus=()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay});
+setInterval(()=>{
+  const st=byId("sync_status");if(st)st.textContent=deviceSync.isLinked()?"● Linked — showing a synced patient with at least one other window/device.":"Same-machine sync active — open another window/tab of this page (or HemoSphere Alta) and they'll show the same patient live.";
+  const rst=byId("sync_relayStatus");if(rst&&deviceSync.relay.url)rst.textContent=(deviceSync.relay.ws&&deviceSync.relay.ws.readyState===1?"● Connected":"Connecting…")+" — code "+deviceSync.relay.code+", "+deviceSync.peerCount()+" peer(s) in room.";
+},1000);
 </script>
 </body>
 </html>

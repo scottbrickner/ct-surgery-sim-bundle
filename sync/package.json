@@ -1,0 +1,9 @@
+{
+  "name": "ct-surgery-sim-sync",
+  "private": true,
+  "type": "module",
+  "description": "Cross-window/cross-device sync for the shared physiology runner. See deviceSync.js.",
+  "scripts": {
+    "test": "node --test"
+  }
+}
