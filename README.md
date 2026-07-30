@@ -110,13 +110,11 @@ cd ../sync && node --test
 
 ## Deploying for real classroom use
 
-Two independent pieces, both optional until the class spans more than one device/machine:
+Two independent pieces, both optional until the class spans more than one device/machine.
 
-**The static site** (console + monitors + pacemaker) — deploy to **Netlify** (not GitHub Pages: Pages can't set custom HTTP headers, and the SharePoint-embedding CSP needs one). Connect this GitHub repo in the Netlify dashboard, publish directory `.`, no build command — `netlify.toml` at the repo root handles the rest. `relay/` is not part of this deploy (Netlify's static hosting can't run a persistent WebSocket process); Netlify will simply serve `relay/server.js` as an inert text file alongside everything else, which is harmless but worth knowing.
+**The static site** (console + monitors + pacemaker) is **live**: **[ct-surgery-sim.netlify.app](https://ct-surgery-sim.netlify.app)**. Deployed via Netlify's GitHub integration (auto-deploys on every push to `main`), publish directory `.`, no build command — `netlify.toml` at the repo root handles headers/CSP. Verified independently (not just "it deployed") — the SharePoint/Teams `frame-ancestors` CSP header is live, the shared engine's ES modules load correctly at multiple path depths (both `/facilitator/console` and `/devices/intellivue/...`), and Netlify's automatic "pretty URL" rewriting (strips `.html`, lowercases paths) doesn't break the relative asset imports. `relay/` is not part of this deploy (Netlify's static hosting can't run a persistent WebSocket process) — Netlify just serves `relay/server.js` as an inert text file alongside everything else, harmless but worth knowing. Note: the site defaults to Netlify's "private/team-only" visitor access on creation — it must be set to public (Project overview → **Make public**) or external links/Teams embeds will hit a login wall.
 
-**The relay** (only needed for cross-device sync, e.g. the pacer on an iPad) — see `relay/README-deploy.md`. Azure App Service is the documented target; the code needs zero changes.
-
-Neither of these has been provisioned yet — that needs your (or Keck IT's) Azure/Netlify account access, which isn't something I can act on. Everything in Phases 0-5 already works fully without either: same-machine BroadcastChannel sync needs nothing deployed at all.
+**The relay** (only needed for cross-device sync, e.g. the pacer on an iPad) — see `relay/README-deploy.md`. Azure App Service is the documented target; the code needs zero changes. Not yet provisioned.
 
 ## Source projects
 
