@@ -8,9 +8,11 @@ Training simulation only. Not for clinical use.
 
 ## Status
 
-**Phases 0-3 complete.** Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema, with the flagship 3-part case authored against it. Phase 2 wired IntelliVue and HemoSphere Alta to that engine, each driving its own local copy from a new "Shared Flagship Scenario" facilitator-panel section. **Phase 3 made the two wired devices actually talk to each other**: a new `sync/deviceSync.js` module (BroadcastChannel + localStorage mirror for same-machine, an opt-in WebSocket relay for real cross-device pairing) now keeps both devices' shared-engine state in lockstep — driving the scenario from either device's Facilitator panel updates the other, live. Both devices also gained a generalized `?role=learner` pop-out (hides all facilitator chrome, still syncs) via a new "Open Learner Display" button.
+**Phases 0-4 complete.** Phase 0 was a straight, unmodified port of three existing prototypes into one repo. Phase 1 added the shared physiology engine and the unified scenario schema, with the flagship 3-part case authored against it. Phase 2 wired IntelliVue and HemoSphere Alta to that engine, each driving its own local copy from a new "Shared Flagship Scenario" facilitator-panel section. Phase 3 made the two wired devices actually talk to each other via a new `sync/deviceSync.js` module. **Phase 4 added `facilitator/console.html`** — a dedicated, standalone control page (import the same `engine/`/`scenarios/`/`sync/` modules the monitors use, nothing new invented) meant to run on the instructor's own laptop: Next/Prev/Reset/jump through the flagship case, override every synced parameter from one place, generate a `?role=learner` link for each monitor, and a live compact readout of everything currently being displayed. It's additive — IntelliVue's and HemoSphere Alta's own local facilitator panels still work exactly as before (see the note below on why they weren't stripped out).
 
-**The pacemaker is deliberately still not wired into any of this.** It remains exactly as ported in Phase 0 — its own mature BroadcastChannel/relay sync is untouched and unrelated to the new `sync/deviceSync.js` module. Actually cross-wiring the pacemaker's capture state into the shared physiology engine (so e.g. losing capture there visibly changes IntelliVue's rhythm) is explicitly Phase 5 territory (BUILD_PROMPT.md §9), not Phase 3 — Phase 3's scope was the monitor-to-monitor sync bus and the pop-out pattern, both done.
+**The pacemaker is deliberately still not wired into any of this.** It remains exactly as ported in Phase 0 — its own mature BroadcastChannel/relay sync is untouched and unrelated to `sync/deviceSync.js`, and it's not reachable from the new console either. Actually cross-wiring the pacemaker's capture state into the shared physiology engine (so e.g. losing capture there visibly changes IntelliVue's rhythm) is explicitly Phase 5 territory (BUILD_PROMPT.md §9) — until then, true three-way unification isn't achievable, so Phase 4's console only unifies the two devices that are actually on the shared engine.
+
+**Design call worth knowing about**: BUILD_PROMPT.md's Phase 4 description says "unify the three separate side-drawers into one control surface," which could be read as *replacing* the per-device panels. I chose to add the console without removing IntelliVue's/HemoSphere Alta's own local Next/Prev/override controls, because those are a working, already-verified feature (solo single-device testing without needing a second screen or the console open) and nothing about Phase 3's sync requires a single driver — any device (or now the console) can drive the scenario and the others follow. Each device's facilitator panel now has a one-line pointer to the console as the recommended way to run a real class session. If you'd rather those panels were stripped down to just local-only controls (CT-stepped scenarios, waveform morphology, etc.) with the flagship-scenario/override controls console-only, that's a reasonable alternative — just wasn't the default I picked.
 
 **Breaking change from Phase 1: IntelliVue and HemoSphere Alta can no longer be opened by double-click (`file://`).** Browsers block ES module imports (and `fetch`) from local files — each `file://` page is treated as its own opaque origin. Serve the repo root over `http://` instead: `node serve.js` (see below). The pacemaker is untouched and still opens via `file://` fine.
 
@@ -19,7 +21,7 @@ Known, deliberate simplifications (documented in code comments where they occur)
 - IntelliVue has no literal "PEA" waveform (rhythm is a fixed enum). The engine's effective-rhythm output is mapped to the closest real device rhythm (`PEA` → `sinus_tach`), with pulselessness conveyed by the flat 0/0 arterial pressure rather than a distinct waveform.
 - The sync payload is deliberately narrow (`{partIndex, stepIndex, state}` — never `activeRamp`, since its timestamp is `performance.now()`-relative and meaningless across windows/devices). Whichever device is actively driving a ramp ticks it locally and broadcasts each already-interpolated snapshot; a follower device never runs its own ramp math, just displays incoming numbers. This also means, right now, either device can drive the scenario — there's no facilitator "lock," matching the pacemaker sim's own precedent of not needing one in practice.
 
-See `docs/BUILD_PROMPT.md` §9 for what Phase 4 onward looks like.
+See `docs/BUILD_PROMPT.md` §9 for what Phase 5 onward looks like.
 
 ## Structure
 
@@ -35,6 +37,8 @@ scenarios/
 sync/
   deviceSync.js                      # BroadcastChannel + localStorage mirror (same-machine) + WebSocket relay (cross-device) — mirrors the pacemaker's own proven sync pattern
   deviceSync.test.js                 # node --test coverage for the pure logic (genCode, dedupe, self-echo guard) — 9 passing
+facilitator/
+  console.html                       # standalone facilitator control page — imports engine/scenarios/sync directly, meant to run on the instructor's own laptop
 devices/
   intellivue/
     IntelliVue_Sim_Monitor.html        # primary IntelliVue prototype — richest fidelity, has the 4-scenario CT pack
@@ -56,18 +60,25 @@ docs/
   references/                          # case study + device manuals + formulary, pulled in for the build session's convenience (some gitignored, see below)
 ```
 
-## Running it today (post-Phase-3, pre-Phase-4)
+## Running it today (post-Phase-4, pre-Phase-5)
 
-Serve the repo root and open both monitors over `http://` (required as of Phase 2 — see above):
+Serve the repo root over `http://` (required as of Phase 2 — see above):
 
 ```bash
 node serve.js
-# then open, in two separate tabs/windows:
-# http://localhost:8080/devices/intellivue/IntelliVue_Sim_Monitor.html
-# http://localhost:8080/devices/hemosphere-alta/HemoSphere_Alta_Sim.html
 ```
 
-Open the Facilitator panel (gear icon, or press `F`) → "Shared Flagship Scenario" on either tab and click through Next/Part 1/2/3 — the *other* tab updates live within a couple hundred milliseconds, with zero configuration (same-machine sync is automatic via BroadcastChannel). The "Cross-Device Sync" section right below it has an "Open Learner Display" button (spawns a `?role=learner` popup with all facilitator controls hidden — drag that to a projector) and a relay URL field for pairing a genuinely separate device (a second laptop, an iPad): paste a `wss://` relay endpoint, click Connect, then Copy Learner Link to send that device a URL carrying the relay + session code. `relay/server.js` is the relay to point it at — see `relay/README-deploy.md` for hosting it (target is Azure App Service per BUILD_PROMPT.md §8.2; `PORT=<port> node server.js` after `npm install` inside `relay/` works fine for local testing against `ws://localhost:<port>`).
+**Recommended way to run a session** — open the console plus both monitors, in three separate tabs/windows:
+
+```
+http://localhost:8080/facilitator/console.html
+http://localhost:8080/devices/intellivue/IntelliVue_Sim_Monitor.html
+http://localhost:8080/devices/hemosphere-alta/HemoSphere_Alta_Sim.html
+```
+
+Drive the case entirely from the console (Next/Prev/Part 1/2/3, override sliders, rhythm dropdown, pacer capture toggle, event flags) — both monitors update live within a couple hundred milliseconds, zero configuration needed on one machine (BroadcastChannel). For a genuinely separate device (a monitor on a different laptop, the pacer on an iPad *once Phase 5 wires it in*), use the console's relay URL field: paste a `wss://` endpoint, click Connect, then Copy the per-device learner link — that URL carries the relay + session code so the monitor auto-joins. `relay/server.js` is the relay to point it at (`npm install && PORT=<port> node server.js` for local testing against `ws://localhost:<port>`; see `relay/README-deploy.md` for real hosting — target is Azure App Service per BUILD_PROMPT.md §8.2).
+
+Each monitor's own Facilitator panel (gear icon, or press `F`) still works standalone too, for solo testing without the console open — see the Status section above for why that wasn't removed.
 
 The pacemaker sim (`devices/pacemaker/`) is unchanged from Phase 0 and still fully standalone (`file://` still works for it) — it does not participate in any of the above; see the Status section for why.
 

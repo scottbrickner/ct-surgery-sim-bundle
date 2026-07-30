@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CT Surgery Sim — Facilitator Console</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#0e1420; --panel2:#0a0f18; --line:#1c2836; --txt:#eef2f6; --dim:#8aa0b4;
+    --accent:#2f9ad6; --good:#46c95a; --warn:#f5c542; --bad:#ff5a5a;
+  }
+  *{box-sizing:border-box;-webkit-user-select:none;user-select:none;}
+  html,body{margin:0;min-height:100%;background:var(--bg);font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:var(--txt);}
+  input,select,button{font-family:inherit;}
+  #app{max-width:1180px;margin:0 auto;padding:14px 16px 60px;}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 4px 16px;flex-wrap:wrap;}
+  header h1{font-size:18px;margin:0;font-weight:800;} header .sub{font-size:12px;color:var(--dim);margin-top:2px;}
+  #sessionBadge{font-size:12.5px;padding:6px 12px;border-radius:20px;background:#13202c;border:1px solid #26415a;color:var(--dim);}
+  #sessionBadge.linked{background:#0f2e18;border-color:#1d6e40;color:#9fffc0;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  @media(max-width:900px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:0 0 12px;font-weight:700;}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:7px 0;font-size:13px;}
+  .row label{color:#cdd9e4;flex:0 0 130px;}
+  .row input[type=range]{flex:1;}
+  .row .val{width:52px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;font-size:13px;}
+  .btnrow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;}
+  button.act{flex:1 1 auto;background:#152332;color:#dce8f2;border:1px solid #2a4a63;border-radius:6px;padding:9px 10px;font-size:12.5px;font-weight:600;cursor:pointer;}
+  button.act:hover{background:#1c3348;} button.act.on{background:#15502f;border-color:#1d6e40;color:#d6ffe4;}
+  button.act.danger{background:#4a1414;border-color:#7a2020;color:#ffd6d6;} button.act.danger:hover{background:#661c1c;}
+  button.act.big{padding:12px 10px;font-size:13.5px;}
+  input[type=text]{background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:8px;font-size:12.5px;width:100%;}
+  select{background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:7px;font-size:12.5px;width:100%;}
+  .hint{font-size:11px;color:#6f8aa3;margin-top:6px;line-height:1.5;}
+  .gl{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#6f8aa3;margin:12px 0 6px;font-weight:700;}
+  .gl:first-child{margin-top:0;}
+  #coach{background:#0a1420;border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px;color:#cdd9e4;min-height:20px;line-height:1.5;}
+  #partTitle{font-size:15px;font-weight:800;color:#fff;} #stepId{font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums;}
+  .readout{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;}
+  .rd{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;text-align:center;}
+  .rd .rl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;} .rd .rv{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;}
+  .rd.flag-on{border-color:#7a2020;background:#2a0e0e;} .rd.flag-on .rv{color:var(--bad);}
+  .linkrow{display:flex;gap:6px;margin:5px 0;}
+  .linkrow button{flex:0 0 auto;}
+  code.small{font-size:10.5px;color:var(--dim);word-break:break-all;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div><h1>CT Surgery Sim — Facilitator Console</h1><div class="sub">Drives the shared flagship scenario for IntelliVue + HemoSphere Alta. Not shown to learners.</div></div>
+    <div id="sessionBadge">Same-machine sync active</div>
+  </header>
+
+  <div class="card" style="margin-bottom:14px">
+    <h2>Flagship Scenario</h2>
+    <div class="btnrow">
+      <button class="act" id="fs_part1">Part 1 — Bedside Settle-in</button>
+      <button class="act" id="fs_part2">Part 2 — Tamponade → Arrest</button>
+      <button class="act" id="fs_part3">Part 3 — ECMO Cannulation</button>
+    </div>
+    <div class="btnrow">
+      <button class="act big" id="fs_prev">‹ Prev</button>
+      <button class="act big" id="fs_next">Next ›</button>
+      <button class="act" id="fs_reset">Reset</button>
+    </div>
+    <div style="margin-top:10px"><span id="partTitle">Loading…</span> <span id="stepId"></span></div>
+    <div id="coach" style="margin-top:8px"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Connect Devices</h2>
+      <div class="row"><label>Relay URL</label></div>
+      <input type="text" id="relayUrl" placeholder="wss://your-relay.onrender.com">
+      <div class="btnrow" style="margin-top:8px"><button class="act" id="relayConnect">Connect Relay</button></div>
+      <div class="hint" id="relayStatus">Not connected — devices on THIS machine already sync automatically via BroadcastChannel, zero setup. A relay is only needed to reach a genuinely separate device (a second laptop, an iPad).</div>
+      <div class="gl">Send a monitor this session (opens in learner view — no facilitator controls on that screen)</div>
+      <div class="linkrow"><input type="text" id="linkIntelliVue" readonly><button class="act" id="copyIntelliVue">Copy</button></div>
+      <div class="linkrow"><input type="text" id="linkHemoSphere" readonly><button class="act" id="copyHemoSphere">Copy</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Live Readout</h2>
+      <div class="readout" id="readout"></div>
+      <div class="gl">Clinical Events</div>
+      <div class="btnrow">
+        <button class="act danger" id="ev_arrest">Arrest</button>
+        <button class="act danger" id="ev_sternotomy">Sternotomy</button>
+        <button class="act danger" id="ev_ecmo">ECMO Cannulated</button>
+      </div>
+      <div class="gl">Rhythm / Pacer</div>
+      <div class="row"><label>Intrinsic rhythm</label></div>
+      <select id="ov_rhythm">
+        <option value="Sinus Rhythm">Sinus Rhythm</option>
+        <option value="Sinus Tachycardia">Sinus Tachycardia</option>
+        <option value="Sinus Bradycardia">Sinus Bradycardia</option>
+        <option value="Atrial Fibrillation">Atrial Fibrillation</option>
+        <option value="PEA">PEA</option>
+      </select>
+      <div class="btnrow" style="margin-top:8px"><button class="act" id="ov_captured">Pacer Capture: —</button></div>
+      <div class="hint">The effective rhythm shown on IntelliVue is the paced rhythm when the pacer is capturing, otherwise this intrinsic rhythm — flip capture off to demo loss-of-capture live.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Override Parameters</h2>
+    <div class="grid">
+      <div>
+        <div class="gl">Cardiac / Hemodynamics</div>
+        <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
+        <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
+        <label class="row">BP dia <input type="range" id="ov_dbp" min="20" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
+        <label class="row">MAP <input type="range" id="ov_map" min="30" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
+        <label class="row">PA sys <input type="range" id="ov_pasys" min="10" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
+        <label class="row">PA dia <input type="range" id="ov_padia" min="2" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
+        <label class="row">CVP <input type="range" id="ov_cvp" min="0" max="30" value="8"><span class="val" id="ov_cvp_v">8</span></label>
+        <label class="row">CO <input type="range" id="ov_co" min="1.5" max="12" step="0.1" value="5.0"><span class="val" id="ov_co_v">5.0</span></label>
+      </div>
+      <div>
+        <div class="gl">Perfusion / Respiratory</div>
+        <label class="row">SVV <input type="range" id="ov_svv" min="2" max="35" value="10"><span class="val" id="ov_svv_v">10</span></label>
+        <label class="row">PPV <input type="range" id="ov_ppv" min="2" max="35" value="10"><span class="val" id="ov_ppv_v">10</span></label>
+        <label class="row">ScvO₂ <input type="range" id="ov_scvo2" min="30" max="90" value="65"><span class="val" id="ov_scvo2_v">65</span></label>
+        <label class="row">HPI <input type="range" id="ov_hpi" min="0" max="100" value="0"><span class="val" id="ov_hpi_v">0</span></label>
+        <label class="row">SpO₂ <input type="range" id="ov_spo2" min="50" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
+        <label class="row">RR <input type="range" id="ov_rr" min="0" max="50" value="14"><span class="val" id="ov_rr_v">14</span></label>
+        <label class="row">Temp <input type="range" id="ov_temp" min="32" max="42" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
+      </div>
+    </div>
+    <div class="gl">Drips</div>
+    <div class="grid">
+      <div>
+        <label class="row">Epi (mcg/min) <input type="range" id="ov_epi" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_epi_v">0</span></label>
+        <label class="row">Levo (mcg/min) <input type="range" id="ov_levo" min="0" max="40" step="0.5" value="0"><span class="val" id="ov_levo_v">0</span></label>
+        <label class="row">Vasopressin (u/hr) <input type="range" id="ov_vasopressin" min="0" max="0.1" step="0.005" value="0"><span class="val" id="ov_vasopressin_v">0</span></label>
+        <label class="row">Milrinone (mcg/kg/min) <input type="range" id="ov_milrinone" min="0" max="0.75" step="0.01" value="0"><span class="val" id="ov_milrinone_v">0</span></label>
+      </div>
+      <div>
+        <label class="row">Propofol (mcg/kg/min) <input type="range" id="ov_propofol" min="0" max="200" step="5" value="0"><span class="val" id="ov_propofol_v">0</span></label>
+        <label class="row">Fentanyl (mcg/min) <input type="range" id="ov_fentanyl" min="0" max="100" step="5" value="0"><span class="val" id="ov_fentanyl_v">0</span></label>
+        <label class="row">Insulin (u/hr) <input type="range" id="ov_insulin" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_insulin_v">0</span></label>
+      </div>
+    </div>
+    <div class="hint">Sliders write directly to the shared engine (matching IntelliVue's/HemoSphere Alta's own facilitator sliders) — every change here appears on both monitors live. Not every field is displayed by every monitor (e.g. neither shows chest-tube output); see CLAUDE.md for the full field-to-display map.</div>
+  </div>
+</div>
+
+<script type="module">
+import { getEffectiveRhythm } from '../engine/physiology.js';
+import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../engine/scenarioRunner.js';
+import { createDeviceSync } from '../sync/deviceSync.js';
+const byId=id=>document.getElementById(id);
+
+let runner=null;
+
+async function initFlagshipScenario(){
+  const resp=await fetch("../scenarios/ct-surgery-flagship.json");
+  if(!resp.ok)throw new Error("HTTP "+resp.status);
+  const scenario=await resp.json();
+  runner=createRunner(scenario);
+  syncControlsFromRunner();
+  render();
+}
+initFlagshipScenario().catch(err=>{
+  console.error("Flagship scenario engine failed to load:",err);
+  byId("partTitle").textContent="Shared engine unavailable — serve over http://, not file:// (see serve.js).";
+});
+
+/* ---------------- Scenario navigation ---------------- */
+function render(){
+  if(!runner)return;
+  const part=runner.scenario.parts[runner.partIndex];
+  const step=runner.stepIndex>=0?part.steps[runner.stepIndex]:null;
+  byId("partTitle").textContent=part.title;
+  byId("stepId").textContent=step?("· "+step.id):"· (part start)";
+  byId("coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
+  renderReadout();
+}
+byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());syncControlsFromRunner();render();});
+byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);syncControlsFromRunner();render();});
+byId("fs_reset").addEventListener("click",()=>{runner=srReset(runner);syncControlsFromRunner();render();});
+byId("fs_part1").addEventListener("click",()=>{runner=srJumpToPart(runner,"part1-bedside-settlein");syncControlsFromRunner();render();});
+byId("fs_part2").addEventListener("click",()=>{runner=srJumpToPart(runner,"part2-tamponade-arrest");syncControlsFromRunner();render();});
+byId("fs_part3").addEventListener("click",()=>{runner=srJumpToPart(runner,"part3-ecmo-cannulation");syncControlsFromRunner();render();});
+
+/* ---------------- Live readout ---------------- */
+const READOUT_FIELDS=[
+  ["hr","HR","bpm"],["spo2","SpO₂","%"],["rr","RR","/min"],["temp","Temp","°C"],
+  ["cvp","CVP","mmHg"],["co","CO","L/min"],["svv","SVV","%"],["ppv","PPV","%"],
+  ["scvo2","ScvO₂","%"],["hpi","HPI",""],
+];
+function renderReadout(){
+  const s=runner.state;
+  const rows=READOUT_FIELDS.map(([k,label])=>{
+    const v=s[k];
+    return `<div class="rd"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
+  });
+  rows.push(`<div class="rd"><div class="rl">BP</div><div class="rv" style="font-size:15px">${Math.round(s.bp.sbp)}/${Math.round(s.bp.dbp)}</div></div>`);
+  rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv">${Math.round(s.bp.map)}</div></div>`);
+  rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv" style="font-size:15px">${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}</div></div>`);
+  rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:13px">${getEffectiveRhythm(s)}</div></div>`);
+  const flags=[["arrestActive","Arrest"],["sternotomyPerformed","Sternotomy"],["ecmoCannulated","ECMO"]];
+  flags.forEach(([k,label])=>{rows.push(`<div class="rd ${s.flags[k]?"flag-on":""}"><div class="rl">${label}</div><div class="rv" style="font-size:13px">${s.flags[k]?"YES":"no"}</div></div>`);});
+  byId("readout").innerHTML=rows.join("");
+  byId("ov_captured").textContent="Pacer Capture: "+(s.pacer.captured?"ON":"OFF");
+  byId("ov_captured").classList.toggle("on",s.pacer.captured);
+  byId("ev_arrest").classList.toggle("on",s.flags.arrestActive);
+  byId("ev_sternotomy").classList.toggle("on",s.flags.sternotomyPerformed);
+  byId("ev_ecmo").classList.toggle("on",s.flags.ecmoCannulated);
+  byId("ov_rhythm").value=s.rhythm in {"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1}?s.rhythm:byId("ov_rhythm").value;
+}
+
+/* ---------------- Override sliders ---------------- */
+const OVERRIDE_MAP={
+  ov_hr:"hr",ov_sbp:"bp.sbp",ov_dbp:"bp.dbp",ov_map:"bp.map",ov_pasys:"pa.systolic",ov_padia:"pa.diastolic",ov_cvp:"cvp",ov_co:"co",
+  ov_svv:"svv",ov_ppv:"ppv",ov_scvo2:"scvo2",ov_hpi:"hpi",ov_spo2:"spo2",ov_rr:"rr",ov_temp:"temp",
+  ov_epi:"drips.epi",ov_levo:"drips.levo",ov_vasopressin:"drips.vasopressin",ov_milrinone:"drips.milrinone",
+  ov_propofol:"drips.propofol",ov_fentanyl:"drips.fentanyl",ov_insulin:"drips.insulin",
+};
+function setPath(obj,path,value){const[h,...r]=path.split(".");if(!r.length){obj[h]=value;return;}obj[h]=obj[h]||{};setPath(obj[h],r.join("."),value);}
+function getPath(obj,path){return path.split(".").reduce((o,k)=>o==null?undefined:o[k],obj);}
+function decimalsForStep(step){if(!step)return 0;const s=String(step),i=s.indexOf(".");return i===-1?0:s.length-i-1;}
+function fmtVal(el,v){return v.toFixed(decimalsForStep(el.step));}
+for(const id in OVERRIDE_MAP){
+  const el=byId(id),vv=byId(id+"_v");
+  el.addEventListener("input",()=>{
+    const val=parseFloat(el.value);
+    vv.textContent=fmtVal(el,val);
+    if(!runner)return;
+    const patch={};setPath(patch,OVERRIDE_MAP[id],val);
+    runner=srOverride(runner,patch);
+    renderReadout();
+  });
+}
+function syncControlsFromRunner(){
+  if(!runner)return;
+  const s=runner.state;
+  for(const id in OVERRIDE_MAP){
+    const el=byId(id),vv=byId(id+"_v"),v=getPath(s,OVERRIDE_MAP[id]);
+    if(v==null)continue;
+    el.value=v;
+    vv.textContent=fmtVal(el,v);
+  }
+}
+byId("ov_rhythm").addEventListener("change",()=>{
+  if(!runner)return;
+  runner=srOverride(runner,{rhythm:byId("ov_rhythm").value});
+  renderReadout();
+});
+byId("ov_captured").addEventListener("click",()=>{
+  if(!runner)return;
+  runner=srOverride(runner,{pacer:{captured:!runner.state.pacer.captured}});
+  renderReadout();
+});
+[["ev_arrest","arrestActive"],["ev_sternotomy","sternotomyPerformed"],["ev_ecmo","ecmoCannulated"]].forEach(([id,flag])=>{
+  byId(id).addEventListener("click",()=>{
+    if(!runner)return;
+    runner=srOverride(runner,{flags:{[flag]:!runner.state.flags[flag]}});
+    renderReadout();
+  });
+});
+
+/* ---------------- Live-tick an in-flight ramp ---------------- */
+function consoleTick(ts){
+  if(runner&&runner.activeRamp){runner=srTick(runner,ts);renderReadout();}
+  requestAnimationFrame(consoleTick);
+}
+requestAnimationFrame(consoleTick);
+
+/* ---------------- Sync with the monitors ---------------- */
+const csUrlParams=new URLSearchParams(location.search);
+function onRemoteSnapshot(snapshot){
+  if(!snapshot||!runner)return;
+  const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
+  runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
+  syncControlsFromRunner();
+  if(navChanged)render();else renderReadout();
+}
+const deviceSync=createDeviceSync({
+  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state}:null,
+  onRemoteSnapshot,
+  relayUrl:csUrlParams.get("relay")||"",
+  relayCode:csUrlParams.get("code")||"",
+});
+if(csUrlParams.get("relay"))byId("relayUrl").value=csUrlParams.get("relay");
+
+function monitorLink(devicePath){
+  const base=location.href.split("?")[0].split("#")[0].replace(/facilitator\/console\.html$/,devicePath);
+  const r=deviceSync.relay;
+  return base+"?role=learner"+(r.url?"&relay="+encodeURIComponent(r.url):"")+(r.code?"&code="+encodeURIComponent(r.code):"");
+}
+function refreshLinks(){
+  byId("linkIntelliVue").value=monitorLink("devices/intellivue/IntelliVue_Sim_Monitor.html");
+  byId("linkHemoSphere").value=monitorLink("devices/hemosphere-alta/HemoSphere_Alta_Sim.html");
+}
+refreshLinks();
+byId("copyIntelliVue").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkIntelliVue").value);}catch(e){}});
+byId("copyHemoSphere").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkHemoSphere").value);}catch(e){}});
+byId("relayConnect").addEventListener("click",()=>{
+  const url=(byId("relayUrl").value||"").trim();
+  if(!/^wss?:\/\//i.test(url)){byId("relayStatus").textContent="Enter a relay URL first (wss://…).";return;}
+  const code=deviceSync.setRelay(url,csUrlParams.get("code")||"");
+  byId("relayStatus").textContent="Connecting… session code "+code+".";
+  refreshLinks();
+});
+setInterval(()=>{
+  const badge=byId("sessionBadge");
+  if(deviceSync.isLinked()){badge.textContent="● Linked — "+deviceSync.peerCount()+" peer(s)";badge.classList.add("linked");}
+  else{badge.textContent="Same-machine sync active";badge.classList.remove("linked");}
+  const rst=byId("relayStatus");
+  if(deviceSync.relay.url)rst.textContent=(deviceSync.relay.ws&&deviceSync.relay.ws.readyState===1?"● Connected":"Connecting…")+" — code "+deviceSync.relay.code+", "+deviceSync.peerCount()+" peer(s) in room.";
+},1000);
+
+/* Testing hook, same rationale as the device files' window.ctSharedEngine */
+window.ctSharedEngine={
+  getRunner:()=>runner,getState:()=>runner&&runner.state,
+  tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);renderReadout();}return runner&&runner.state;},
+  syncPushNow:()=>deviceSync.pushNow(),syncHeartbeatNow:()=>deviceSync.heartbeatNow(),
+  syncSetRelay:(url,code)=>deviceSync.setRelay(url,code),
+  getSyncStatus:()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay}),
+};
+</script>
+</body>
+</html>
