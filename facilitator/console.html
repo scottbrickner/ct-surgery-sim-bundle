@@ -160,6 +160,37 @@
     </div>
     <div class="hint">Sliders write directly to the shared engine (matching IntelliVue's/HemoSphere Alta's own facilitator sliders) — every change here appears on both monitors live. Not every field is displayed by every monitor (e.g. neither shows chest-tube output); see CLAUDE.md for the full field-to-display map.</div>
   </div>
+
+  <div class="card" style="margin-top:14px">
+    <h2>Custom Decline (Facilitator-Timed)</h2>
+    <div class="hint" style="margin-top:0">Ramp the CURRENT vitals toward the targets below over a duration you set. If nobody addresses it within an additional grace period, the chosen outcome fires automatically — same auto-advance mechanism the scripted flagship ramps use, but with parameters and timing you pick live, usable at any point in any part (not tied to a scripted step).</div>
+    <div class="grid" style="margin-top:8px">
+      <div>
+        <div class="gl">Decline Target</div>
+        <label class="row">HR <input type="range" id="cd_hr" min="20" max="220" value="120"><span class="val" id="cd_hr_v">120</span></label>
+        <label class="row">BP sys <input type="range" id="cd_sbp" min="40" max="260" value="80"><span class="val" id="cd_sbp_v">80</span></label>
+        <label class="row">BP dia <input type="range" id="cd_dbp" min="20" max="160" value="50"><span class="val" id="cd_dbp_v">50</span></label>
+        <label class="row">MAP <input type="range" id="cd_map" min="30" max="150" value="55"><span class="val" id="cd_map_v">55</span></label>
+        <label class="row">CVP <input type="range" id="cd_cvp" min="0" max="30" value="14"><span class="val" id="cd_cvp_v">14</span></label>
+        <label class="row">SpO₂ <input type="range" id="cd_spo2" min="50" max="100" value="88"><span class="val" id="cd_spo2_v">88</span></label>
+      </div>
+      <div>
+        <div class="gl">Timing &amp; Outcome</div>
+        <label class="row">Ramp over (min) <input type="number" id="cd_duration" min="0.5" step="0.5" value="5" style="width:70px;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;"></label>
+        <label class="row">Then grace period (min) <input type="number" id="cd_grace" min="0" step="0.5" value="3" style="width:70px;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;"></label>
+        <div class="row"><label>If unaddressed</label></div>
+        <select id="cd_outcome">
+          <option value="none">Hold (no auto outcome — decline only)</option>
+          <option value="arrest" selected>Cardiac Arrest (PEA)</option>
+          <option value="lossOfCapture">Loss of Pacer Capture</option>
+        </select>
+        <input type="text" id="cd_label" placeholder="Countdown label (optional, e.g. &quot;septic decompensation&quot;)" style="margin-top:8px">
+        <div class="btnrow" style="margin-top:10px"><button class="act big danger" id="cd_start">Start Custom Decline</button></div>
+      </div>
+    </div>
+    <div id="cdTimer" style="margin-top:8px"></div>
+    <div class="hint">The target sliders set where the decline ENDS UP, not an instant change — current vitals ramp toward them over "Ramp over," same mechanics as the scripted flagship ramps. "Hold" runs a decline with no auto-fire (useful for a slow deterioration you'll call out loud yourself). Cancel from the timer below once it starts, same as a scripted decline.</div>
+  </div>
 </div>
 
 <script type="module">
@@ -169,6 +200,7 @@ import {
   tick as srTick, applyFacilitatorOverride as srOverride,
   getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
+  startFacilitatorRamp as srStartFacilitatorRamp,
 } from '../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot } from '../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
@@ -202,21 +234,34 @@ function render(){
 }
 
 /* ---------------- Decompensation timer / auto-advance countdown ---------------- */
+// Mirrored into two spots (#decompTimer near the top scenario controls,
+// #cdTimer next to the Custom Decline form further down) since there's only
+// ever ONE runner.activeRamp/pendingAutoAdvance at a time regardless of
+// whether a scripted ramp step or startFacilitatorRamp() started it - the
+// SME shouldn't have to scroll back up to see the countdown they just
+// started from the Custom Decline card, or vice versa for a scripted one.
+const DECOMP_TIMER_IDS=["decompTimer","cdTimer"];
 function fmtMMSS(ms){const s=Math.max(0,Math.round(ms/1000));const m=Math.floor(s/60),r=s%60;return m+":"+String(r).padStart(2,"0");}
 function renderDecompTimer(nowMs){
-  const el=byId("decompTimer");
-  if(!runner){el.innerHTML="";return;}
+  const els=DECOMP_TIMER_IDS.map(byId).filter(Boolean);
+  if(!runner){els.forEach(el=>el.innerHTML="");return;}
   const progress=srGetRampProgress(runner,nowMs);
   const countdown=srGetAutoAdvanceCountdown(runner,nowMs);
+  let html;
   if(progress){
     const pct=Math.round(progress.fraction*100);
-    el.innerHTML=`<div class="decomp-label"><span>Decompensating</span><span>${fmtMMSS(progress.elapsedMs)} / ${fmtMMSS(progress.durationMs)}</span></div><div class="decomp-bar"><div class="decomp-fill" style="width:${pct}%"></div></div>`;
+    html=`<div class="decomp-label"><span>Decompensating</span><span>${fmtMMSS(progress.elapsedMs)} / ${fmtMMSS(progress.durationMs)}</span></div><div class="decomp-bar"><div class="decomp-fill" style="width:${pct}%"></div></div>`;
   }else if(countdown){
-    el.innerHTML=`<div class="decomp-label warn"><span>⚠ Auto-advancing if unaddressed in ${fmtMMSS(countdown.remainingMs)}</span></div><div class="btnrow" style="margin-top:4px"><button class="act danger" id="decompCancel">Hold Here — Cancel Auto-Advance</button></div>`;
-    byId("decompCancel").addEventListener("click",()=>{runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());});
+    const what=countdown.label?("to "+countdown.label+" "):"";
+    html=`<div class="decomp-label warn"><span>⚠ Auto-advancing ${what}if unaddressed in ${fmtMMSS(countdown.remainingMs)}</span></div><div class="btnrow" style="margin-top:4px"><button class="act danger decomp-cancel">Hold Here — Cancel Auto-Advance</button></div>`;
   }else{
-    el.innerHTML="";
+    html="";
   }
+  els.forEach(el=>{
+    el.innerHTML=html;
+    const cancelBtn=el.querySelector(".decomp-cancel");
+    if(cancelBtn)cancelBtn.addEventListener("click",()=>{runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());});
+  });
 }
 byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());syncControlsFromRunner();render();});
 byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);syncControlsFromRunner();render();});
@@ -302,6 +347,44 @@ byId("ov_captured").addEventListener("click",()=>{
   });
 });
 
+/* ---------------- Custom Decline (facilitator-timed, SME-configured) ---------------- */
+// Target sliders are deliberately NOT wired through OVERRIDE_MAP/srOverride -
+// unlike the Override Parameters sliders above, these describe where a FUTURE
+// ramp should end up, not an instant change, so dragging one must only update
+// its own displayed number, never touch the live engine state.
+const CD_TARGET_MAP={cd_hr:"hr",cd_sbp:"bp.sbp",cd_dbp:"bp.dbp",cd_map:"bp.map",cd_cvp:"cvp",cd_spo2:"spo2"};
+for(const id in CD_TARGET_MAP){
+  const el=byId(id),vv=byId(id+"_v");
+  el.addEventListener("input",()=>{vv.textContent=fmtVal(el,parseFloat(el.value));});
+}
+// Outcome presets are mechanically-defined engine patches (not fabricated
+// clinical numbers) - the same shapes the flagship scenario's own scripted
+// `arrest`/loss-of-capture events already use elsewhere in this codebase.
+const CD_OUTCOME_PRESETS={
+  none:null,
+  arrest:{rhythm:"PEA",hr:150,bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
+  lossOfCapture:{pacer:{captured:false}},
+};
+const CD_OUTCOME_LABELS={arrest:"cardiac arrest",lossOfCapture:"loss of pacer capture"};
+byId("cd_start").addEventListener("click",()=>{
+  if(!runner)return;
+  const target={};
+  for(const id in CD_TARGET_MAP)setPath(target,CD_TARGET_MAP[id],parseFloat(byId(id).value));
+  const durationMinutes=parseFloat(byId("cd_duration").value)||0;
+  const graceMinutes=parseFloat(byId("cd_grace").value)||0;
+  const outcomeKey=byId("cd_outcome").value;
+  const outcomePatch=CD_OUTCOME_PRESETS[outcomeKey];
+  const label=byId("cd_label").value.trim()||(outcomeKey!=="none"?CD_OUTCOME_LABELS[outcomeKey]:"");
+  runner=srStartFacilitatorRamp(runner,{
+    target,durationMinutes,
+    autoAdvanceAfterMinutes:outcomeKey!=="none"?graceMinutes:undefined,
+    outcomePatch:outcomePatch||undefined,
+    label,
+  },performance.now());
+  renderReadout();
+  renderDecompTimer(performance.now());
+});
+
 /* ---------------- Live-tick an in-flight ramp + auto-advance countdown ---------------- */
 // Runs every frame whenever there's a ramp in flight OR a pendingAutoAdvance
 // counting down (the latter persists after the ramp itself has settled to
@@ -384,6 +467,7 @@ window.ctSharedEngine={
   cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
   getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
   getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
+  startCustomDeclineNow:(opts,ts)=>{if(!runner)return null;runner=srStartFacilitatorRamp(runner,opts,ts);renderReadout();renderDecompTimer(performance.now());return runner.state;},
   syncPushNow:()=>deviceSync.pushNow(),syncHeartbeatNow:()=>deviceSync.heartbeatNow(),
   syncSetRelay:(url,code)=>deviceSync.setRelay(url,code),
   getSyncStatus:()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay}),

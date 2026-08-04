@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createRunner, next, prev, reset, jumpToPart, tick, applyFacilitatorOverride,
   getRampProgress, checkAutoAdvance, getAutoAdvanceCountdown, cancelAutoAdvance,
+  startFacilitatorRamp,
 } from './scenarioRunner.js';
 
 // Small synthetic fixture, independent of the real flagship scenario (that
@@ -219,7 +220,7 @@ test('a ramp step without autoAdvanceAfterMinutes never schedules a pendingAutoA
 test('next() into a ramp step with autoAdvanceAfterMinutes schedules pendingAutoAdvance at start+duration+grace', () => {
   let r = createRunner(fixtureScenarioWithAutoAdvance());
   r = next(r, 0); // ramp starts at t=0, 5 min duration + 3 min grace = fires at 8 min
-  assert.deepEqual(r.pendingAutoAdvance, { fireAtMs: 8 * 60000 });
+  assert.deepEqual(r.pendingAutoAdvance, { fireAtMs: 8 * 60000, kind: 'scripted' });
 });
 
 test('checkAutoAdvance() is a no-op before the fire time, even after the ramp itself has settled', () => {
@@ -250,8 +251,8 @@ test('getAutoAdvanceCountdown() reports remaining time, null when nothing is pen
 
   r = next(r, 0);
   r = tick(r, 300000);
-  assert.deepEqual(getAutoAdvanceCountdown(r, 300000), { remainingMs: 3 * 60000 });
-  assert.deepEqual(getAutoAdvanceCountdown(r, 8 * 60000 - 1000), { remainingMs: 1000 });
+  assert.deepEqual(getAutoAdvanceCountdown(r, 300000), { remainingMs: 3 * 60000, label: null });
+  assert.deepEqual(getAutoAdvanceCountdown(r, 8 * 60000 - 1000), { remainingMs: 1000, label: null });
 });
 
 test('cancelAutoAdvance() clears a pending auto-advance without changing anything else', () => {
@@ -287,5 +288,126 @@ test('prev() and jumpToPart() also clear a pending auto-advance', () => {
   assert.equal(rPrev.pendingAutoAdvance, null);
 
   let rJump = jumpToPart(r, 'partB');
+  assert.equal(rJump.pendingAutoAdvance, null);
+});
+
+/* ---------------- startFacilitatorRamp() - SME-timed custom decline ---------------- */
+
+test('startFacilitatorRamp() starts a ramp toward a custom target from the current state, independent of partIndex/stepIndex', () => {
+  let r = createRunner(fixtureScenario()); // partIndex 0, stepIndex -1, no scripted ramp involved at all
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4 }, 1000);
+  assert.equal(r.partIndex, 0);
+  assert.equal(r.stepIndex, -1); // untouched - this is not a scripted-step transition
+  assert.ok(r.activeRamp);
+  assert.equal(r.activeRamp.fromState.hr, 90); // ramping from wherever the state currently was
+  assert.equal(r.activeRamp.startedAtMs, 1000);
+  assert.equal(r.activeRamp.durationMs, 4 * 60000);
+  assert.equal(r.pendingAutoAdvance, null); // no autoAdvanceAfterMinutes/outcomePatch given - decline-only, no auto-fire
+});
+
+test('startFacilitatorRamp() ticks and settles exactly like a scripted ramp', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4 }, 0);
+  r = tick(r, 120000); // halfway
+  assert.equal(r.state.hr, 65);
+  r = tick(r, 240000); // full duration
+  assert.equal(r.state.hr, 40);
+  assert.equal(r.activeRamp, null);
+});
+
+test('startFacilitatorRamp() with autoAdvanceAfterMinutes + outcomePatch schedules a custom pendingAutoAdvance', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2,
+    outcomePatch: { rhythm: 'PEA', flags: { arrestActive: true } }, label: 'cardiac arrest',
+  }, 0);
+  assert.deepEqual(r.pendingAutoAdvance, {
+    fireAtMs: 6 * 60000, kind: 'custom', patch: { rhythm: 'PEA', flags: { arrestActive: true } }, label: 'cardiac arrest',
+  });
+});
+
+test('startFacilitatorRamp() without BOTH autoAdvanceAfterMinutes and outcomePatch never schedules an auto-fire (decline-only)', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2 }, 0); // no outcomePatch
+  assert.equal(r.pendingAutoAdvance, null);
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4, outcomePatch: { rhythm: 'PEA' } }, 0); // no autoAdvanceAfterMinutes
+  assert.equal(r.pendingAutoAdvance, null);
+});
+
+test('checkAutoAdvance() applies the custom outcome patch on fire, WITHOUT touching partIndex/stepIndex', () => {
+  let r = createRunner(fixtureScenario());
+  r = next(r, 0); r = next(r, 0); // walk to partA's a-arrest step first, so we're mid-scenario
+  const partBefore = r.partIndex, stepBefore = r.stepIndex;
+  r = startFacilitatorRamp(r, {
+    target: { hr: 200 }, durationMinutes: 1, autoAdvanceAfterMinutes: 1,
+    outcomePatch: { rhythm: 'VF', flags: { arrestActive: true } }, label: 'v-fib',
+  }, 0);
+  r = tick(r, 60000); // ramp settles
+  r = checkAutoAdvance(r, 120000); // grace period elapses
+  assert.equal(r.partIndex, partBefore);
+  assert.equal(r.stepIndex, stepBefore); // untouched by the custom auto-advance
+  assert.equal(r.state.rhythm, 'VF');
+  assert.equal(r.state.flags.arrestActive, true);
+  assert.equal(r.activeRamp, null);
+  assert.equal(r.pendingAutoAdvance, null);
+});
+
+test('checkAutoAdvance() for a custom decline is a no-op before the deadline', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2,
+    outcomePatch: { rhythm: 'PEA' },
+  }, 0);
+  r = checkAutoAdvance(r, 5 * 60000); // 5 min in, deadline is at 6 min
+  assert.notEqual(r.state.rhythm, 'PEA');
+  assert.ok(r.pendingAutoAdvance);
+});
+
+test('cancelAutoAdvance() also cancels a custom (facilitator-timed) auto-advance', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2,
+    outcomePatch: { rhythm: 'PEA' },
+  }, 0);
+  r = tick(r, 240000);
+  r = cancelAutoAdvance(r);
+  assert.equal(r.pendingAutoAdvance, null);
+  r = checkAutoAdvance(r, 999 * 60000);
+  assert.notEqual(r.state.rhythm, 'PEA');
+});
+
+test('getAutoAdvanceCountdown() surfaces the custom decline\'s label for the UI', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2,
+    outcomePatch: { rhythm: 'PEA' }, label: 'sepsis-driven arrest',
+  }, 0);
+  r = tick(r, 240000);
+  assert.deepEqual(getAutoAdvanceCountdown(r, 240000), { remainingMs: 120000, label: 'sepsis-driven arrest' });
+});
+
+test('next()/prev()/jumpToPart() also cancel an in-flight custom decline (activeRamp and pendingAutoAdvance alike)', () => {
+  // Start from partB, whose only step ('b-instant') is NOT itself a ramp -
+  // isolates "does next() clear the custom ramp" from "does the destination
+  // step happen to start its own new ramp" (partA's first step is a ramp,
+  // which would confound this assertion).
+  let r = jumpToPart(createRunner(fixtureScenario()), 'partB');
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2,
+    outcomePatch: { rhythm: 'PEA' },
+  }, 0);
+  assert.ok(r.activeRamp);
+  assert.ok(r.pendingAutoAdvance);
+
+  const rNext = next(r, 0); // into b-instant
+  assert.equal(rNext.activeRamp, null);
+  assert.equal(rNext.pendingAutoAdvance, null);
+
+  const rPrev = prev(r);
+  assert.equal(rPrev.activeRamp, null);
+  assert.equal(rPrev.pendingAutoAdvance, null);
+
+  const rJump = jumpToPart(r, 'partA');
+  assert.equal(rJump.activeRamp, null);
   assert.equal(rJump.pendingAutoAdvance, null);
 });

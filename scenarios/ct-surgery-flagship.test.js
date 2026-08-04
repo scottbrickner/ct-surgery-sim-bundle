@@ -135,7 +135,7 @@ test('Part 2: an unaddressed tamponade auto-arrests at minute 8 (5-min ramp + 3-
   r = next(r, 0); // recent-events
   r = next(r, 0); // tamponade-begins
   r = next(r, 0); // tamponade-onset ramp starts at t=0
-  assert.deepEqual(r.pendingAutoAdvance, { fireAtMs: 8 * 60000 });
+  assert.deepEqual(r.pendingAutoAdvance, { fireAtMs: 8 * 60000, kind: 'scripted' });
 
   r = tick(r, 5 * 60000); // ramp settles at 5 min - not yet arrested
   r = checkAutoAdvance(r, 7 * 60000 + 59000); // 1 second before the deadline

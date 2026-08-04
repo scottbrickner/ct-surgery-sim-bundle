@@ -37,7 +37,7 @@ export function createRunner(scenario) {
     stepIndex: -1,
     state: createState(scenario.parts[0].initialState),
     activeRamp: null, // { fromState, target, startedAtMs, durationMs }
-    pendingAutoAdvance: null, // { fireAtMs } - see checkAutoAdvance()
+    pendingAutoAdvance: null, // { fireAtMs, kind: 'scripted'|'custom', patch?, label? } - see checkAutoAdvance()
     events: [],
   };
 }
@@ -95,7 +95,7 @@ export function next(runner, nowMs) {
       // scripted step follows (typically an `event` like arrest) is exactly
       // what a facilitator's own manual "Next" click would do at this point.
       if (typeof step.autoAdvanceAfterMinutes === 'number') {
-        pendingAutoAdvance = { fireAtMs: nowMs + durationMs + step.autoAdvanceAfterMinutes * 60000 };
+        pendingAutoAdvance = { fireAtMs: nowMs + durationMs + step.autoAdvanceAfterMinutes * 60000, kind: 'scripted' };
       }
     } else if (step.type === 'discussion') {
       state = priorState;
@@ -173,17 +173,65 @@ export function getRampProgress(runner, nowMs) {
  * by manually calling next()/prev()/jumpToPart() (which clear it as a side
  * effect of navigating) or by calling cancelAutoAdvance() to stay on the
  * current step indefinitely.
+ *
+ * Two independent sources can schedule a pendingAutoAdvance, distinguished by
+ * `kind`: 'scripted' (set by next() when it enters a ramp step authored with
+ * autoAdvanceAfterMinutes - fires by calling next() again, exactly like a
+ * manual Next click) or 'custom' (set by startFacilitatorRamp() - fires by
+ * applying an arbitrary facilitator-chosen patch via applyInstant, WITHOUT
+ * touching partIndex/stepIndex, since a facilitator-timed decline isn't tied
+ * to any scripted step and may be running mid-discussion in any part).
  */
 export function checkAutoAdvance(runner, nowMs) {
   if (!runner.pendingAutoAdvance) return runner;
   if (nowMs < runner.pendingAutoAdvance.fireAtMs) return runner;
+  if (runner.pendingAutoAdvance.kind === 'custom') {
+    const { patch, label } = runner.pendingAutoAdvance;
+    return {
+      ...runner,
+      state: applyInstant(runner.state, patch),
+      activeRamp: null,
+      pendingAutoAdvance: null,
+      events: [...runner.events, { at: `custom-decline:${label || 'outcome'}`, nowMs }],
+    };
+  }
   return next(runner, nowMs);
 }
 
-/** Read-only view of a pending auto-advance, for rendering a countdown. Null if none is scheduled. */
+/** Read-only view of a pending auto-advance, for rendering a countdown. Null if none is scheduled. Includes `label` (custom declines only - see startFacilitatorRamp) for the UI to show what's about to fire. */
 export function getAutoAdvanceCountdown(runner, nowMs) {
   if (!runner.pendingAutoAdvance) return null;
-  return { remainingMs: Math.max(0, runner.pendingAutoAdvance.fireAtMs - nowMs) };
+  return { remainingMs: Math.max(0, runner.pendingAutoAdvance.fireAtMs - nowMs), label: runner.pendingAutoAdvance.label || null };
+}
+
+/**
+ * Facilitator-driven counterpart to a scripted `ramp` step: ramp the CURRENT
+ * state toward an arbitrary `target` over `durationMinutes`, usable at any
+ * point in any part (mid-discussion, before a scripted ramp even exists in
+ * that part, etc.) - independent of partIndex/stepIndex entirely, same
+ * "independent of the scripted timeline" spirit as applyFacilitatorOverride().
+ * If both `autoAdvanceAfterMinutes` and `outcomePatch` are given, schedules a
+ * 'custom' pendingAutoAdvance that applies `outcomePatch` (any partial state
+ * patch - e.g. an arrest-like flatline, a loss-of-capture flag) once the
+ * ramp settles and that extra grace period elapses unaddressed. Omit either
+ * one for a decline-only ramp that just settles and waits (no auto-fire) -
+ * same as a scripted ramp step without autoAdvanceAfterMinutes. `label` is
+ * carried through to getAutoAdvanceCountdown() for the UI to display (e.g.
+ * "cardiac arrest") - purely cosmetic, no engine meaning.
+ */
+export function startFacilitatorRamp(runner, { target, durationMinutes, autoAdvanceAfterMinutes, outcomePatch, label }, nowMs) {
+  const durationMs = (durationMinutes || 0) * 60000;
+  const activeRamp = { fromState: runner.state, target, startedAtMs: nowMs, durationMs };
+  let pendingAutoAdvance = null;
+  if (typeof autoAdvanceAfterMinutes === 'number' && outcomePatch) {
+    pendingAutoAdvance = { fireAtMs: nowMs + durationMs + autoAdvanceAfterMinutes * 60000, kind: 'custom', patch: outcomePatch, label };
+  }
+  return {
+    ...runner,
+    activeRamp,
+    pendingAutoAdvance,
+    events: [...runner.events, { at: `custom-decline:${label || 'start'}`, nowMs }],
+  };
 }
 
 /** Facilitator explicitly opts to stay on the current step - cancels a scheduled auto-advance without otherwise changing anything. */
