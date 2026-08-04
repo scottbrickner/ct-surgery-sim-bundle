@@ -76,13 +76,14 @@
           "id": "tamponade-onset",
           "type": "ramp",
           "durationMinutes": 5,
+          "autoAdvanceAfterMinutes": 3,
           "target": {
             "hr": 135,
             "bp": { "sbp": 72, "dbp": 58, "map": 65 },
             "pa": { "systolic": 45, "diastolic": 15 },
             "cvp": 15
           },
-          "coach": "Over the next 5 minutes: HR 100→135, BP 110/70→72/58, PA 38/12→45/15, CVP 8→15. Watch for the class to recognize tamponade physiology and call for emergent sternotomy."
+          "coach": "Over the next 5 minutes: HR 100→135, BP 110/70→72/58, PA 38/12→45/15, CVP 8→15. Watch for the class to recognize tamponade physiology and call for emergent sternotomy. If nobody calls it, the patient arrests on their own 3 minutes after this ramp settles (5+3=8min, matching the source's arrest timing) — cancel the auto-advance from the facilitator panel if you want to hold this state longer for discussion."
         },
         {
           "id": "arrest",
@@ -110,7 +111,7 @@
       "sourceNotes": [
         "rhythm is set to a placeholder 'Sinus Rhythm' for the same reason as Part 1 — never actually shown while pacer.captured is true, up until the arrest step explicitly overrides both rhythm and captured.",
         "rr, temp, co/ci/svr/svri/svv/ppv/scvo2/hpi, and chest-tube mL totals are not restated in the source for this part — left at engine defaults. Each part is authored from its own independent 'Start of scenario' snapshot per the source, so Part 1's ending values are deliberately NOT carried forward. Facilitator should override live if a specific number matters for the class.",
-        "'atMinute: 8' on the arrest step is documentation only (matches the source's 'At 8 min, patient goes into cardiac arrest') — the engine does not enforce absolute scenario-clock timing beyond the preceding ramp step's own 5-minute duration; the facilitator triggers the arrest step manually via Next when ready.",
+        "'atMinute: 8' on the arrest step documents the source's 'At 8 min, patient goes into cardiac arrest' and is now also mechanically enforced: tamponade-onset's 'autoAdvanceAfterMinutes: 3' fires arrest automatically 3 minutes after the 5-minute ramp settles (5+3=8) if the facilitator hasn't already called it manually via Next — either path lands on the identical arrest state. The facilitator can cancel the auto-advance from the panel to hold the pre-arrest state open for discussion instead.",
         "The arrest step sets pacer.captured to false — modeling the pacer<->ECG feedback loop from BUILD_PROMPT.md §3.1 (loss of capture reveals the underlying rhythm). The source's 'HR – PEA (150 bpm st)' is read as the ECG showing organized electrical activity at 150 with no pulse, i.e. the pacer is no longer effectively capturing at that point, not that PEA is a distinct paced morphology."
       ]
     },

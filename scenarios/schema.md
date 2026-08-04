@@ -55,7 +55,17 @@ is required:
   of real wall-clock time. Only fields in `engine/physiology.js`'s
   `NUMERIC_PATHS` whitelist may appear in `target` - rhythm, pacer.mode,
   and flags.* are NOT ramp-able (the engine throws if you try); use an
-  `event` step for those instead.
+  `event` step for those instead. Optional `autoAdvanceAfterMinutes`: once
+  the ramp settles, if the facilitator hasn't already manually navigated
+  away, `engine/scenarioRunner.js`'s `checkAutoAdvance()` automatically
+  advances to whatever step comes next (typically an `event`) this many
+  *additional* real minutes later - e.g. "if nobody addresses it, the
+  tamponade progresses to arrest on its own." Omit for a ramp that just
+  settles and waits indefinitely for the facilitator, unchanged from
+  before this field existed. The facilitator can always head this off:
+  `cancelAutoAdvance()` stays on the current step indefinitely, or simply
+  navigating manually (`next`/`prev`/`jumpToPart`) cancels it as a side
+  effect, same as it clears any other in-flight ramp.
 - **`event`** - same mechanics as `instant` (applies `set` immediately) but
   marks a hard, discrete clinical event (arrest, sternotomy, cannulation)
   rather than a routine value change. Kept as its own type so a future UI

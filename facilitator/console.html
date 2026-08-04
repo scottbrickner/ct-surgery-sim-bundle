@@ -44,6 +44,10 @@
   .linkrow{display:flex;gap:6px;margin:5px 0;}
   .linkrow button{flex:0 0 auto;}
   code.small{font-size:10.5px;color:var(--dim);word-break:break-all;}
+  .decomp-label{font-size:12px;color:var(--dim);font-weight:600;display:flex;justify-content:space-between;}
+  .decomp-label.warn{color:var(--warn);}
+  .decomp-bar{height:7px;border-radius:4px;background:#0a121b;border:1px solid var(--line);margin-top:5px;overflow:hidden;}
+  .decomp-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--bad));transition:width .25s linear;}
 </style>
 </head>
 <body>
@@ -74,6 +78,7 @@
     </div>
     <div style="margin-top:10px"><span id="partTitle">Loading…</span> <span id="stepId"></span></div>
     <div id="coach" style="margin-top:8px"></div>
+    <div id="decompTimer" style="margin-top:8px"></div>
   </div>
 
   <div class="grid">
@@ -159,7 +164,12 @@
 
 <script type="module">
 import { getEffectiveRhythm, getEffectiveHR } from '../engine/physiology.js';
-import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../engine/scenarioRunner.js';
+import {
+  createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart,
+  tick as srTick, applyFacilitatorOverride as srOverride,
+  getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
+  getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
+} from '../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot } from '../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
 
@@ -188,6 +198,25 @@ function render(){
   byId("stepId").textContent=step?("· "+step.id):"· (part start)";
   byId("coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
   renderReadout();
+  renderDecompTimer(performance.now());
+}
+
+/* ---------------- Decompensation timer / auto-advance countdown ---------------- */
+function fmtMMSS(ms){const s=Math.max(0,Math.round(ms/1000));const m=Math.floor(s/60),r=s%60;return m+":"+String(r).padStart(2,"0");}
+function renderDecompTimer(nowMs){
+  const el=byId("decompTimer");
+  if(!runner){el.innerHTML="";return;}
+  const progress=srGetRampProgress(runner,nowMs);
+  const countdown=srGetAutoAdvanceCountdown(runner,nowMs);
+  if(progress){
+    const pct=Math.round(progress.fraction*100);
+    el.innerHTML=`<div class="decomp-label"><span>Decompensating</span><span>${fmtMMSS(progress.elapsedMs)} / ${fmtMMSS(progress.durationMs)}</span></div><div class="decomp-bar"><div class="decomp-fill" style="width:${pct}%"></div></div>`;
+  }else if(countdown){
+    el.innerHTML=`<div class="decomp-label warn"><span>⚠ Auto-advancing if unaddressed in ${fmtMMSS(countdown.remainingMs)}</span></div><div class="btnrow" style="margin-top:4px"><button class="act danger" id="decompCancel">Hold Here — Cancel Auto-Advance</button></div>`;
+    byId("decompCancel").addEventListener("click",()=>{runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());});
+  }else{
+    el.innerHTML="";
+  }
 }
 byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());syncControlsFromRunner();render();});
 byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);syncControlsFromRunner();render();});
@@ -273,9 +302,23 @@ byId("ov_captured").addEventListener("click",()=>{
   });
 });
 
-/* ---------------- Live-tick an in-flight ramp ---------------- */
+/* ---------------- Live-tick an in-flight ramp + auto-advance countdown ---------------- */
+// Runs every frame whenever there's a ramp in flight OR a pendingAutoAdvance
+// counting down (the latter persists after the ramp itself has settled to
+// activeRamp:null, e.g. "3 more minutes before this auto-arrests") - both
+// need the decompensation timer UI refreshed live, not just the physiology
+// numbers. If checkAutoAdvance() actually fires (grace period elapsed with
+// no facilitator action), that's exactly equivalent to a manual Next click,
+// so it gets the same full render() - not just a readout refresh - to
+// update the part/step title and coach text too.
 function consoleTick(ts){
-  if(runner&&runner.activeRamp){runner=srTick(runner,ts);renderReadout();}
+  if(runner&&(runner.activeRamp||runner.pendingAutoAdvance)){
+    if(runner.activeRamp)runner=srTick(runner,ts);
+    const beforeAutoAdvance=runner;
+    runner=srCheckAutoAdvance(runner,ts);
+    if(runner!==beforeAutoAdvance){syncControlsFromRunner();render();}
+    else{renderReadout();renderDecompTimer(ts);}
+  }
   requestAnimationFrame(consoleTick);
 }
 requestAnimationFrame(consoleTick);
@@ -337,6 +380,10 @@ setInterval(()=>{
 window.ctSharedEngine={
   getRunner:()=>runner,getState:()=>runner&&runner.state,
   tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);renderReadout();}return runner&&runner.state;},
+  checkAutoAdvanceNow:(ts)=>{if(!runner)return null;runner=srCheckAutoAdvance(runner,ts);render();return runner.state;},
+  cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
+  getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
+  getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
   syncPushNow:()=>deviceSync.pushNow(),syncHeartbeatNow:()=>deviceSync.heartbeatNow(),
   syncSetRelay:(url,code)=>deviceSync.setRelay(url,code),
   getSyncStatus:()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay}),

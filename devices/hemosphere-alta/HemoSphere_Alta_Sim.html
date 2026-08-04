@@ -119,6 +119,11 @@
   #fac .scn:hover{background:#1b3144;} #fac .scn b{display:block;font-size:12.5px;color:#fff;} #fac .scn span{font-size:10.5px;color:#90a6ba;}
   #fac .toggrid{display:flex;flex-wrap:wrap;gap:5px;} #fac .tog{flex:1 1 28%;background:#13202c;border:1px solid #26415a;border-radius:5px;padding:6px 3px;font-size:11px;cursor:pointer;color:#90a6ba;text-align:center;font-weight:700;} #fac .tog.on{background:#16384f;color:#fff;border-color:#2f6f9a;}
   .hint{font-size:10.5px;color:#6f8aa3;margin-top:6px;line-height:1.45;}
+  .decomp-label{font-size:11px;color:#6f8aa3;font-weight:600;display:flex;justify-content:space-between;}
+  .decomp-label.warn{color:var(--warn);}
+  .decomp-bar{height:6px;border-radius:4px;background:#070a0f;border:1px solid var(--line);margin-top:4px;overflow:hidden;}
+  .decomp-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--bad));transition:width .25s linear;}
+  #fac .scn.danger{background:#5a1414;border-color:#7a2020;color:#ffd6d6;} #fac .scn.danger:hover{background:#7a1c1c;}
   #cfgModal{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:70;display:none;align-items:center;justify-content:center;}
   #cfgModal .win{background:#0d1925;border:1px solid #2f6f9a;border-radius:8px;width:380px;}
   #cfgModal .h{padding:10px 16px;background:#13384f;font-weight:700;display:flex;justify-content:space-between;}
@@ -241,6 +246,7 @@
       <div class="hint" id="fs_part" style="margin-top:6px">Loading shared engine…</div>
       <div class="hint" id="fs_step"></div>
       <div class="hint" id="fs_coach"></div>
+      <div id="fs_decomp" style="margin-top:6px"></div>
       <div class="hint">Running a real class? <b>facilitator/console.html</b> unifies this panel + IntelliVue's into one control surface on your own laptop — recommended over driving from here directly. This panel stays fully functional for solo testing.</div>
     </div>
     <div class="grp"><div class="gl">Cross-Device Sync</div>
@@ -322,7 +328,12 @@
   </div></div></div>
 
 <script type="module">
-import { createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart, tick as srTick, applyFacilitatorOverride as srOverride } from '../../engine/scenarioRunner.js';
+import {
+  createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart,
+  tick as srTick, applyFacilitatorOverride as srOverride,
+  getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
+  getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
+} from '../../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot } from '../../sync/deviceSync.js';
 import { getEffectiveHR } from '../../engine/physiology.js';
 const byId=id=>document.getElementById(id);
@@ -672,6 +683,25 @@ function renderFlagshipUI(){
   byId("fs_step").textContent=step?step.id:"(part start)";
   byId("fs_coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
   applyEngineStateFull(runner.state);
+  renderDecompTimer(performance.now());
+}
+
+/* Decompensation timer / auto-advance countdown - same pattern as facilitator/console.html */
+function fmtMMSS(ms){const s=Math.max(0,Math.round(ms/1000));const m=Math.floor(s/60),r=s%60;return m+":"+String(r).padStart(2,"0");}
+function renderDecompTimer(nowMs){
+  const el=byId("fs_decomp");if(!el)return;
+  if(!runner){el.innerHTML="";return;}
+  const progress=srGetRampProgress(runner,nowMs);
+  const countdown=srGetAutoAdvanceCountdown(runner,nowMs);
+  if(progress){
+    const pct=Math.round(progress.fraction*100);
+    el.innerHTML=`<div class="decomp-label"><span>Decompensating</span><span>${fmtMMSS(progress.elapsedMs)} / ${fmtMMSS(progress.durationMs)}</span></div><div class="decomp-bar"><div class="decomp-fill" style="width:${pct}%"></div></div>`;
+  }else if(countdown){
+    el.innerHTML=`<div class="decomp-label warn"><span>⚠ Auto-advancing if unaddressed in ${fmtMMSS(countdown.remainingMs)}</span></div><button class="scn danger" id="fs_decompCancel" style="margin-top:4px">Hold Here — Cancel Auto-Advance</button>`;
+    byId("fs_decompCancel").addEventListener("click",()=>{runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());});
+  }else{
+    el.innerHTML="";
+  }
 }
 byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());renderFlagshipUI();});
 byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);renderFlagshipUI();});
@@ -689,9 +719,19 @@ for(const id in ENGINE_OVERRIDE_MAP){const el=byId(id);if(!el)continue;
   el.addEventListener("input",()=>{if(!runner)return;const patch={};setEnginePath(patch,ENGINE_OVERRIDE_MAP[id],parseFloat(el.value));runner=srOverride(runner,patch);});}
 
 // Independent rAF loop for live-ticking an in-flight ramp, mirroring this file's
-// own frame() pattern rather than growing frame() itself.
+// own frame() pattern rather than growing frame() itself. Also drives
+// checkAutoAdvance() - see facilitator/console.html's identical loop for why this
+// keeps running (decomp timer + auto-advance countdown) even after the ramp itself
+// has settled to activeRamp:null, and why an actual auto-advance gets a full
+// renderFlagshipUI() rather than just the light per-tick apply.
 function flagshipTick(ts){
-  if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}
+  if(runner&&(runner.activeRamp||runner.pendingAutoAdvance)){
+    if(runner.activeRamp)runner=srTick(runner,ts);
+    const beforeAutoAdvance=runner;
+    runner=srCheckAutoAdvance(runner,ts);
+    if(runner!==beforeAutoAdvance)renderFlagshipUI();
+    else{applyEngineValuesLight(runner.state);renderDecompTimer(ts);}
+  }
   requestAnimationFrame(flagshipTick);
 }
 requestAnimationFrame(flagshipTick);
@@ -703,6 +743,10 @@ window.ctSharedEngine={
   getState:()=>runner&&runner.state,
   getDeviceState:()=>drv,
   tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);applyEngineValuesLight(runner.state);}return runner&&runner.state;},
+  checkAutoAdvanceNow:(ts)=>{if(!runner)return null;runner=srCheckAutoAdvance(runner,ts);renderFlagshipUI();return runner.state;},
+  cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
+  getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
+  getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
 };
 
 /* ---------------- Cross-device sync + pop-out (Phase 3) ---------------- */

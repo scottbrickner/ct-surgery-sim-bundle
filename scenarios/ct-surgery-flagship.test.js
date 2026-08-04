@@ -8,7 +8,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { createRunner, next, prev, tick, jumpToPart } from '../engine/scenarioRunner.js';
+import {
+  createRunner, next, prev, tick, jumpToPart, checkAutoAdvance, cancelAutoAdvance,
+} from '../engine/scenarioRunner.js';
 import { getEffectiveRhythm } from '../engine/physiology.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -126,4 +128,32 @@ test('prev() from Part 3\'s baseline walks back into Part 2\'s final settled sta
   assert.equal(r.partIndex, 1);
   assert.equal(r.stepIndex, 4); // sternotomy, Part 2's last step
   assert.equal(r.state.flags.sternotomyPerformed, true);
+});
+
+test('Part 2: an unaddressed tamponade auto-arrests at minute 8 (5-min ramp + 3-min grace), matching the source\'s "At 8 min, patient goes into cardiac arrest"', () => {
+  let r = jumpToPart(createRunner(scenario), 'part2-tamponade-arrest');
+  r = next(r, 0); // recent-events
+  r = next(r, 0); // tamponade-begins
+  r = next(r, 0); // tamponade-onset ramp starts at t=0
+  assert.deepEqual(r.pendingAutoAdvance, { fireAtMs: 8 * 60000 });
+
+  r = tick(r, 5 * 60000); // ramp settles at 5 min - not yet arrested
+  r = checkAutoAdvance(r, 7 * 60000 + 59000); // 1 second before the deadline
+  assert.equal(r.state.flags.arrestActive, false);
+
+  r = checkAutoAdvance(r, 8 * 60000); // deadline reached, nobody called it manually
+  assert.equal(r.state.rhythm, 'PEA');
+  assert.equal(r.state.flags.arrestActive, true);
+  assert.equal(getEffectiveRhythm(r.state), 'PEA');
+});
+
+test('Part 2: cancelAutoAdvance() lets the facilitator hold the pre-arrest tamponade state open past minute 8', () => {
+  let r = jumpToPart(createRunner(scenario), 'part2-tamponade-arrest');
+  r = next(r, 0); r = next(r, 0); r = next(r, 0); // into the ramp
+  r = tick(r, 5 * 60000);
+  r = cancelAutoAdvance(r);
+
+  r = checkAutoAdvance(r, 60 * 60000); // long past minute 8 - still doesn't fire, it was cancelled
+  assert.equal(r.state.flags.arrestActive, false);
+  assert.equal(r.state.bp.sbp, 72); // parked at the settled tamponade values, not arrest's 0
 });

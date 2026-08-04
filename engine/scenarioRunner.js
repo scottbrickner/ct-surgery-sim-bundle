@@ -37,6 +37,7 @@ export function createRunner(scenario) {
     stepIndex: -1,
     state: createState(scenario.parts[0].initialState),
     activeRamp: null, // { fromState, target, startedAtMs, durationMs }
+    pendingAutoAdvance: null, // { fireAtMs } - see checkAutoAdvance()
     events: [],
   };
 }
@@ -54,6 +55,7 @@ export function jumpToPart(runner, partId) {
     stepIndex: -1,
     state: createState(runner.scenario.parts[idx].initialState),
     activeRamp: null,
+    pendingAutoAdvance: null,
   };
 }
 
@@ -73,6 +75,7 @@ export function next(runner, nowMs) {
 
   let state;
   let activeRamp = null;
+  let pendingAutoAdvance = null;
   let eventLabel;
   if (newStepIndex === -1) {
     state = createState(scenario.parts[newPartIndex].initialState);
@@ -81,8 +84,19 @@ export function next(runner, nowMs) {
     const step = scenario.parts[newPartIndex].steps[newStepIndex];
     const priorState = computeStateAt(scenario, newPartIndex, newStepIndex - 1);
     if (step.type === 'ramp') {
-      activeRamp = { fromState: priorState, target: step.target, startedAtMs: nowMs, durationMs: (step.durationMinutes || 0) * 60000 };
+      const durationMs = (step.durationMinutes || 0) * 60000;
+      activeRamp = { fromState: priorState, target: step.target, startedAtMs: nowMs, durationMs };
       state = priorState; // tick() progresses it from here
+      // Auto-advance is scheduled up front (not discovered reactively when the
+      // ramp completes) since everything needed - start time, ramp duration,
+      // grace period - is already known the instant the ramp begins. See
+      // checkAutoAdvance() for why this fires next() rather than something
+      // ramp-specific: an unaddressed decompensation advancing to whatever
+      // scripted step follows (typically an `event` like arrest) is exactly
+      // what a facilitator's own manual "Next" click would do at this point.
+      if (typeof step.autoAdvanceAfterMinutes === 'number') {
+        pendingAutoAdvance = { fireAtMs: nowMs + durationMs + step.autoAdvanceAfterMinutes * 60000 };
+      }
     } else if (step.type === 'discussion') {
       state = priorState;
     } else {
@@ -97,6 +111,7 @@ export function next(runner, nowMs) {
     stepIndex: newStepIndex,
     state,
     activeRamp,
+    pendingAutoAdvance,
     events: [...runner.events, { at: eventLabel, nowMs }],
   };
 }
@@ -119,6 +134,7 @@ export function prev(runner) {
     stepIndex: newStepIndex,
     state: computeStateAt(scenario, newPartIndex, newStepIndex),
     activeRamp: null,
+    pendingAutoAdvance: null,
   };
 }
 
@@ -128,7 +144,52 @@ export function tick(runner, nowMs) {
   const { fromState, target, startedAtMs, durationMs } = runner.activeRamp;
   const fraction = durationMs <= 0 ? 1 : (nowMs - startedAtMs) / durationMs;
   const state = rampState(fromState, target, fraction);
+  // pendingAutoAdvance (if any) is left untouched here - it was scheduled by
+  // next() up front and fires via checkAutoAdvance(), independent of whether
+  // the ramp itself has settled to activeRamp:null yet.
   return { ...runner, state, activeRamp: fraction >= 1 ? null : runner.activeRamp };
+}
+
+/**
+ * Progress any in-flight ramp toward its target - see getRampProgress() for
+ * a read-only view of the same thing, used to render a decompensation timer
+ * without needing to derive fraction/remaining time by hand.
+ */
+export function getRampProgress(runner, nowMs) {
+  if (!runner.activeRamp) return null;
+  const { startedAtMs, durationMs } = runner.activeRamp;
+  const elapsedMs = Math.max(0, nowMs - startedAtMs);
+  const fraction = durationMs <= 0 ? 1 : Math.min(1, elapsedMs / durationMs);
+  return { elapsedMs, durationMs, fraction, remainingMs: Math.max(0, durationMs - elapsedMs) };
+}
+
+/**
+ * If a ramp step was authored with `autoAdvanceAfterMinutes`, calling this
+ * every tick (alongside tick() itself) advances the scenario via next() once
+ * that grace period elapses with no facilitator action - e.g. "if nobody
+ * addresses the tamponade, it progresses to arrest on its own 3 minutes
+ * after the ramp settles." A no-op if nothing is pending, or the fire time
+ * hasn't arrived yet. The facilitator can always head this off first, either
+ * by manually calling next()/prev()/jumpToPart() (which clear it as a side
+ * effect of navigating) or by calling cancelAutoAdvance() to stay on the
+ * current step indefinitely.
+ */
+export function checkAutoAdvance(runner, nowMs) {
+  if (!runner.pendingAutoAdvance) return runner;
+  if (nowMs < runner.pendingAutoAdvance.fireAtMs) return runner;
+  return next(runner, nowMs);
+}
+
+/** Read-only view of a pending auto-advance, for rendering a countdown. Null if none is scheduled. */
+export function getAutoAdvanceCountdown(runner, nowMs) {
+  if (!runner.pendingAutoAdvance) return null;
+  return { remainingMs: Math.max(0, runner.pendingAutoAdvance.fireAtMs - nowMs) };
+}
+
+/** Facilitator explicitly opts to stay on the current step - cancels a scheduled auto-advance without otherwise changing anything. */
+export function cancelAutoAdvance(runner) {
+  if (!runner.pendingAutoAdvance) return runner;
+  return { ...runner, pendingAutoAdvance: null };
 }
 
 /**
