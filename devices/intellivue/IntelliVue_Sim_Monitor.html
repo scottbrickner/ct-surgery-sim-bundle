@@ -1051,6 +1051,12 @@ const RHYTHM_MAP={
   "Paced (DDD)":"paced_v","Paced (DDI)":"paced_v","Paced (VVI)":"paced_v","Paced (VOO)":"paced_v","Paced (AOO)":"paced_v",
   "PEA":"sinus_tach", // organized activity w/o a pulse - shown as its underlying morphology; pulselessness comes through via flat ART pressure (sys/dia -> 0), not a distinct waveform
   "Sinus Tachycardia":"sinus_tach","Sinus Bradycardia":"sinus_brady","Sinus Rhythm":"sinus","Atrial Fibrillation":"afib",
+  // Unlike PEA, these map to a REAL distinct morphology this device's own
+  // native rhythm engine already had (pre-existing, Phase 0/unmodified) -
+  // fibrillatory ECG trace + "*** VENT FIB" banner + suppressed HR/flatline
+  // ART for vfib; fast monomorphic complexes + "*** VENT TACH" banner for
+  // vtach. See ecgValue()/updateNumerics()/computeAnnunConditions() above.
+  "Ventricular Fibrillation":"vfib","Ventricular Tachycardia":"vtach",
 };
 function mapEngineRhythm(effRhythm){const m=RHYTHM_MAP[effRhythm];if(!m){console.warn("Flagship engine: no device rhythm mapping for",JSON.stringify(effRhythm),"- falling back to sinus");return"sinus";}return m;}
 

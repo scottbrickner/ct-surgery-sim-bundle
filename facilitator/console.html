@@ -113,6 +113,8 @@
         <option value="Sinus Bradycardia">Sinus Bradycardia</option>
         <option value="Atrial Fibrillation">Atrial Fibrillation</option>
         <option value="PEA">PEA</option>
+        <option value="Ventricular Tachycardia">Ventricular Tachycardia</option>
+        <option value="Ventricular Fibrillation">Ventricular Fibrillation</option>
       </select>
       <div class="btnrow" style="margin-top:8px"><button class="act" id="ov_captured">Pacer Capture: —</button></div>
       <div class="hint">The effective rhythm shown on IntelliVue is the paced rhythm when the pacer is capturing, otherwise this intrinsic rhythm — flip capture off to demo loss-of-capture live.</div>
@@ -182,6 +184,8 @@
         <select id="cd_outcome">
           <option value="none">Hold (no auto outcome — decline only)</option>
           <option value="arrest" selected>Cardiac Arrest (PEA)</option>
+          <option value="vfib">Cardiac Arrest (V-Fib)</option>
+          <option value="vtach">Cardiac Arrest (Pulseless V-Tach)</option>
           <option value="lossOfCapture">Loss of Pacer Capture</option>
         </select>
         <input type="text" id="cd_label" placeholder="Countdown label (optional, e.g. &quot;septic decompensation&quot;)" style="margin-top:8px">
@@ -294,7 +298,7 @@ function renderReadout(){
   byId("ev_arrest").classList.toggle("on",s.flags.arrestActive);
   byId("ev_sternotomy").classList.toggle("on",s.flags.sternotomyPerformed);
   byId("ev_ecmo").classList.toggle("on",s.flags.ecmoCannulated);
-  byId("ov_rhythm").value=s.rhythm in {"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1}?s.rhythm:byId("ov_rhythm").value;
+  byId("ov_rhythm").value=s.rhythm in {"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1,"Ventricular Tachycardia":1,"Ventricular Fibrillation":1}?s.rhythm:byId("ov_rhythm").value;
 }
 
 /* ---------------- Override sliders ---------------- */
@@ -363,9 +367,16 @@ for(const id in CD_TARGET_MAP){
 const CD_OUTCOME_PRESETS={
   none:null,
   arrest:{rhythm:"PEA",hr:150,bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
+  // Pulseless, same flatline hemodynamics as PEA - only the rhythm/ECG
+  // morphology differs (IntelliVue's RHYTHM_MAP already has real vfib/vtach
+  // waveform + alarm-banner support, unlike PEA which just borrows sinus_tach
+  // morphology). V-Fib has no organized rate - hr is deliberately left
+  // unpatched rather than given a fabricated number.
+  vfib:{rhythm:"Ventricular Fibrillation",bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
+  vtach:{rhythm:"Ventricular Tachycardia",hr:180,bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
   lossOfCapture:{pacer:{captured:false}},
 };
-const CD_OUTCOME_LABELS={arrest:"cardiac arrest",lossOfCapture:"loss of pacer capture"};
+const CD_OUTCOME_LABELS={arrest:"cardiac arrest (PEA)",vfib:"cardiac arrest (V-Fib)",vtach:"cardiac arrest (pulseless V-Tach)",lossOfCapture:"loss of pacer capture"};
 byId("cd_start").addEventListener("click",()=>{
   if(!runner)return;
   const target={};
