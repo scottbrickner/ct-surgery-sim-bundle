@@ -1,0 +1,76 @@
+/* Shared components for facilitator/administrative surfaces. Depends on
+   tokens.css - always load tokens.css first. Add to this file as later
+   phases need new shared patterns (e.g. the Facilitator Console's
+   collapsible side-rail in Phase 3); don't fork a page-local variant of
+   something that belongs here. */
+
+/* ---------------------------------------------------------------------
+   Page header — eyebrow + display heading + dek, used at the top of every
+   admin/facilitator surface (homepage, Assessments Monitor stub, Builder
+   stub, and later the Console/Assessments Monitor proper).
+   --------------------------------------------------------------------- */
+.page-head{padding:var(--space-8) var(--grid-margin) var(--space-6); max-width:var(--content-max); margin:0 auto;}
+.page-head h1{font-size:clamp(30px,4vw,var(--text-3xl)); line-height:1.05; max-width:20ch;}
+.page-head .dek{font-size:var(--text-md); max-width:62ch; margin-top:var(--space-3);}
+.page-head .status-row{display:flex; flex-wrap:wrap; gap:var(--space-2); margin-top:var(--space-5);}
+
+/* ---------------------------------------------------------------------
+   Setup-order list — numbered because it IS a real, load-bearing sequence
+   (join order genuinely changes behavior: the pacemaker overlays onto an
+   existing session and needs one to exist first). Numbering here encodes
+   real information, not decoration.
+   --------------------------------------------------------------------- */
+.setup-steps{counter-reset:step; list-style:none; margin:var(--space-4) 0 0; padding:0; max-width:62ch;}
+.setup-steps li{
+  counter-increment:step; position:relative; padding-left:34px; margin-bottom:var(--space-3);
+  font-size:var(--text-sm); color:var(--ink-soft); line-height:1.55;
+}
+.setup-steps li::before{
+  content:counter(step); position:absolute; left:0; top:0; font-family:var(--font-mono);
+  font-size:var(--text-xs); color:var(--accent-ink); border:1px solid var(--rule-strong);
+  width:22px; height:22px; border-radius:var(--radius-sm); display:flex; align-items:center; justify-content:center;
+}
+.setup-steps strong{color:var(--ink); font-weight:600;}
+
+/* ---------------------------------------------------------------------
+   Launch card — the homepage's primary unit. A real <a>, keyboard-operable
+   by default, no hover-only affordance.
+   --------------------------------------------------------------------- */
+.launch-grid{padding:0 var(--grid-margin) var(--space-4); max-width:var(--content-max); margin:0 auto;
+  display:grid; grid-template-columns:repeat(3,1fr); gap:var(--grid-gutter);}
+@media (max-width:900px){ .launch-grid{grid-template-columns:repeat(2,1fr);} }
+@media (max-width:600px){ .launch-grid{grid-template-columns:1fr;} }
+
+.launch-card{
+  display:flex; flex-direction:column; gap:var(--space-2);
+  background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md);
+  padding:var(--space-5); text-decoration:none; color:var(--ink);
+  min-height:150px; position:relative;
+}
+.launch-card:hover{border-color:var(--accent);}
+.launch-card .kicker{font-family:var(--font-mono); font-size:var(--text-2xs); letter-spacing:0.06em; text-transform:uppercase; color:var(--accent-ink);}
+.launch-card h3{font-size:var(--text-lg); margin-top:2px;}
+.launch-card .d{font-size:var(--text-xs); color:var(--ink-faint); line-height:1.55; margin-top:2px;}
+.launch-card .card-foot{margin-top:auto; padding-top:var(--space-3); display:flex; justify-content:space-between; align-items:center; gap:var(--space-2); flex-wrap:wrap;}
+.launch-card.disabled{opacity:0.6; cursor:default;}
+.launch-card.disabled:hover{border-color:var(--rule);}
+
+.launch-grid.secondary{grid-template-columns:1fr; max-width:calc(var(--content-max) * 0.62); margin:var(--space-4) auto 0; padding:0 var(--grid-margin);}
+.launch-grid.secondary .launch-card{flex-direction:row; align-items:center; min-height:0; padding:var(--space-4) var(--space-5);}
+.launch-grid.secondary .launch-card .text{flex:1;}
+
+/* ---------------------------------------------------------------------
+   Section label — small uppercase group header above a block of content.
+   --------------------------------------------------------------------- */
+.section-label{
+  font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.06em;
+  color:var(--ink-faint); margin:var(--space-7) var(--grid-margin) var(--space-2); max-width:var(--content-max);
+}
+.section-label-wrap{max-width:var(--content-max); margin:0 auto;}
+
+.doc-foot{
+  max-width:var(--content-max); margin:0 auto; padding:var(--space-7) var(--grid-margin) var(--space-6);
+  font-family:var(--font-mono); font-size:var(--text-2xs); color:var(--ink-faint); line-height:1.7;
+  border-top:1px solid var(--rule);
+}
+.doc-foot a{color:var(--accent-ink);}

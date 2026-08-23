@@ -1,0 +1,9 @@
+{
+  "name": "ct-surgery-sim-design-system",
+  "private": true,
+  "type": "module",
+  "description": "Shared tokens/components for facilitator and administrative surfaces, plus the read-only same-machine presence detector. See tokens.css, components.css, presence.js.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scenario Builder</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="../design-system/tokens.css">
+<link rel="stylesheet" href="../design-system/components.css">
+<style>
+  .stub{max-width:var(--content-max); margin:0 auto; padding:var(--space-7) var(--grid-margin) var(--space-8);}
+  .stub-card{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:var(--space-6); max-width:640px;}
+  .stub-card h2{font-size:var(--text-lg); margin-bottom:var(--space-2);}
+  .stub-list{margin:var(--space-4) 0 0; padding-left:20px; font-size:var(--text-sm); color:var(--ink-soft); max-width:56ch;}
+  .stub-list li{margin-bottom:6px;}
+  .role-note{border-left:3px solid var(--accent); background:var(--accent-wash); padding:var(--space-3) var(--space-4); margin-top:var(--space-5); font-size:var(--text-xs); color:var(--ink-soft); max-width:56ch;}
+</style>
+</head>
+<body>
+  <div class="page-head">
+    <div class="eyebrow">Author access · in progress</div>
+    <h1>Scenario Builder</h1>
+    <p class="dek">A standalone authoring tool for building and publishing staged, branching scenarios — schema-validated, version-controlled, reusable across every facilitator once approved.</p>
+    <div class="status-row"><span class="pill warn"><span class="dot"></span>Not yet built</span></div>
+  </div>
+
+  <div class="stub">
+    <div class="stub-card">
+      <h2>What's coming here</h2>
+      <p>This is Phase 4 of the platform plan. It will let an author:</p>
+      <ul class="stub-list">
+        <li>Define a baseline, staged deterioration/branching model, and named endpoints without hand-writing JSON</li>
+        <li>Set trigger conditions, transition/hold durations, success criteria, and reveal rules per stage</li>
+        <li>Import/export scenario JSON with schema validation and clear, line-level error reporting</li>
+        <li>Publish an approved scenario so it's available to every facilitator, not just this machine</li>
+      </ul>
+      <div class="role-note">
+        <strong style="color:var(--ink);">Access model:</strong> authoring is a separate role from running a session. A facilitator can drive and adjust any published scenario live with no login. Building or saving a new scenario here will require a passcode once Supabase Auth is wired in (Phase 3 foundation → enforced here in Phase 4) — this page doesn't gate anything yet because that auth layer doesn't exist yet either.
+      </div>
+      <a class="btn" href="../index.html" style="display:inline-block; margin-top:var(--space-5); text-decoration:none;">&larr; Back to launch</a>
+    </div>
+  </div>
+
+  <footer class="doc-foot">Clinical Patient Simulator · Scenario Builder stub · see CLAUDE.md for the full phased plan</footer>
+</body>
+</html>

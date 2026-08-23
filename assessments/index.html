@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Patient Assessments Monitor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="../design-system/tokens.css">
+<link rel="stylesheet" href="../design-system/components.css">
+<style>
+  .stub{max-width:var(--content-max); margin:0 auto; padding:var(--space-7) var(--grid-margin) var(--space-8);}
+  .stub-card{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:var(--space-6); max-width:640px;}
+  .stub-card h2{font-size:var(--text-lg); margin-bottom:var(--space-2);}
+  .stub-list{margin:var(--space-4) 0 0; padding-left:20px; font-size:var(--text-sm); color:var(--ink-soft); max-width:56ch;}
+  .stub-list li{margin-bottom:6px;}
+</style>
+</head>
+<body>
+  <div class="page-head">
+    <div class="eyebrow">Learner surface · in progress</div>
+    <h1>Patient Assessments Monitor</h1>
+    <p class="dek">A touch-friendly, learner-facing surface for outputs, physical assessment, sounds, therapies, and patient findings — driven by the same shared physiology engine as the other monitors.</p>
+    <div class="status-row"><span class="pill warn"><span class="dot"></span>Not yet built</span></div>
+  </div>
+
+  <div class="stub">
+    <div class="stub-card">
+      <h2>What's coming here</h2>
+      <p>This surface is scoped for Phase 8 of the platform plan. When it lands, it will give a learner:</p>
+      <ul class="stub-list">
+        <li>A top row of 3–6 facilitator-selected priority findings</li>
+        <li>Tabs for Outputs, Assessment, Sounds, Therapies/Devices, and Patient</li>
+        <li>Interactive assessment requests — inspect a chest tube, check urine output, auscultate, ask the patient a question — each revealed automatically, held for facilitator approval, or hidden per the scenario author's rules</li>
+        <li>A full requested/revealed/missed/delayed trail for debrief, with zero facilitator-only content ever visible here</li>
+      </ul>
+      <p style="margin-top:var(--space-4);">Until then, use the Facilitator Console's override sliders and event toggles to convey assessment findings verbally during a session.</p>
+      <a class="btn" href="../index.html" style="display:inline-block; margin-top:var(--space-4); text-decoration:none;">&larr; Back to launch</a>
+    </div>
+  </div>
+
+  <footer class="doc-foot">Clinical Patient Simulator · Patient Assessments Monitor stub · see CLAUDE.md for the full phased plan</footer>
+</body>
+</html>

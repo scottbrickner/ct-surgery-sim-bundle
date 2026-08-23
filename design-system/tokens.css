@@ -1,0 +1,172 @@
+/* Design tokens for the Clinical Patient Simulator's facilitator-facing and
+   administrative surfaces — homepage, Facilitator Console, Patient
+   Assessments Monitor, Scenario Builder, and any facilitator-only drawer
+   layered on top of a device screen.
+
+   Explicitly NOT for the three learner-facing device shells (IntelliVue,
+   HemoSphere Alta, the pacemaker) — those keep their own realistic,
+   independent chrome. See CLAUDE.md's design-system section before importing
+   this file into a device shell; it isn't meant to be.
+
+   Direction: Swiss-grid — strict alignment, strong typographic hierarchy,
+   tabular numerals for clinical values, thin rules over card shadows, red
+   reserved ONLY for alarms/critical/destructive states (never decorative).
+   Dark by default, matching every other page in this product (console,
+   index, all three device shells are already dark) - this file doesn't
+   invent a new brand, it's the first SHARED version of the palette every
+   page already approximates separately with divergent hex values. */
+
+:root{
+  /* ---- color: surface ---- */
+  --paper:#0B0D10;          /* page background */
+  --paper-raised:#13161B;   /* panel / card background */
+  --paper-sunken:#07090B;   /* input wells, recessed elements */
+
+  /* ---- color: ink ---- */
+  --ink:#F2F1ED;
+  --ink-soft:#C7CCD1;       /* secondary text */
+  --ink-faint:#8A9198;      /* tertiary / placeholder */
+
+  /* ---- color: structure ---- */
+  --rule:#262B31;           /* hairline borders/dividers */
+  --rule-strong:#3A4149;
+
+  /* ---- color: accent (restrained cyan/blue - system accent, not semantic) ---- */
+  --accent:#3AA0DE;
+  --accent-ink:#8FCBF0;     /* accent text on dark surfaces */
+  --accent-wash:#132530;    /* accent-tinted panel background */
+
+  /* ---- color: semantic (never used for pure decoration) ---- */
+  --critical:#E5455F;       /* alarms, destructive actions, clinically urgent info ONLY */
+  --critical-wash:#2C1218;
+  --warn:#E0AC4E;           /* caution, needs-attention */
+  --warn-wash:#2A2210;
+  --good:#5FC98A;           /* connected, healthy, confirmed */
+  --good-wash:#122A1D;
+
+  --focus-ring:#3AA0DE;
+
+  /* ---- type families ----
+     Archivo: display headings, used sparingly, tight tracking.
+     IBM Plex Sans: body copy and UI labels — built for interface legibility.
+     IBM Plex Mono: tabular numerals, code, file paths, session codes. */
+  --font-display:'Archivo',"Helvetica Neue",Arial,sans-serif;
+  --font-body:'IBM Plex Sans',-apple-system,"Segoe UI",Arial,sans-serif;
+  --font-mono:'IBM Plex Mono',"SFMono-Regular",Consolas,monospace;
+
+  /* ---- type scale (px, a fixed ratio - stay on it rather than ad hoc sizes) ---- */
+  --text-2xs:11px;
+  --text-xs:12.5px;
+  --text-sm:14px;
+  --text-base:15.5px;
+  --text-md:17px;
+  --text-lg:20px;
+  --text-xl:26px;
+  --text-2xl:34px;
+  --text-3xl:44px;
+
+  /* ---- spacing (4px base unit) ---- */
+  --space-1:4px;
+  --space-2:8px;
+  --space-3:12px;
+  --space-4:16px;
+  --space-5:24px;
+  --space-6:32px;
+  --space-7:48px;
+  --space-8:64px;
+
+  /* ---- radius: squared / minimally rounded, per the Swiss-grid brief ---- */
+  --radius-sm:2px;
+  --radius-md:4px;
+
+  /* ---- 12-column grid ---- */
+  --grid-columns:12;
+  --grid-gutter:var(--space-5);
+  --grid-margin:var(--space-6);
+  --content-max:1180px;
+
+  /* ---- breakpoints (informational — used inside @media blocks below) ----
+     laptop/desktop: no query needed (default)
+     tablet: <=900px       projector/TV: no distinct query, scales via clamp()
+     Mobile phones are explicitly out of scope per the brief. */
+}
+
+/* ---------------------------------------------------------------------
+   Base element styling. Token-driven only - no component here should ever
+   hardcode a color/space/radius outside the variables above.
+   --------------------------------------------------------------------- */
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--font-body); font-size:var(--text-base); line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{
+  font-family:var(--font-display); font-weight:800; letter-spacing:-0.01em;
+  text-wrap:balance; color:var(--ink); margin:0;
+}
+p{margin:0 0 var(--space-3); max-width:70ch; color:var(--ink-soft);}
+a{color:var(--accent-ink);}
+code, .mono, .tabular{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+table{font-variant-numeric:tabular-nums;}
+
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focus-visible{
+  outline:2px solid var(--focus-ring); outline-offset:2px;
+}
+
+::selection{background:var(--accent); color:#04141C;}
+
+/* ---------------------------------------------------------------------
+   12-column grid utility
+   --------------------------------------------------------------------- */
+.grid-12{
+  display:grid;
+  grid-template-columns:repeat(var(--grid-columns), 1fr);
+  gap:var(--grid-gutter);
+  max-width:var(--content-max);
+  margin:0 auto;
+  padding:0 var(--grid-margin);
+}
+@media (max-width:900px){
+  .grid-12{grid-template-columns:repeat(4,1fr);}
+}
+
+/* ---------------------------------------------------------------------
+   Shared primitives every facilitator/admin surface can reuse
+   --------------------------------------------------------------------- */
+.eyebrow{
+  font-family:var(--font-mono); font-size:var(--text-2xs); letter-spacing:0.08em;
+  text-transform:uppercase; color:var(--accent-ink);
+}
+
+.pill{
+  display:inline-flex; align-items:center; gap:var(--space-2);
+  font-family:var(--font-mono); font-size:var(--text-2xs); letter-spacing:0.03em;
+  text-transform:uppercase; padding:5px 10px; border:1px solid currentColor;
+  border-radius:var(--radius-sm); line-height:1;
+}
+.pill .dot{width:6px; height:6px; border-radius:50%; background:currentColor; flex:none;}
+.pill.good{color:var(--good); background:var(--good-wash);}
+.pill.info{color:var(--accent-ink); background:var(--accent-wash);}
+.pill.warn{color:var(--warn); background:var(--warn-wash);}
+.pill.critical{color:var(--critical); background:var(--critical-wash);}
+.pill.neutral{color:var(--ink-faint); background:var(--paper-raised); border-color:var(--rule-strong);}
+
+.btn{
+  font-family:var(--font-body); font-weight:600; font-size:var(--text-sm);
+  padding:10px 18px; border-radius:var(--radius-sm); border:1px solid var(--rule-strong);
+  background:var(--paper-raised); color:var(--ink); cursor:pointer;
+}
+.btn:hover{border-color:var(--accent);}
+.btn.primary{background:var(--accent); border-color:var(--accent); color:#04141C;}
+.btn.primary:hover{filter:brightness(1.08);}
+.btn.danger{background:var(--critical-wash); border-color:var(--critical); color:var(--critical);}
+
+.hairline{border:none; border-top:1px solid var(--rule); margin:var(--space-6) 0;}
+
+.disclaimer{
+  font-family:var(--font-mono); font-size:var(--text-2xs); letter-spacing:0.02em;
+  color:var(--critical); background:var(--critical-wash); border:1px solid var(--critical);
+  border-radius:var(--radius-sm); padding:8px 12px; display:inline-block;
+}
