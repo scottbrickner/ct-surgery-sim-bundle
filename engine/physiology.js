@@ -46,11 +46,14 @@ const BASE_STATE = Object.freeze({
   flags: { arrestActive: false, sternotomyPerformed: false, ecmoCannulated: false },
 });
 
-function getPath(obj, path) {
+// Exported (not just internal to rampState) so scenarioRunner.js's override-
+// release machinery can build/read single-path patches without duplicating
+// this logic - see setOverrideWithRelease()/tickReleaseRamps() there.
+export function getPath(obj, path) {
   return path.split('.').reduce((o, k) => (o == null ? undefined : o[k]), obj);
 }
 
-function setPathImmutable(obj, path, value) {
+export function setPathImmutable(obj, path, value) {
   const [head, ...rest] = path.split('.');
   if (rest.length === 0) return { ...obj, [head]: value };
   return { ...obj, [head]: setPathImmutable(obj[head] ?? {}, rest.join('.'), value) };

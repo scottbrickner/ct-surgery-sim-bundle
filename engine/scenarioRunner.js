@@ -15,7 +15,7 @@
 // state forward (see BUILD_PROMPT.md §4 - Part 2 starts at a different BP
 // than where Part 1 left off, hours having passed off-screen).
 
-import { createState, applyInstant, rampState } from './physiology.js';
+import { createState, applyInstant, rampState, getPath, setPathImmutable } from './physiology.js';
 
 /** The fully-settled state at a given part/step position (ramps resolved to fraction 1). Internal - exported for tests. */
 export function computeStateAt(scenario, partIndex, stepIndex) {
@@ -38,6 +38,8 @@ export function createRunner(scenario) {
     state: createState(scenario.parts[0].initialState),
     activeRamp: null, // { fromState, target, startedAtMs, durationMs }
     pendingAutoAdvance: null, // { fireAtMs, kind: 'scripted'|'custom', patch?, label? } - see checkAutoAdvance()
+    overrides: {}, // { [path]: { releaseMode: 'hold'|'duration', releaseAt: ms|null, priorValue } } - see setOverrideWithRelease()
+    releaseRamps: {}, // { [path]: { fromValue, toValue, startedAtMs, durationMs } } - in-flight gradual releases, see startGradualRelease()
     events: [],
   };
 }
@@ -56,6 +58,8 @@ export function jumpToPart(runner, partId) {
     state: createState(runner.scenario.parts[idx].initialState),
     activeRamp: null,
     pendingAutoAdvance: null,
+    overrides: {},
+    releaseRamps: {},
   };
 }
 
@@ -112,6 +116,8 @@ export function next(runner, nowMs) {
     state,
     activeRamp,
     pendingAutoAdvance,
+    overrides: {},
+    releaseRamps: {},
     events: [...runner.events, { at: eventLabel, nowMs }],
   };
 }
@@ -135,19 +141,31 @@ export function prev(runner) {
     state: computeStateAt(scenario, newPartIndex, newStepIndex),
     activeRamp: null,
     pendingAutoAdvance: null,
+    overrides: {},
+    releaseRamps: {},
   };
 }
 
-/** Progress any in-flight ramp toward its target given the current wall-clock time. No-op if nothing is ramping. */
+/**
+ * Progress any in-flight ramp toward its target, AND any in-flight gradual
+ * override releases (see tickReleaseRamps() below), given the current
+ * wall-clock time. No-op for whichever of the two isn't active. Both share
+ * one call so device tick loops don't need to remember to call two
+ * functions - see facilitator/console.html's consoleTick() for the pattern.
+ */
 export function tick(runner, nowMs) {
-  if (!runner.activeRamp) return runner;
-  const { fromState, target, startedAtMs, durationMs } = runner.activeRamp;
-  const fraction = durationMs <= 0 ? 1 : (nowMs - startedAtMs) / durationMs;
-  const state = rampState(fromState, target, fraction);
-  // pendingAutoAdvance (if any) is left untouched here - it was scheduled by
-  // next() up front and fires via checkAutoAdvance(), independent of whether
-  // the ramp itself has settled to activeRamp:null yet.
-  return { ...runner, state, activeRamp: fraction >= 1 ? null : runner.activeRamp };
+  let result = runner;
+  if (result.activeRamp) {
+    const { fromState, target, startedAtMs, durationMs } = result.activeRamp;
+    const fraction = durationMs <= 0 ? 1 : (nowMs - startedAtMs) / durationMs;
+    const state = rampState(fromState, target, fraction);
+    // pendingAutoAdvance (if any) is left untouched here - it was scheduled by
+    // next() up front and fires via checkAutoAdvance(), independent of whether
+    // the ramp itself has settled to activeRamp:null yet.
+    result = { ...result, state, activeRamp: fraction >= 1 ? null : result.activeRamp };
+  }
+  result = tickReleaseRamps(result, nowMs);
+  return result;
 }
 
 /**
@@ -245,6 +263,12 @@ export function cancelAutoAdvance(runner) {
  * ramp is currently in flight, its `fromState` is rebased to include the
  * override so the next tick() doesn't clobber it - the ramp keeps its
  * original schedule and target, just continues from the nudged values.
+ *
+ * This is the ORIGINAL, no-release-semantics override primitive - still the
+ * right tool for discrete fields where "release mode" doesn't mean anything
+ * (rhythm select, pacer capture toggle, arrest/sternotomy/ECMO flags). For a
+ * numeric field that should support hold/duration/release behavior, use
+ * setOverrideWithRelease() below instead.
  */
 export function applyFacilitatorOverride(runner, patch) {
   const state = applyInstant(runner.state, patch);
@@ -252,4 +276,158 @@ export function applyFacilitatorOverride(runner, patch) {
     ? { ...runner.activeRamp, fromState: applyInstant(runner.activeRamp.fromState, patch) }
     : null;
   return { ...runner, state, activeRamp };
+}
+
+/* =========================================================================
+ * Override release model
+ *
+ * The brief asks for four release behaviors per override: hold indefinitely,
+ * hold for a duration, gradually return control, immediately return control.
+ * Rather than four flat, mutually-exclusive modes, these collapse cleanly
+ * onto two orthogonal choices:
+ *   - WHEN to auto-release: never ('hold'), or after a duration ('duration')
+ *     - chosen up front, at setOverrideWithRelease() time.
+ *   - HOW to release: now (releaseOverrideNow) or gradually
+ *     (startGradualRelease) - callable at ANY time on an active override,
+ *     independent of which hold mode was picked. A facilitator can set a
+ *     rate with no timer and still choose to wean it off later; a timed
+ *     override can still be cut immediately before its clock expires.
+ * This is fewer states to reason about, and matches how a real infusion
+ * titration actually works (set a rate, then separately decide to stop or
+ * wean it) more closely than a flat 4-way radio choice would.
+ *
+ * "Release" always targets the value at that path from the INSTANT BEFORE
+ * this override was applied (`priorValue`, snapshotted once, frozen) - not
+ * a live-recomputed "what would the script say right now" value. A moving
+ * target would need runner.state to fork into a separate override-free
+ * baseline that keeps evolving underneath, tracked independently forever;
+ * this is simpler, fully predictable to a facilitator, and correct for the
+ * common case (no ramp active on that field). The one edge case it doesn't
+ * chase: if a scripted ramp targeting the SAME field was running underneath
+ * an override the whole time, its `fromState` was already rebased to the
+ * override value (see applyFacilitatorOverride's docstring) - so the ramp
+ * itself continues normally from wherever the override left it; releasing
+ * back to `priorValue` in that specific case moves backward relative to
+ * where the ramp has since progressed. Flagged, not solved - revisit only
+ * if a real session needs it. See CLAUDE.md.
+ * ========================================================================= */
+
+/**
+ * Set a single-path override with a chosen release behavior. `opts.releaseMode`
+ * is 'hold' (default - persists until explicitly released) or 'duration'
+ * (also schedules an automatic, immediate release after `opts.releaseMinutes`,
+ * fired by checkOverrideReleases() - same "scheduled up front, fired by a
+ * check function every tick" pattern as pendingAutoAdvance). Setting a new
+ * override on a path cancels any gradual release already in flight there.
+ */
+export function setOverrideWithRelease(runner, path, value, opts = {}, nowMs) {
+  const { releaseMode = 'hold', releaseMinutes } = opts;
+  const priorValue = getPath(runner.state, path);
+  const patch = setPathImmutable({}, path, value);
+  const state = applyInstant(runner.state, patch);
+  const activeRamp = runner.activeRamp
+    ? { ...runner.activeRamp, fromState: applyInstant(runner.activeRamp.fromState, patch) }
+    : null;
+  const releaseAt = releaseMode === 'duration' && typeof releaseMinutes === 'number'
+    ? nowMs + releaseMinutes * 60000
+    : null;
+  const overrides = { ...runner.overrides, [path]: { releaseMode, releaseAt, priorValue } };
+  const releaseRamps = { ...runner.releaseRamps };
+  delete releaseRamps[path];
+  return { ...runner, state, activeRamp, overrides, releaseRamps };
+}
+
+/** Drop the override at `path` immediately - its pre-override value shows again with no ramp. No-op if `path` isn't overridden. */
+export function releaseOverrideNow(runner, path) {
+  if (!runner.overrides[path]) return runner;
+  const { priorValue } = runner.overrides[path];
+  const patch = setPathImmutable({}, path, priorValue);
+  const state = applyInstant(runner.state, patch);
+  const overrides = { ...runner.overrides }; delete overrides[path];
+  const releaseRamps = { ...runner.releaseRamps }; delete releaseRamps[path];
+  return { ...runner, state, overrides, releaseRamps };
+}
+
+/**
+ * Ramp the override at `path` back toward its pre-override value over
+ * `releaseMinutes`, instead of snapping instantly. Reuses rampState()'s
+ * fixed-target interpolation and NUMERIC_PATHS whitelist directly - only
+ * ramp-able fields can be gradually released, the same restriction a
+ * scripted ramp step already has and for the same reason (a discrete field
+ * like rhythm has no meaningful "partway" value). No-op if `path` isn't
+ * currently overridden. tick() must be called for this to actually progress
+ * - see tickReleaseRamps() below, which tick() calls internally.
+ */
+export function startGradualRelease(runner, path, releaseMinutes, nowMs) {
+  if (!runner.overrides[path]) return runner;
+  const { priorValue } = runner.overrides[path];
+  const fromValue = getPath(runner.state, path);
+  const durationMs = (releaseMinutes || 0) * 60000;
+  const overrides = { ...runner.overrides }; delete overrides[path];
+  const releaseRamps = { ...runner.releaseRamps, [path]: { fromValue, toValue: priorValue, startedAtMs: nowMs, durationMs } };
+  return { ...runner, overrides, releaseRamps };
+}
+
+/** Progress any in-flight gradual releases toward their target. Internal - called by tick(); exported for tests. */
+export function tickReleaseRamps(runner, nowMs) {
+  const paths = Object.keys(runner.releaseRamps);
+  if (paths.length === 0) return runner;
+  let state = runner.state;
+  const releaseRamps = { ...runner.releaseRamps };
+  for (const path of paths) {
+    const { fromValue, toValue, startedAtMs, durationMs } = releaseRamps[path];
+    const fraction = durationMs <= 0 ? 1 : (nowMs - startedAtMs) / durationMs;
+    // Force the "from" value rampState reads at this path to the frozen
+    // fromValue (not whatever state currently holds there) so every call
+    // recomputes fresh from a fixed start, same pattern tick() uses for
+    // activeRamp - never accumulate across ticks.
+    state = rampState(setPathImmutable(state, path, fromValue), setPathImmutable({}, path, toValue), fraction);
+    if (fraction >= 1) delete releaseRamps[path];
+  }
+  return { ...runner, state, releaseRamps };
+}
+
+/**
+ * Read-only override status at `path`, for the UI. Returns null if `path`
+ * isn't currently overridden or releasing. `{status:'held', releaseMode,
+ * remainingMs}` (remainingMs null for an indefinite hold) or
+ * `{status:'releasing', fraction}` while a gradual release is in flight.
+ */
+export function getOverrideInfo(runner, path, nowMs) {
+  const held = runner.overrides[path];
+  if (held) {
+    return {
+      status: 'held',
+      releaseMode: held.releaseMode,
+      remainingMs: held.releaseAt != null ? Math.max(0, held.releaseAt - nowMs) : null,
+    };
+  }
+  const releasing = runner.releaseRamps[path];
+  if (releasing) {
+    const fraction = releasing.durationMs <= 0 ? 1 : Math.min(1, (nowMs - releasing.startedAtMs) / releasing.durationMs);
+    return { status: 'releasing', fraction };
+  }
+  return null;
+}
+
+/** Is `path` currently overridden (held OR mid-gradual-release)? */
+export function isOverridden(runner, path) {
+  return !!(runner.overrides[path] || runner.releaseRamps[path]);
+}
+
+/**
+ * If any 'duration' override's release time has passed, release it
+ * immediately (same "scheduled up front, fired by a check every tick"
+ * pattern as checkAutoAdvance). Call every tick alongside tick(). A no-op
+ * for overrides with no releaseAt (indefinite holds).
+ */
+export function checkOverrideReleases(runner, nowMs) {
+  let result = runner;
+  for (const path of Object.keys(runner.overrides)) {
+    const ov = runner.overrides[path];
+    if (ov.releaseMode === 'duration' && ov.releaseAt != null && nowMs >= ov.releaseAt) {
+      result = releaseOverrideNow(result, path);
+    }
+  }
+  return result;
 }

@@ -4,6 +4,8 @@ import {
   createRunner, next, prev, reset, jumpToPart, tick, applyFacilitatorOverride,
   getRampProgress, checkAutoAdvance, getAutoAdvanceCountdown, cancelAutoAdvance,
   startFacilitatorRamp,
+  setOverrideWithRelease, releaseOverrideNow, startGradualRelease, tickReleaseRamps,
+  getOverrideInfo, isOverridden, checkOverrideReleases,
 } from './scenarioRunner.js';
 
 // Small synthetic fixture, independent of the real flagship scenario (that
@@ -410,4 +412,152 @@ test('next()/prev()/jumpToPart() also cancel an in-flight custom decline (active
   const rJump = jumpToPart(r, 'partA');
   assert.equal(rJump.activeRamp, null);
   assert.equal(rJump.pendingAutoAdvance, null);
+});
+
+/* ---------------- Override release model (Phase 3) ---------------- */
+
+test('setOverrideWithRelease applies the value immediately and defaults to an indefinite hold', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0);
+  assert.equal(r.state.hr, 40);
+  assert.deepEqual(r.overrides.hr, { releaseMode: 'hold', releaseAt: null, priorValue: 90 });
+  assert.equal(isOverridden(r, 'hr'), true);
+});
+
+test('setOverrideWithRelease with releaseMode "duration" schedules an automatic release time', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, { releaseMode: 'duration', releaseMinutes: 5 }, 1000);
+  assert.deepEqual(r.overrides.hr, { releaseMode: 'duration', releaseAt: 1000 + 5 * 60000, priorValue: 90 });
+});
+
+test('getOverrideInfo reports a held override, with remainingMs only for a timed one', () => {
+  let r = createRunner(fixtureScenario());
+  assert.equal(getOverrideInfo(r, 'hr', 0), null);
+
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0); // indefinite hold
+  assert.deepEqual(getOverrideInfo(r, 'hr', 5000), { status: 'held', releaseMode: 'hold', remainingMs: null });
+
+  r = setOverrideWithRelease(r, 'cvp', 20, { releaseMode: 'duration', releaseMinutes: 2 }, 0);
+  assert.deepEqual(getOverrideInfo(r, 'cvp', 30000), { status: 'held', releaseMode: 'duration', remainingMs: 2 * 60000 - 30000 });
+});
+
+test('releaseOverrideNow snaps back to the pre-override value with no ramp, and clears override tracking', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0);
+  assert.equal(r.state.hr, 40);
+
+  r = releaseOverrideNow(r, 'hr');
+  assert.equal(r.state.hr, 90); // back to the value from before the override
+  assert.equal(isOverridden(r, 'hr'), false);
+  assert.equal(getOverrideInfo(r, 'hr', 0), null);
+});
+
+test('releaseOverrideNow is a no-op for a path that was never overridden', () => {
+  let r = createRunner(fixtureScenario());
+  const before = r;
+  r = releaseOverrideNow(r, 'hr');
+  assert.equal(r, before); // same reference back
+});
+
+test('checkOverrideReleases fires an automatic immediate release once a "duration" override\'s time is up, and not before', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, { releaseMode: 'duration', releaseMinutes: 5 }, 0);
+
+  r = checkOverrideReleases(r, 5 * 60000 - 1000); // 1s early
+  assert.equal(r.state.hr, 40);
+  assert.ok(isOverridden(r, 'hr'));
+
+  r = checkOverrideReleases(r, 5 * 60000); // exactly at the deadline
+  assert.equal(r.state.hr, 90);
+  assert.equal(isOverridden(r, 'hr'), false);
+});
+
+test('checkOverrideReleases never touches an indefinite hold (no releaseAt)', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0);
+  r = checkOverrideReleases(r, 999 * 60000);
+  assert.equal(r.state.hr, 40);
+  assert.ok(isOverridden(r, 'hr'));
+});
+
+test('startGradualRelease + tick ramps the overridden value back toward the pre-override value over the chosen duration', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0); // prior value 90, override to 40
+  r = startGradualRelease(r, 'hr', 4, 0); // release over 4 minutes, starting at t=0
+  assert.equal(isOverridden(r, 'hr'), true); // still "overridden" in the loose sense (releasing counts)
+  assert.equal(r.overrides.hr, undefined); // but no longer a tracked "held" override
+
+  r = tick(r, 120000); // halfway (2 of 4 min): 40 -> 90, midpoint 65
+  assert.equal(r.state.hr, 65);
+  assert.equal(getOverrideInfo(r, 'hr', 120000).status, 'releasing');
+
+  r = tick(r, 240000); // full duration
+  assert.equal(r.state.hr, 90);
+  assert.equal(isOverridden(r, 'hr'), false);
+  assert.equal(r.releaseRamps.hr, undefined);
+});
+
+test('starting a fresh override on a path cancels an in-flight gradual release for that same path', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0);
+  r = startGradualRelease(r, 'hr', 4, 0);
+  r = tick(r, 60000); // partway through the release
+  assert.ok(r.releaseRamps.hr);
+
+  r = setOverrideWithRelease(r, 'hr', 150, {}, 60000); // facilitator overrides again mid-release
+  assert.equal(r.state.hr, 150);
+  assert.equal(r.releaseRamps.hr, undefined); // the old release is gone
+  assert.ok(r.overrides.hr); // replaced by a fresh held override
+});
+
+test('tick() progresses a scripted ramp and a gradual override release together in one call', () => {
+  let r = createRunner(fixtureScenario());
+  r = next(r, 0); // start the scripted 5-min hr 90->135 ramp
+  r = setOverrideWithRelease(r, 'cvp', 20, {}, 0); // unrelated field, overridden
+  r = startGradualRelease(r, 'cvp', 2, 0);
+
+  r = tick(r, 150000); // 2.5 of 5 min for the scripted ramp; 2.5 of 2 min (past full) for the release
+  assert.equal(r.state.hr, 112.5); // scripted ramp still progressing normally
+  assert.equal(r.state.cvp, 8); // release completed and settled at its target (fixture partA has no authored cvp override, base default 8)
+  assert.ok(r.activeRamp); // scripted ramp still in flight
+  assert.equal(r.releaseRamps.cvp, undefined); // release ramp finished and cleared
+});
+
+test('next()/jumpToPart() clear all overrides and in-flight releases', () => {
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0);
+  r = setOverrideWithRelease(r, 'cvp', 20, { releaseMode: 'duration', releaseMinutes: 5 }, 0);
+  r = startGradualRelease(r, 'cvp', 2, 0);
+  assert.ok(Object.keys(r.overrides).length + Object.keys(r.releaseRamps).length > 0);
+
+  const rNext = next(r, 0);
+  assert.deepEqual(rNext.overrides, {});
+  assert.deepEqual(rNext.releaseRamps, {});
+
+  const rJump = jumpToPart(r, 'partB');
+  assert.deepEqual(rJump.overrides, {});
+  assert.deepEqual(rJump.releaseRamps, {});
+});
+
+test('prev() also clears all overrides and in-flight releases (from a non-start position)', () => {
+  let r = createRunner(fixtureScenario());
+  r = next(r, 0); // move off the very start, where prev() is otherwise a no-op
+  r = setOverrideWithRelease(r, 'hr', 40, {}, 0);
+  r = startGradualRelease(r, 'hr', 2, 0);
+  assert.ok(Object.keys(r.releaseRamps).length > 0);
+
+  const rPrev = prev(r);
+  assert.deepEqual(rPrev.overrides, {});
+  assert.deepEqual(rPrev.releaseRamps, {});
+});
+
+test('setOverrideWithRelease rebases an in-flight scripted ramp\'s fromState, same as applyFacilitatorOverride', () => {
+  let r = createRunner(fixtureScenario());
+  r = next(r, 0); // start the 5-min hr 90->135 ramp
+  r = tick(r, 150000); // halfway: hr 112.5
+  r = setOverrideWithRelease(r, 'hr', 100, {}, 150000);
+  assert.equal(r.state.hr, 100);
+
+  r = tick(r, 300000); // ramp reaches full duration - still converges on the original target (135)
+  assert.equal(r.state.hr, 135);
 });

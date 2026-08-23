@@ -3,198 +3,322 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CT Surgery Sim — Facilitator Console</title>
+<title>Facilitator Console</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="../design-system/tokens.css">
+<link rel="stylesheet" href="../design-system/components.css">
 <style>
-  :root{
-    --bg:#0a0d12; --panel:#0e1420; --panel2:#0a0f18; --line:#1c2836; --txt:#eef2f6; --dim:#8aa0b4;
-    --accent:#2f9ad6; --good:#46c95a; --warn:#f5c542; --bad:#ff5a5a;
+  *{-webkit-user-select:none;user-select:none;}
+  input,select,button{font-family:inherit;-webkit-user-select:auto;user-select:auto;}
+
+  /* ---- shell: rail + hero main ---- */
+  .shell{display:grid; grid-template-columns:340px minmax(0,1fr); min-height:100vh;}
+  @media (max-width:980px){ .shell{grid-template-columns:1fr;} .rail{position:static; height:auto;} }
+  .rail{position:sticky; top:0; height:100vh; overflow-y:auto; border-right:1px solid var(--rule); padding:var(--space-5) var(--space-4) var(--space-8);}
+  main{min-width:0; padding:var(--space-5) var(--space-6) var(--space-8);}
+
+  .rail-head{padding:0 var(--space-2) var(--space-5);}
+  .rail-head h1{font-size:var(--text-lg); line-height:1.1;}
+  .rail-head .sub{font-size:var(--text-2xs); color:var(--ink-faint); margin-top:6px; line-height:1.5;}
+
+  .mode-toggle{display:flex; gap:4px; margin-top:var(--space-4);}
+  .mode-toggle button{flex:1; font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.04em; padding:7px 6px; border:1px solid var(--rule-strong); background:var(--paper-raised); color:var(--ink-faint); border-radius:var(--radius-sm); cursor:pointer;}
+  .mode-toggle button.on{background:var(--accent-wash); border-color:var(--accent); color:var(--accent-ink);}
+
+  /* ---- rail groups: native <details> for free keyboard operability ---- */
+  .rail-group{border-top:1px solid var(--rule);}
+  .rail-group summary{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:var(--space-4) var(--space-2); cursor:pointer; list-style:none;
+    font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.05em;
+    color:var(--ink-soft); font-weight:600;
   }
-  *{box-sizing:border-box;-webkit-user-select:none;user-select:none;}
-  html,body{margin:0;min-height:100%;background:var(--bg);font-family:"Segoe UI",Arial,Helvetica,sans-serif;color:var(--txt);}
-  input,select,button{font-family:inherit;}
-  #app{max-width:1180px;margin:0 auto;padding:14px 16px 60px;}
-  header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 4px 16px;flex-wrap:wrap;}
-  header h1{font-size:18px;margin:0;font-weight:800;} header .sub{font-size:12px;color:var(--dim);margin-top:2px;}
-  #sessionBadge{font-size:12.5px;padding:6px 12px;border-radius:20px;background:#13202c;border:1px solid #26415a;color:var(--dim);}
-  #sessionBadge.linked{background:#0f2e18;border-color:#1d6e40;color:#9fffc0;}
-  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
-  @media(max-width:900px){.grid{grid-template-columns:1fr;}}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;}
-  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);margin:0 0 12px;font-weight:700;}
-  .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:7px 0;font-size:13px;}
-  .row label{color:#cdd9e4;flex:0 0 130px;}
-  .row input[type=range]{flex:1;}
-  .row .val{width:52px;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;font-size:13px;}
-  .btnrow{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0;}
-  button.act{flex:1 1 auto;background:#152332;color:#dce8f2;border:1px solid #2a4a63;border-radius:6px;padding:9px 10px;font-size:12.5px;font-weight:600;cursor:pointer;}
-  button.act:hover{background:#1c3348;} button.act.on{background:#15502f;border-color:#1d6e40;color:#d6ffe4;}
-  button.act.danger{background:#4a1414;border-color:#7a2020;color:#ffd6d6;} button.act.danger:hover{background:#661c1c;}
-  button.act.big{padding:12px 10px;font-size:13.5px;}
-  input[type=text]{background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:8px;font-size:12.5px;width:100%;}
-  select{background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:7px;font-size:12.5px;width:100%;}
-  .hint{font-size:11px;color:#6f8aa3;margin-top:6px;line-height:1.5;}
-  .gl{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:#6f8aa3;margin:12px 0 6px;font-weight:700;}
+  .rail-group summary::-webkit-details-marker{display:none;}
+  .rail-group summary .chev{color:var(--gray-400); transition:transform .15s;}
+  .rail-group[open] summary .chev{transform:rotate(90deg);}
+  .rail-group summary:hover{color:var(--ink);}
+  .rail-group .body{padding:0 var(--space-2) var(--space-4);}
+  .rail-group.deemph summary{color:var(--ink-faint); font-weight:500;}
+  .rail-group.deemph{opacity:0.85;}
+
+  .gl{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase; color:var(--ink-faint); margin:14px 0 6px; font-weight:600;}
   .gl:first-child{margin-top:0;}
-  #coach{background:#0a1420;border:1px solid var(--line);border-radius:6px;padding:10px 12px;font-size:13px;color:#cdd9e4;min-height:20px;line-height:1.5;}
-  #partTitle{font-size:15px;font-weight:800;color:#fff;} #stepId{font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums;}
-  .readout{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;}
-  .rd{background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px 10px;text-align:center;}
-  .rd .rl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;} .rd .rv{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:2px;}
-  .rd.flag-on{border-color:#7a2020;background:#2a0e0e;} .rd.flag-on .rv{color:var(--bad);}
-  .linkrow{display:flex;gap:6px;margin:5px 0;}
+  .phase-note{font-size:var(--text-2xs); color:var(--ink-faint); background:var(--paper-sunken); border:1px solid var(--rule); border-radius:var(--radius-sm); padding:8px 10px; margin-top:8px; line-height:1.5;}
+
+  .row{display:flex; align-items:center; justify-content:space-between; gap:8px; margin:7px 0; font-size:var(--text-xs);}
+  .row label{color:var(--ink-soft); flex:0 0 108px;}
+  .row input[type=range]{flex:1; accent-color:var(--accent);}
+  .row .val{width:48px; text-align:right; font-family:var(--font-mono); font-weight:600; font-size:var(--text-xs);}
+
+  .btnrow{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0;}
+  button.act{flex:1 1 auto; background:var(--paper-raised); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:8px 9px; font-size:var(--text-2xs); font-weight:600; cursor:pointer;}
+  button.act:hover{border-color:var(--accent);}
+  button.act.on{background:var(--good-wash); border-color:var(--good); color:var(--good);}
+  button.act.danger{background:var(--critical-wash); border-color:var(--critical); color:var(--critical);}
+  button.act.danger:hover{filter:brightness(1.15);}
+  button.act.big{padding:11px 9px; font-size:var(--text-xs);}
+  button.act.mini{flex:0 0 auto; padding:4px 8px; font-size:10.5px;}
+
+  input[type=text], input[type=number]{background:var(--paper-sunken); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:7px 8px; font-size:var(--text-xs); width:100%;}
+  select{background:var(--paper-sunken); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:6px 7px; font-size:var(--text-xs); width:100%;}
+  .hint{font-size:10.5px; color:var(--ink-faint); margin-top:6px; line-height:1.5;}
+  code.small{font-size:10.5px; color:var(--ink-faint); word-break:break-all;}
+  .linkrow{display:flex; gap:6px; margin:5px 0;}
   .linkrow button{flex:0 0 auto;}
-  code.small{font-size:10.5px;color:var(--dim);word-break:break-all;}
-  .decomp-label{font-size:12px;color:var(--dim);font-weight:600;display:flex;justify-content:space-between;}
+
+  #coach{background:var(--paper-sunken); border:1px solid var(--rule); border-radius:var(--radius-sm); padding:9px 11px; font-size:var(--text-xs); color:var(--ink-soft); min-height:18px; line-height:1.5;}
+  #partTitle{font-size:var(--text-sm); font-weight:700; color:var(--ink);} #stepId{font-size:10.5px; color:var(--ink-faint); font-family:var(--font-mono);}
+
+  .decomp-label{font-size:var(--text-2xs); color:var(--ink-faint); font-weight:600; display:flex; justify-content:space-between;}
   .decomp-label.warn{color:var(--warn);}
-  .decomp-bar{height:7px;border-radius:4px;background:#0a121b;border:1px solid var(--line);margin-top:5px;overflow:hidden;}
-  .decomp-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--bad));transition:width .25s linear;}
+  .decomp-bar{height:6px; border-radius:var(--radius-sm); background:var(--paper-sunken); border:1px solid var(--rule); margin-top:5px; overflow:hidden;}
+  .decomp-fill{height:100%; background:linear-gradient(90deg,var(--accent),var(--critical)); transition:width .25s linear;}
+
+  /* ---- hero: live readout dominates main content ---- */
+  .hero-head{display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-4); flex-wrap:wrap; margin-bottom:var(--space-5);}
+  .hero-head h2{font-size:var(--text-2xl);}
+  .hero-head .patient-sub{font-family:var(--font-mono); font-size:var(--text-xs); color:var(--ink-faint); margin-top:4px;}
+  #sessionBadge{font-family:var(--font-mono); font-size:var(--text-2xs); padding:6px 12px; border-radius:var(--radius-sm); background:var(--paper-raised); border:1px solid var(--rule-strong); color:var(--ink-faint);}
+  #sessionBadge.linked{background:var(--good-wash); border-color:var(--good); color:var(--good);}
+
+  .release-pref{display:flex; align-items:center; gap:8px; font-size:var(--text-2xs); color:var(--ink-faint); margin-bottom:var(--space-4);}
+  .release-pref select{width:auto; max-width:220px;}
+
+  .readout{display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:10px;}
+  .rd{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:14px 14px 12px; text-align:left;}
+  .rd .rl{font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.04em;}
+  .rd .rv{font-family:var(--font-mono); font-size:30px; font-weight:700; margin-top:4px; line-height:1;}
+  .rd.flag-on{border-color:var(--critical); background:var(--critical-wash);}
+  .rd.flag-on .rv{color:var(--critical);}
+  .rd.hero-primary .rv{font-size:38px;}
+
+  .section-gap{margin-top:var(--space-7);}
+
+  /* ---- override status row: only rendered when a field IS currently overridden ---- */
+  .ov-status{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-2px 0 8px; padding:6px 8px; background:var(--warn-wash); border:1px solid var(--warn); border-radius:var(--radius-sm); font-size:10.5px;}
+  .ov-status[hidden]{display:none;} /* author `.ov-status{display:flex}` otherwise beats the UA stylesheet's [hidden]{display:none} regardless of source order (author > user-agent cascade origin) */
+  .ov-status .txt{color:var(--warn); font-family:var(--font-mono); flex:1 1 auto; min-width:100px;}
 </style>
 </head>
 <body>
-<div id="app">
-  <header>
-    <div><h1>CT Surgery Sim — Facilitator Console</h1><div class="sub">Drives the shared flagship scenario for IntelliVue + HemoSphere Alta. Not shown to learners.</div></div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <div class="btnrow" style="margin:0" id="modeToggle">
-        <button class="act on" id="mode_training" style="flex:0 0 auto">Training</button>
-        <button class="act" id="mode_validation" style="flex:0 0 auto">Validation</button>
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-head">
+      <div class="eyebrow">Facilitator</div>
+      <h1>Console</h1>
+      <div class="sub">Drives the shared scenario for every connected device. Not shown to learners.</div>
+      <div class="mode-toggle" id="modeToggle">
+        <button class="on" id="mode_training">Training</button>
+        <button id="mode_validation">Validation</button>
       </div>
-      <div id="sessionBadge">Same-machine sync active</div>
-    </div>
-  </header>
-  <div class="hint" style="margin:-8px 0 14px 4px">Session mode syncs to the pacemaker's own annunciator (Training shows all fault flags on its screen, Validation hides them). No additional effect on the monitors yet — see CLAUDE.md.</div>
-
-  <div class="card" style="margin-bottom:14px">
-    <h2>Flagship Scenario</h2>
-    <div class="btnrow">
-      <button class="act" id="fs_part1">Part 1 — Bedside Settle-in</button>
-      <button class="act" id="fs_part2">Part 2 — Tamponade → Arrest</button>
-      <button class="act" id="fs_part3">Part 3 — ECMO Cannulation</button>
-    </div>
-    <div class="btnrow">
-      <button class="act big" id="fs_prev">‹ Prev</button>
-      <button class="act big" id="fs_next">Next ›</button>
-      <button class="act" id="fs_reset">Reset</button>
-    </div>
-    <div style="margin-top:10px"><span id="partTitle">Loading…</span> <span id="stepId"></span></div>
-    <div id="coach" style="margin-top:8px"></div>
-    <div id="decompTimer" style="margin-top:8px"></div>
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Connect Devices</h2>
-      <div class="row"><label>Relay URL</label></div>
-      <input type="text" id="relayUrl" placeholder="wss://your-relay.onrender.com">
-      <div class="btnrow" style="margin-top:8px"><button class="act" id="relayConnect">Connect Relay</button></div>
-      <div class="hint" id="relayStatus">Not connected — devices on THIS machine already sync automatically via BroadcastChannel, zero setup. A relay is only needed to reach a genuinely separate device (a second laptop, an iPad).</div>
-      <div class="gl">Send a monitor this session (opens in learner view — no facilitator controls on that screen)</div>
-      <div class="linkrow"><input type="text" id="linkIntelliVue" readonly><button class="act" id="copyIntelliVue">Copy</button></div>
-      <div class="linkrow"><input type="text" id="linkHemoSphere" readonly><button class="act" id="copyHemoSphere">Copy</button></div>
-      <div class="gl">Send the pacer this session (e.g. to an iPad — device stays fully interactive, only its own facilitator drawer is hidden)</div>
-      <div class="linkrow"><input type="text" id="linkPacemaker" readonly><button class="act" id="copyPacemaker">Copy</button></div>
-      <div class="hint">The pacer only OVERLAYS its live capture state onto this session (mode + captured, feeding IntelliVue's rhythm display) — it has no scenario of its own, so it must join AFTER a monitor or this console has already started pushing.</div>
     </div>
 
-    <div class="card">
-      <h2>Live Readout</h2>
-      <div class="readout" id="readout"></div>
-      <div class="gl">Clinical Events</div>
-      <div class="btnrow">
-        <button class="act danger" id="ev_arrest">Arrest</button>
-        <button class="act danger" id="ev_sternotomy">Sternotomy</button>
-        <button class="act danger" id="ev_ecmo">ECMO Cannulated</button>
-      </div>
-      <div class="gl">Rhythm / Pacer</div>
-      <div class="row"><label>Intrinsic rhythm</label></div>
-      <select id="ov_rhythm">
-        <option value="Sinus Rhythm">Sinus Rhythm</option>
-        <option value="Sinus Tachycardia">Sinus Tachycardia</option>
-        <option value="Sinus Bradycardia">Sinus Bradycardia</option>
-        <option value="Atrial Fibrillation">Atrial Fibrillation</option>
-        <option value="PEA">PEA</option>
-        <option value="Ventricular Tachycardia">Ventricular Tachycardia</option>
-        <option value="Ventricular Fibrillation">Ventricular Fibrillation</option>
-      </select>
-      <div class="btnrow" style="margin-top:8px"><button class="act" id="ov_captured">Pacer Capture: —</button></div>
-      <div class="hint">The effective rhythm shown on IntelliVue is the paced rhythm when the pacer is capturing, otherwise this intrinsic rhythm — flip capture off to demo loss-of-capture live.</div>
-    </div>
-  </div>
+    <details class="rail-group" id="grp_scenario">
+      <summary><span>Scenario &amp; Stage</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="btnrow">
+          <button class="act" id="fs_part1">Part 1</button>
+          <button class="act" id="fs_part2">Part 2</button>
+          <button class="act" id="fs_part3">Part 3</button>
+        </div>
+        <div class="btnrow">
+          <button class="act big" id="fs_prev">‹ Prev</button>
+          <button class="act big" id="fs_next">Next ›</button>
+          <button class="act" id="fs_reset">Reset</button>
+        </div>
+        <div style="margin-top:8px"><span id="partTitle">Loading…</span> <span id="stepId"></span></div>
+        <div id="coach" style="margin-top:6px"></div>
+        <div id="decompTimer" style="margin-top:6px"></div>
 
-  <div class="card" style="margin-top:14px">
-    <h2>Override Parameters</h2>
-    <div class="grid">
-      <div>
-        <div class="gl">Cardiac / Hemodynamics</div>
-        <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
-        <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
-        <label class="row">BP dia <input type="range" id="ov_dbp" min="20" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
-        <label class="row">MAP <input type="range" id="ov_map" min="30" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
-        <label class="row">PA sys <input type="range" id="ov_pasys" min="10" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
-        <label class="row">PA dia <input type="range" id="ov_padia" min="2" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
-        <label class="row">CVP <input type="range" id="ov_cvp" min="0" max="30" value="8"><span class="val" id="ov_cvp_v">8</span></label>
-        <label class="row">CO <input type="range" id="ov_co" min="1.5" max="12" step="0.1" value="5.0"><span class="val" id="ov_co_v">5.0</span></label>
-      </div>
-      <div>
-        <div class="gl">Perfusion / Respiratory</div>
-        <label class="row">SVV <input type="range" id="ov_svv" min="2" max="35" value="10"><span class="val" id="ov_svv_v">10</span></label>
-        <label class="row">PPV <input type="range" id="ov_ppv" min="2" max="35" value="10"><span class="val" id="ov_ppv_v">10</span></label>
-        <label class="row">ScvO₂ <input type="range" id="ov_scvo2" min="30" max="90" value="65"><span class="val" id="ov_scvo2_v">65</span></label>
-        <label class="row">HPI <input type="range" id="ov_hpi" min="0" max="100" value="0"><span class="val" id="ov_hpi_v">0</span></label>
-        <label class="row">SpO₂ <input type="range" id="ov_spo2" min="50" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
-        <label class="row">RR <input type="range" id="ov_rr" min="0" max="50" value="14"><span class="val" id="ov_rr_v">14</span></label>
-        <label class="row">Temp <input type="range" id="ov_temp" min="32" max="42" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
-      </div>
-    </div>
-    <div class="gl">Drips</div>
-    <div class="grid">
-      <div>
-        <label class="row">Epi (mcg/min) <input type="range" id="ov_epi" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_epi_v">0</span></label>
-        <label class="row">Levo (mcg/min) <input type="range" id="ov_levo" min="0" max="40" step="0.5" value="0"><span class="val" id="ov_levo_v">0</span></label>
-        <label class="row">Vasopressin (u/hr) <input type="range" id="ov_vasopressin" min="0" max="0.1" step="0.005" value="0"><span class="val" id="ov_vasopressin_v">0</span></label>
-        <label class="row">Milrinone (mcg/kg/min) <input type="range" id="ov_milrinone" min="0" max="0.75" step="0.01" value="0"><span class="val" id="ov_milrinone_v">0</span></label>
-      </div>
-      <div>
-        <label class="row">Propofol (mcg/kg/min) <input type="range" id="ov_propofol" min="0" max="200" step="5" value="0"><span class="val" id="ov_propofol_v">0</span></label>
-        <label class="row">Fentanyl (mcg/min) <input type="range" id="ov_fentanyl" min="0" max="100" step="5" value="0"><span class="val" id="ov_fentanyl_v">0</span></label>
-        <label class="row">Insulin (u/hr) <input type="range" id="ov_insulin" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_insulin_v">0</span></label>
-      </div>
-    </div>
-    <div class="hint">Sliders write directly to the shared engine (matching IntelliVue's/HemoSphere Alta's own facilitator sliders) — every change here appears on both monitors live. Not every field is displayed by every monitor (e.g. neither shows chest-tube output); see CLAUDE.md for the full field-to-display map.</div>
-  </div>
-
-  <div class="card" style="margin-top:14px">
-    <h2>Custom Decline (Facilitator-Timed)</h2>
-    <div class="hint" style="margin-top:0">Ramp the CURRENT vitals toward the targets below over a duration you set. If nobody addresses it within an additional grace period, the chosen outcome fires automatically — same auto-advance mechanism the scripted flagship ramps use, but with parameters and timing you pick live, usable at any point in any part (not tied to a scripted step).</div>
-    <div class="grid" style="margin-top:8px">
-      <div>
-        <div class="gl">Decline Target</div>
+        <div class="gl" style="margin-top:16px">Custom Decline (Facilitator-Timed)</div>
+        <div class="hint" style="margin-top:0">Ramp CURRENT vitals toward a target you set. If unaddressed after a grace period, the chosen outcome fires — usable at any point in any part.</div>
         <label class="row">HR <input type="range" id="cd_hr" min="20" max="220" value="120"><span class="val" id="cd_hr_v">120</span></label>
         <label class="row">BP sys <input type="range" id="cd_sbp" min="40" max="260" value="80"><span class="val" id="cd_sbp_v">80</span></label>
         <label class="row">BP dia <input type="range" id="cd_dbp" min="20" max="160" value="50"><span class="val" id="cd_dbp_v">50</span></label>
         <label class="row">MAP <input type="range" id="cd_map" min="30" max="150" value="55"><span class="val" id="cd_map_v">55</span></label>
         <label class="row">CVP <input type="range" id="cd_cvp" min="0" max="30" value="14"><span class="val" id="cd_cvp_v">14</span></label>
         <label class="row">SpO₂ <input type="range" id="cd_spo2" min="50" max="100" value="88"><span class="val" id="cd_spo2_v">88</span></label>
-      </div>
-      <div>
-        <div class="gl">Timing &amp; Outcome</div>
-        <label class="row">Ramp over (min) <input type="number" id="cd_duration" min="0.5" step="0.5" value="5" style="width:70px;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;"></label>
-        <label class="row">Then grace period (min) <input type="number" id="cd_grace" min="0" step="0.5" value="3" style="width:70px;background:#0a121b;color:#fff;border:1px solid #2a3a4a;border-radius:5px;padding:6px;"></label>
+        <label class="row">Ramp over (min) <input type="number" id="cd_duration" min="0.5" step="0.5" value="5" style="width:64px"></label>
+        <label class="row">Grace period (min) <input type="number" id="cd_grace" min="0" step="0.5" value="3" style="width:64px"></label>
         <div class="row"><label>If unaddressed</label></div>
         <select id="cd_outcome">
-          <option value="none">Hold (no auto outcome — decline only)</option>
+          <option value="none">Hold (decline only)</option>
           <option value="arrest" selected>Cardiac Arrest (PEA)</option>
           <option value="vfib">Cardiac Arrest (V-Fib)</option>
           <option value="vtach">Cardiac Arrest (Pulseless V-Tach)</option>
           <option value="lossOfCapture">Loss of Pacer Capture</option>
         </select>
-        <input type="text" id="cd_label" placeholder="Countdown label (optional, e.g. &quot;septic decompensation&quot;)" style="margin-top:8px">
-        <div class="btnrow" style="margin-top:10px"><button class="act big danger" id="cd_start">Start Custom Decline</button></div>
+        <input type="text" id="cd_label" placeholder="Countdown label (optional)" style="margin-top:8px">
+        <div class="btnrow" style="margin-top:8px"><button class="act big danger" id="cd_start">Start Custom Decline</button></div>
+        <div id="cdTimer" style="margin-top:6px"></div>
+      </div>
+    </details>
+
+    <details class="rail-group" id="grp_interventions" open>
+      <summary><span>Interventions</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="gl">Vasoactive Infusions</div>
+        <label class="row">Epi (mcg/min) <input type="range" id="ov_epi" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_epi_v">0</span></label>
+        <div class="ov-status" id="ov_epi_status" hidden></div>
+        <label class="row">Levo (mcg/min) <input type="range" id="ov_levo" min="0" max="40" step="0.5" value="0"><span class="val" id="ov_levo_v">0</span></label>
+        <div class="ov-status" id="ov_levo_status" hidden></div>
+        <label class="row">Vasopressin (u/hr) <input type="range" id="ov_vasopressin" min="0" max="0.1" step="0.005" value="0"><span class="val" id="ov_vasopressin_v">0</span></label>
+        <div class="ov-status" id="ov_vasopressin_status" hidden></div>
+        <label class="row">Milrinone (mcg/kg/min) <input type="range" id="ov_milrinone" min="0" max="0.75" step="0.01" value="0"><span class="val" id="ov_milrinone_v">0</span></label>
+        <div class="ov-status" id="ov_milrinone_status" hidden></div>
+
+        <div class="gl">Pain &amp; Sedation</div>
+        <label class="row">Propofol (mcg/kg/min) <input type="range" id="ov_propofol" min="0" max="200" step="5" value="0"><span class="val" id="ov_propofol_v">0</span></label>
+        <div class="ov-status" id="ov_propofol_status" hidden></div>
+        <label class="row">Fentanyl (mcg/min) <input type="range" id="ov_fentanyl" min="0" max="100" step="5" value="0"><span class="val" id="ov_fentanyl_v">0</span></label>
+        <div class="ov-status" id="ov_fentanyl_status" hidden></div>
+
+        <div class="gl">Other</div>
+        <label class="row">Insulin (u/hr) <input type="range" id="ov_insulin" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_insulin_v">0</span></label>
+        <div class="ov-status" id="ov_insulin_status" hidden></div>
+
+        <div class="phase-note">Antiarrhythmics, boluses, IV push, IV piggybacks, and real dose/onset/duration modeling arrive with the formulary-driven intervention engine (a later phase) — these sliders are raw infusion rates only today.</div>
+      </div>
+    </details>
+
+    <details class="rail-group" id="grp_bls" open>
+      <summary><span>BLS/ACLS</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="gl">Rhythm / Pacer</div>
+        <div class="row"><label>Intrinsic rhythm</label></div>
+        <select id="ov_rhythm">
+          <option value="Sinus Rhythm">Sinus Rhythm</option>
+          <option value="Sinus Tachycardia">Sinus Tachycardia</option>
+          <option value="Sinus Bradycardia">Sinus Bradycardia</option>
+          <option value="Atrial Fibrillation">Atrial Fibrillation</option>
+          <option value="PEA">PEA</option>
+          <option value="Ventricular Tachycardia">Ventricular Tachycardia</option>
+          <option value="Ventricular Fibrillation">Ventricular Fibrillation</option>
+        </select>
+        <div class="btnrow" style="margin-top:8px"><button class="act" id="ov_captured">Pacer Capture: —</button></div>
+
+        <div class="gl">Clinical Events</div>
+        <div class="btnrow">
+          <button class="act danger" id="ev_arrest">Arrest</button>
+          <button class="act danger" id="ev_sternotomy">Sternotomy</button>
+          <button class="act danger" id="ev_ecmo">ECMO Cannulated</button>
+        </div>
+        <div class="phase-note">CPR quality, defibrillation/cardioversion, a ROSC state machine, and Zoll R-series connection arrive with the pulsatility/CPR model (a later phase). Rhythm + arrest-flag toggles above are what's real today.</div>
+      </div>
+    </details>
+
+    <details class="rail-group" id="grp_assessments" open>
+      <summary><span>Patient Assessments &amp; Outputs</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="gl">Cardiac / Hemodynamics</div>
+        <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
+        <div class="ov-status" id="ov_hr_status" hidden></div>
+        <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
+        <div class="ov-status" id="ov_sbp_status" hidden></div>
+        <label class="row">BP dia <input type="range" id="ov_dbp" min="20" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
+        <div class="ov-status" id="ov_dbp_status" hidden></div>
+        <label class="row">MAP <input type="range" id="ov_map" min="30" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
+        <div class="ov-status" id="ov_map_status" hidden></div>
+        <label class="row">PA sys <input type="range" id="ov_pasys" min="10" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
+        <div class="ov-status" id="ov_pasys_status" hidden></div>
+        <label class="row">PA dia <input type="range" id="ov_padia" min="2" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
+        <div class="ov-status" id="ov_padia_status" hidden></div>
+        <label class="row">CVP <input type="range" id="ov_cvp" min="0" max="30" value="8"><span class="val" id="ov_cvp_v">8</span></label>
+        <div class="ov-status" id="ov_cvp_status" hidden></div>
+        <label class="row">CO <input type="range" id="ov_co" min="1.5" max="12" step="0.1" value="5.0"><span class="val" id="ov_co_v">5.0</span></label>
+        <div class="ov-status" id="ov_co_status" hidden></div>
+
+        <div class="gl">Perfusion / Respiratory</div>
+        <label class="row">SVV <input type="range" id="ov_svv" min="2" max="35" value="10"><span class="val" id="ov_svv_v">10</span></label>
+        <div class="ov-status" id="ov_svv_status" hidden></div>
+        <label class="row">PPV <input type="range" id="ov_ppv" min="2" max="35" value="10"><span class="val" id="ov_ppv_v">10</span></label>
+        <div class="ov-status" id="ov_ppv_status" hidden></div>
+        <label class="row">ScvO₂ <input type="range" id="ov_scvo2" min="30" max="90" value="65"><span class="val" id="ov_scvo2_v">65</span></label>
+        <div class="ov-status" id="ov_scvo2_status" hidden></div>
+        <label class="row">HPI <input type="range" id="ov_hpi" min="0" max="100" value="0"><span class="val" id="ov_hpi_v">0</span></label>
+        <div class="ov-status" id="ov_hpi_status" hidden></div>
+        <label class="row">SpO₂ <input type="range" id="ov_spo2" min="50" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
+        <div class="ov-status" id="ov_spo2_status" hidden></div>
+        <label class="row">RR <input type="range" id="ov_rr" min="0" max="50" value="14"><span class="val" id="ov_rr_v">14</span></label>
+        <div class="ov-status" id="ov_rr_status" hidden></div>
+        <label class="row">Temp <input type="range" id="ov_temp" min="32" max="42" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
+        <div class="ov-status" id="ov_temp_status" hidden></div>
+
+        <div class="gl">Chest Tube Output (mL)</div>
+        <label class="row">R Pleural <input type="range" id="ov_rpleural" min="0" max="200" step="5" value="0"><span class="val" id="ov_rpleural_v">0</span></label>
+        <div class="ov-status" id="ov_rpleural_status" hidden></div>
+        <label class="row">R Mediastinal <input type="range" id="ov_rmediastinal" min="0" max="200" step="5" value="0"><span class="val" id="ov_rmediastinal_v">0</span></label>
+        <div class="ov-status" id="ov_rmediastinal_status" hidden></div>
+        <label class="row">Blake <input type="range" id="ov_blake" min="0" max="200" step="5" value="0"><span class="val" id="ov_blake_v">0</span></label>
+        <div class="ov-status" id="ov_blake_status" hidden></div>
+        <label class="row">L Pleural <input type="range" id="ov_lpleural" min="0" max="200" step="5" value="0"><span class="val" id="ov_lpleural_v">0</span></label>
+        <div class="ov-status" id="ov_lpleural_status" hidden></div>
+        <label class="row">L Mediastinal <input type="range" id="ov_lmediastinal" min="0" max="200" step="5" value="0"><span class="val" id="ov_lmediastinal_v">0</span></label>
+        <div class="ov-status" id="ov_lmediastinal_status" hidden></div>
+
+        <div class="phase-note">Chest-tube output was already modeled in the shared engine but never had a control anywhere - added here. Foley/CRRT/NGT output, heart/lung sounds, and the full interactive Patient Assessments Monitor arrive later; use these sliders plus verbal findings until then.</div>
+      </div>
+    </details>
+
+    <details class="rail-group deemph" id="grp_devices">
+      <summary><span>Device Connections</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="row"><label>Relay URL</label></div>
+        <input type="text" id="relayUrl" placeholder="wss://your-relay.onrender.com">
+        <div class="btnrow" style="margin-top:8px"><button class="act" id="relayConnect">Connect Relay</button></div>
+        <div class="hint" id="relayStatus">Not connected — devices on THIS machine already sync automatically, zero setup. A relay is only needed for a genuinely separate device.</div>
+        <div class="gl">Send a monitor this session</div>
+        <div class="linkrow"><input type="text" id="linkIntelliVue" readonly><button class="act mini" id="copyIntelliVue">Copy</button></div>
+        <div class="linkrow"><input type="text" id="linkHemoSphere" readonly><button class="act mini" id="copyHemoSphere">Copy</button></div>
+        <div class="gl">Send the pacer this session</div>
+        <div class="linkrow"><input type="text" id="linkPacemaker" readonly><button class="act mini" id="copyPacemaker">Copy</button></div>
+        <div class="hint">The pacer only overlays its live capture state onto this session — it needs a monitor or this console open first.</div>
+      </div>
+    </details>
+
+    <details class="rail-group deemph" id="grp_session">
+      <summary><span>Session, Pause &amp; Reset</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="hint">Training/Validation mode is set above. Reset returns to Part 1's baseline.</div>
+        <div class="btnrow" style="margin-top:8px"><button class="act" id="fs_reset2">Reset Scenario</button></div>
+        <div class="phase-note">Pause with a learner-facing message ("TIME OUT" / "Let's Chat!") and a hidden resume snapshot are planned for a later phase, alongside the full cross-device session upgrade.</div>
+      </div>
+    </details>
+  </aside>
+
+  <main>
+    <div class="hero-head">
+      <div>
+        <div class="eyebrow">Live Patient State</div>
+        <h2>Current Vitals</h2>
+        <div class="patient-sub" id="patientSub">—</div>
+      </div>
+      <div id="sessionBadge">Same-machine sync active</div>
+    </div>
+
+    <div class="release-pref">
+      <label for="releaseModeSelect">New overrides:</label>
+      <select id="releaseModeSelect">
+        <option value="hold">Hold until released</option>
+        <option value="1">Auto-release after 1 min</option>
+        <option value="2">Auto-release after 2 min</option>
+        <option value="5">Auto-release after 5 min</option>
+        <option value="10">Auto-release after 10 min</option>
+      </select>
+      <span class="hint" style="margin:0">applies to the next slider you move, in Interventions or Assessments &amp; Outputs</span>
+    </div>
+
+    <div class="readout" id="readout"></div>
+
+    <div class="section-gap">
+      <div class="gl">Clinical Events</div>
+      <div class="btnrow" style="max-width:420px">
+        <span class="pill neutral" id="flag_arrest">Arrest</span>
+        <span class="pill neutral" id="flag_sternotomy">Sternotomy</span>
+        <span class="pill neutral" id="flag_ecmo">ECMO</span>
       </div>
     </div>
-    <div id="cdTimer" style="margin-top:8px"></div>
-    <div class="hint">The target sliders set where the decline ENDS UP, not an instant change — current vitals ramp toward them over "Ramp over," same mechanics as the scripted flagship ramps. "Hold" runs a decline with no auto-fire (useful for a slow deterioration you'll call out loud yourself). Cancel from the timer below once it starts, same as a scripted decline.</div>
-  </div>
+  </main>
 </div>
 
 <script type="module">
@@ -205,18 +329,22 @@ import {
   getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
   startFacilitatorRamp as srStartFacilitatorRamp,
+  setOverrideWithRelease as srSetOverride, releaseOverrideNow as srReleaseNow,
+  startGradualRelease as srReleaseGradually, getOverrideInfo as srGetOverrideInfo,
+  checkOverrideReleases as srCheckOverrideReleases,
 } from '../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot } from '../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
 
 let runner=null;
-let sessionMode="training"; // 'training' | 'validation' - synced to the pacemaker's own annunciator mode; see Phase 5 notes in CLAUDE.md for why the monitors don't yet do anything with this beyond carrying it
+let sessionMode="training"; // 'training' | 'validation' - synced to the pacemaker's own annunciator mode
 
 async function initFlagshipScenario(){
   const resp=await fetch("../scenarios/ct-surgery-flagship.json");
   if(!resp.ok)throw new Error("HTTP "+resp.status);
   const scenario=await resp.json();
   runner=createRunner(scenario);
+  byId("patientSub").textContent=(scenario.patient?scenario.patient.name+" · ":"")+scenario.title;
   syncControlsFromRunner();
   render();
 }
@@ -235,15 +363,10 @@ function render(){
   byId("coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
   renderReadout();
   renderDecompTimer(performance.now());
+  renderAllOverrideStatuses(performance.now());
 }
 
 /* ---------------- Decompensation timer / auto-advance countdown ---------------- */
-// Mirrored into two spots (#decompTimer near the top scenario controls,
-// #cdTimer next to the Custom Decline form further down) since there's only
-// ever ONE runner.activeRamp/pendingAutoAdvance at a time regardless of
-// whether a scripted ramp step or startFacilitatorRamp() started it - the
-// SME shouldn't have to scroll back up to see the countdown they just
-// started from the Custom Decline card, or vice versa for a scripted one.
 const DECOMP_TIMER_IDS=["decompTimer","cdTimer"];
 function fmtMMSS(ms){const s=Math.max(0,Math.round(ms/1000));const m=Math.floor(s/60),r=s%60;return m+":"+String(r).padStart(2,"0");}
 function renderDecompTimer(nowMs){
@@ -270,11 +393,12 @@ function renderDecompTimer(nowMs){
 byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());syncControlsFromRunner();render();});
 byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);syncControlsFromRunner();render();});
 byId("fs_reset").addEventListener("click",()=>{runner=srReset(runner);syncControlsFromRunner();render();});
+byId("fs_reset2").addEventListener("click",()=>{runner=srReset(runner);syncControlsFromRunner();render();});
 byId("fs_part1").addEventListener("click",()=>{runner=srJumpToPart(runner,"part1-bedside-settlein");syncControlsFromRunner();render();});
 byId("fs_part2").addEventListener("click",()=>{runner=srJumpToPart(runner,"part2-tamponade-arrest");syncControlsFromRunner();render();});
 byId("fs_part3").addEventListener("click",()=>{runner=srJumpToPart(runner,"part3-ecmo-cannulation");syncControlsFromRunner();render();});
 
-/* ---------------- Live readout ---------------- */
+/* ---------------- Live readout (hero) ---------------- */
 const READOUT_FIELDS=[
   ["hr","HR","bpm"],["spo2","SpO₂","%"],["rr","RR","/min"],["temp","Temp","°C"],
   ["cvp","CVP","mmHg"],["co","CO","L/min"],["svv","SVV","%"],["ppv","PPV","%"],
@@ -284,43 +408,57 @@ function renderReadout(){
   const s=runner.state;
   const rows=READOUT_FIELDS.map(([k,label])=>{
     const v=k==="hr"?getEffectiveHR(s):s[k];
-    return `<div class="rd"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
+    const cls=k==="hr"?"rd hero-primary":"rd";
+    return `<div class="${cls}"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
   });
-  rows.push(`<div class="rd"><div class="rl">BP</div><div class="rv" style="font-size:15px">${Math.round(s.bp.sbp)}/${Math.round(s.bp.dbp)}</div></div>`);
+  rows.push(`<div class="rd hero-primary"><div class="rl">BP</div><div class="rv">${Math.round(s.bp.sbp)}/${Math.round(s.bp.dbp)}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv">${Math.round(s.bp.map)}</div></div>`);
-  rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv" style="font-size:15px">${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}</div></div>`);
-  rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:13px">${getEffectiveRhythm(s)}</div></div>`);
-  const flags=[["arrestActive","Arrest"],["sternotomyPerformed","Sternotomy"],["ecmoCannulated","ECMO"]];
-  flags.forEach(([k,label])=>{rows.push(`<div class="rd ${s.flags[k]?"flag-on":""}"><div class="rl">${label}</div><div class="rv" style="font-size:13px">${s.flags[k]?"YES":"no"}</div></div>`);});
+  rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv" style="font-size:22px">${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}</div></div>`);
+  rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:18px">${getEffectiveRhythm(s)}</div></div>`);
   byId("readout").innerHTML=rows.join("");
   byId("ov_captured").textContent="Pacer Capture: "+(s.pacer.captured?"ON":"OFF");
   byId("ov_captured").classList.toggle("on",s.pacer.captured);
-  byId("ev_arrest").classList.toggle("on",s.flags.arrestActive);
-  byId("ev_sternotomy").classList.toggle("on",s.flags.sternotomyPerformed);
-  byId("ev_ecmo").classList.toggle("on",s.flags.ecmoCannulated);
+  const flags=[["flag_arrest","arrestActive"],["flag_sternotomy","sternotomyPerformed"],["flag_ecmo","ecmoCannulated"]];
+  flags.forEach(([id,k])=>{
+    const el=byId(id);
+    el.className="pill "+(s.flags[k]?"critical":"neutral");
+  });
   byId("ov_rhythm").value=s.rhythm in {"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1,"Ventricular Tachycardia":1,"Ventricular Fibrillation":1}?s.rhythm:byId("ov_rhythm").value;
 }
 
-/* ---------------- Override sliders ---------------- */
+/* ---------------- Override sliders (release-capable) ---------------- */
+// Interventions + Patient Assessments & Outputs sliders all go through
+// setOverrideWithRelease() (release semantics) rather than the plain
+// applyFacilitatorOverride() the rhythm/pacer-capture/event-flag toggles
+// below still use - those are discrete fields where "release mode" has no
+// meaning (see scenarioRunner.js's docstring on the two functions).
 const OVERRIDE_MAP={
   ov_hr:"hr",ov_sbp:"bp.sbp",ov_dbp:"bp.dbp",ov_map:"bp.map",ov_pasys:"pa.systolic",ov_padia:"pa.diastolic",ov_cvp:"cvp",ov_co:"co",
   ov_svv:"svv",ov_ppv:"ppv",ov_scvo2:"scvo2",ov_hpi:"hpi",ov_spo2:"spo2",ov_rr:"rr",ov_temp:"temp",
   ov_epi:"drips.epi",ov_levo:"drips.levo",ov_vasopressin:"drips.vasopressin",ov_milrinone:"drips.milrinone",
   ov_propofol:"drips.propofol",ov_fentanyl:"drips.fentanyl",ov_insulin:"drips.insulin",
+  ov_rpleural:"chestTubes.rPleural",ov_rmediastinal:"chestTubes.rMediastinal",ov_blake:"chestTubes.blake",
+  ov_lpleural:"chestTubes.lPleural",ov_lmediastinal:"chestTubes.lMediastinal",
 };
 function setPath(obj,path,value){const[h,...r]=path.split(".");if(!r.length){obj[h]=value;return;}obj[h]=obj[h]||{};setPath(obj[h],r.join("."),value);}
 function getPath(obj,path){return path.split(".").reduce((o,k)=>o==null?undefined:o[k],obj);}
 function decimalsForStep(step){if(!step)return 0;const s=String(step),i=s.indexOf(".");return i===-1?0:s.length-i-1;}
 function fmtVal(el,v){return v.toFixed(decimalsForStep(el.step));}
+
+function currentReleaseChoice(){
+  const v=byId("releaseModeSelect").value;
+  return v==="hold" ? {releaseMode:"hold"} : {releaseMode:"duration", releaseMinutes:parseFloat(v)};
+}
+
 for(const id in OVERRIDE_MAP){
   const el=byId(id),vv=byId(id+"_v");
   el.addEventListener("input",()=>{
     const val=parseFloat(el.value);
     vv.textContent=fmtVal(el,val);
     if(!runner)return;
-    const patch={};setPath(patch,OVERRIDE_MAP[id],val);
-    runner=srOverride(runner,patch);
+    runner=srSetOverride(runner,OVERRIDE_MAP[id],val,currentReleaseChoice(),performance.now());
     renderReadout();
+    renderOverrideStatus(id,OVERRIDE_MAP[id]);
   });
 }
 function syncControlsFromRunner(){
@@ -332,7 +470,38 @@ function syncControlsFromRunner(){
     el.value=v;
     vv.textContent=fmtVal(el,v);
   }
+  renderAllOverrideStatuses(performance.now());
 }
+
+/** Renders the small "OVERRIDDEN" strip beneath one slider, or hides it if that path isn't currently overridden. */
+function renderOverrideStatus(sliderId,path){
+  const el=byId(sliderId+"_status");
+  if(!el||!runner)return;
+  const info=srGetOverrideInfo(runner,path,performance.now());
+  if(!info){el.hidden=true;el.innerHTML="";return;}
+  el.hidden=false;
+  let statusTxt;
+  if(info.status==="held"){
+    statusTxt=info.remainingMs!=null?`Held — auto-releases in ${fmtMMSS(info.remainingMs)}`:"Held indefinitely";
+  }else{
+    statusTxt=`Releasing… ${Math.round(info.fraction*100)}%`;
+  }
+  el.innerHTML=`<span class="txt">${statusTxt}</span>`+
+    `<button class="act mini" data-release-now="${path}" data-slider="${sliderId}">Release Now</button>`+
+    (info.status==="held"?`<button class="act mini" data-release-gradual="${path}" data-slider="${sliderId}">Release Over 2 min</button>`:"");
+  el.querySelectorAll("[data-release-now]").forEach(b=>b.addEventListener("click",()=>{
+    runner=srReleaseNow(runner,b.getAttribute("data-release-now"));
+    syncControlsFromRunner();renderReadout();
+  }));
+  el.querySelectorAll("[data-release-gradual]").forEach(b=>b.addEventListener("click",()=>{
+    runner=srReleaseGradually(runner,b.getAttribute("data-release-gradual"),2,performance.now());
+    renderOverrideStatus(b.getAttribute("data-slider"),b.getAttribute("data-release-gradual"));
+  }));
+}
+function renderAllOverrideStatuses(nowMs){
+  for(const id in OVERRIDE_MAP)renderOverrideStatus(id,OVERRIDE_MAP[id]);
+}
+
 byId("ov_rhythm").addEventListener("change",()=>{
   if(!runner)return;
   runner=srOverride(runner,{rhythm:byId("ov_rhythm").value});
@@ -352,26 +521,14 @@ byId("ov_captured").addEventListener("click",()=>{
 });
 
 /* ---------------- Custom Decline (facilitator-timed, SME-configured) ---------------- */
-// Target sliders are deliberately NOT wired through OVERRIDE_MAP/srOverride -
-// unlike the Override Parameters sliders above, these describe where a FUTURE
-// ramp should end up, not an instant change, so dragging one must only update
-// its own displayed number, never touch the live engine state.
 const CD_TARGET_MAP={cd_hr:"hr",cd_sbp:"bp.sbp",cd_dbp:"bp.dbp",cd_map:"bp.map",cd_cvp:"cvp",cd_spo2:"spo2"};
 for(const id in CD_TARGET_MAP){
   const el=byId(id),vv=byId(id+"_v");
   el.addEventListener("input",()=>{vv.textContent=fmtVal(el,parseFloat(el.value));});
 }
-// Outcome presets are mechanically-defined engine patches (not fabricated
-// clinical numbers) - the same shapes the flagship scenario's own scripted
-// `arrest`/loss-of-capture events already use elsewhere in this codebase.
 const CD_OUTCOME_PRESETS={
   none:null,
   arrest:{rhythm:"PEA",hr:150,bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
-  // Pulseless, same flatline hemodynamics as PEA - only the rhythm/ECG
-  // morphology differs (IntelliVue's RHYTHM_MAP already has real vfib/vtach
-  // waveform + alarm-banner support, unlike PEA which just borrows sinus_tach
-  // morphology). V-Fib has no organized rate - hr is deliberately left
-  // unpatched rather than given a fabricated number.
   vfib:{rhythm:"Ventricular Fibrillation",bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
   vtach:{rhythm:"Ventricular Tachycardia",hr:180,bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
   lossOfCapture:{pacer:{captured:false}},
@@ -396,22 +553,20 @@ byId("cd_start").addEventListener("click",()=>{
   renderDecompTimer(performance.now());
 });
 
-/* ---------------- Live-tick an in-flight ramp + auto-advance countdown ---------------- */
-// Runs every frame whenever there's a ramp in flight OR a pendingAutoAdvance
-// counting down (the latter persists after the ramp itself has settled to
-// activeRamp:null, e.g. "3 more minutes before this auto-arrests") - both
-// need the decompensation timer UI refreshed live, not just the physiology
-// numbers. If checkAutoAdvance() actually fires (grace period elapsed with
-// no facilitator action), that's exactly equivalent to a manual Next click,
-// so it gets the same full render() - not just a readout refresh - to
-// update the part/step title and coach text too.
+/* ---------------- Live-tick an in-flight ramp + auto-advance + override releases ---------------- */
 function consoleTick(ts){
-  if(runner&&(runner.activeRamp||runner.pendingAutoAdvance)){
-    if(runner.activeRamp)runner=srTick(runner,ts);
+  if(runner){
+    const before=runner;
+    if(runner.activeRamp||Object.keys(runner.releaseRamps).length)runner=srTick(runner,ts);
+    if(Object.keys(runner.overrides).length)runner=srCheckOverrideReleases(runner,ts);
     const beforeAutoAdvance=runner;
-    runner=srCheckAutoAdvance(runner,ts);
+    if(runner.pendingAutoAdvance)runner=srCheckAutoAdvance(runner,ts);
     if(runner!==beforeAutoAdvance){syncControlsFromRunner();render();}
-    else{renderReadout();renderDecompTimer(ts);}
+    // syncControlsFromRunner() moves slider *positions* back to match state
+    // (e.g. a duration override auto-releasing, or a gradual release
+    // completing) - not just the readout text - so it has to run on ANY
+    // change here, not only a full navigation change.
+    else if(runner!==before){syncControlsFromRunner();renderReadout();renderDecompTimer(ts);}
   }
   requestAnimationFrame(consoleTick);
 }
@@ -479,6 +634,11 @@ window.ctSharedEngine={
   getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
   getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
   startCustomDeclineNow:(opts,ts)=>{if(!runner)return null;runner=srStartFacilitatorRamp(runner,opts,ts);renderReadout();renderDecompTimer(performance.now());return runner.state;},
+  setOverrideNow:(path,val,opts,ts)=>{if(!runner)return null;runner=srSetOverride(runner,path,val,opts||{},ts);renderReadout();renderAllOverrideStatuses(ts);return runner.state;},
+  releaseOverrideNow:(path)=>{if(!runner)return null;runner=srReleaseNow(runner,path);syncControlsFromRunner();renderReadout();return runner.state;},
+  startGradualReleaseNow:(path,minutes,ts)=>{if(!runner)return null;runner=srReleaseGradually(runner,path,minutes,ts);renderAllOverrideStatuses(ts);return runner;},
+  checkOverrideReleasesNow:(ts)=>{if(!runner)return null;runner=srCheckOverrideReleases(runner,ts);syncControlsFromRunner();renderReadout();return runner.state;},
+  getOverrideInfo:(path,ts)=>runner&&srGetOverrideInfo(runner,path,ts),
   syncPushNow:()=>deviceSync.pushNow(),syncHeartbeatNow:()=>deviceSync.heartbeatNow(),
   syncSetRelay:(url,code)=>deviceSync.setRelay(url,code),
   getSyncStatus:()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay}),
