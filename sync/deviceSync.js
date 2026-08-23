@@ -62,6 +62,27 @@ export function isValidSnapshot(snapshot) {
     && snapshot.state !== null && typeof snapshot.state === 'object';
 }
 
+/**
+ * Same purpose as isValidSnapshot() above, for the OTHER snapshot shape this
+ * project's sync bus can now carry: {currentStageId, state, mode?, engine:'v2'}
+ * from a v2 (stage-graph, engine/stageRunner.js) scenario driven from the
+ * Facilitator Console, instead of v1's {partIndex, stepIndex, state, mode?}.
+ * Deliberately a SEPARATE function rather than a modified isValidSnapshot():
+ * a receiver needs to know WHICH shape arrived (they apply completely
+ * differently - v1 mutates a local partIndex/stepIndex-based runner, v2 only
+ * ever touches the physiology `state` for display) not just "is this valid
+ * for me." A v1-only receiver that never calls this will simply and safely
+ * ignore a v2 broadcast (isValidSnapshot() correctly returns false for a
+ * {currentStageId,...} payload, since it has no partIndex/stepIndex) -
+ * that's the correct default for any device not yet updated to understand
+ * v2, not a bug to work around.
+ */
+export function isValidGraphSnapshot(snapshot) {
+  return !!snapshot
+    && typeof snapshot.currentStageId === 'string' && snapshot.currentStageId.length > 0
+    && snapshot.state !== null && typeof snapshot.state === 'object';
+}
+
 export function shouldApplyRemote(msg, { winId, lastSyncStr }) {
   if (!msg || typeof msg.data !== 'string') return false;
   if (msg.win === winId) return false;

@@ -334,7 +334,7 @@ import {
   getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
 } from '../../engine/scenarioRunner.js';
-import { createDeviceSync, isValidSnapshot } from '../../sync/deviceSync.js';
+import { createDeviceSync, isValidSnapshot, isValidGraphSnapshot } from '../../sync/deviceSync.js';
 import { getEffectiveHR } from '../../engine/physiology.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
@@ -759,11 +759,26 @@ if(FS_ROLE==="learner")document.body.classList.add("learner");
 
 let sessionMode="training"; // 'training' | 'validation' - no local UI here, the console is the source of truth; carried/relayed so the pacemaker's Phase 5 bridge sees it regardless of which device it joins alongside
 function onRemoteSnapshot(snapshot){
-  if(!isValidSnapshot(snapshot)||!runner)return;
-  const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
-  runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
-  if(snapshot.mode==="training"||snapshot.mode==="validation")sessionMode=snapshot.mode;
-  if(navChanged)renderFlagshipUI();else applyEngineValuesLight(runner.state);
+  if(isValidSnapshot(snapshot)){
+    if(!runner)return;
+    const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
+    runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
+    if(snapshot.mode==="training"||snapshot.mode==="validation")sessionMode=snapshot.mode;
+    if(navChanged)renderFlagshipUI();else applyEngineValuesLight(runner.state);
+    return;
+  }
+  // v2 (schema-v2, stage-graph) scenario driven from the console -
+  // display-only mirror, same rationale as IntelliVue's identical addition:
+  // the sync bus never carries a v2 scenario's stages[] definition, only
+  // {currentStageId, state}, so this device can only show the physiology
+  // numbers it was handed - never touches its own local v1 runner.
+  if(isValidGraphSnapshot(snapshot)){
+    applyEngineValuesLight(snapshot.state);
+    const el=byId("fs_part");if(el)el.innerHTML="<b>Mirroring console</b> (v2 scenario)";
+    const stepEl=byId("fs_step");if(stepEl)stepEl.textContent=snapshot.currentStageId;
+    const coachEl=byId("fs_coach");if(coachEl)coachEl.textContent="This device is display-only for v2 scenarios - drive the graph from the Facilitator Console.";
+    if(snapshot.mode==="training"||snapshot.mode==="validation")sessionMode=snapshot.mode;
+  }
 }
 const deviceSync=createDeviceSync({
   getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode}:null,

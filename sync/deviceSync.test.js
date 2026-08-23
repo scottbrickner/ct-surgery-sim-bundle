@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { genCode, shouldPush, shouldApplyRemote, isValidSnapshot } from './deviceSync.js';
+import { genCode, shouldPush, shouldApplyRemote, isValidSnapshot, isValidGraphSnapshot } from './deviceSync.js';
 
 test('genCode returns a 6-character code drawn only from the unambiguous alphabet', () => {
   for (let i = 0; i < 200; i++) {
@@ -69,4 +69,28 @@ test('isValidSnapshot rejects missing/malformed fields', () => {
   assert.equal(isValidSnapshot({ partIndex: '0', stepIndex: -1, state: {} }), false); // partIndex not a number
   assert.equal(isValidSnapshot({ partIndex: 0, stepIndex: -1, state: null }), false); // state is null
   assert.equal(isValidSnapshot({ partIndex: 0, stepIndex: -1, state: 'not-an-object' }), false);
+});
+
+test('isValidGraphSnapshot accepts a well-formed {currentStageId, state} v2 snapshot', () => {
+  assert.equal(isValidGraphSnapshot({ currentStageId: 'stage-1', state: { hr: 90 } }), true);
+  assert.equal(isValidGraphSnapshot({ currentStageId: 'arrest', state: {}, mode: 'training' }), true); // mode is optional
+});
+
+test('isValidGraphSnapshot rejects missing/malformed fields', () => {
+  assert.equal(isValidGraphSnapshot(null), false);
+  assert.equal(isValidGraphSnapshot(undefined), false);
+  assert.equal(isValidGraphSnapshot({}), false);
+  assert.equal(isValidGraphSnapshot({ currentStageId: 'stage-1' }), false); // no state
+  assert.equal(isValidGraphSnapshot({ currentStageId: '', state: {} }), false); // empty stage id
+  assert.equal(isValidGraphSnapshot({ currentStageId: 5, state: {} }), false); // not a string
+  assert.equal(isValidGraphSnapshot({ currentStageId: 'stage-1', state: null }), false);
+});
+
+test('isValidSnapshot and isValidGraphSnapshot are mutually exclusive - a v1 snapshot never also looks like a v2 one and vice versa', () => {
+  const v1 = { partIndex: 0, stepIndex: -1, state: { hr: 90 }, mode: 'training' };
+  const v2 = { currentStageId: 'stage-1', state: { hr: 90 }, mode: 'training' };
+  assert.equal(isValidSnapshot(v1), true);
+  assert.equal(isValidGraphSnapshot(v1), false);
+  assert.equal(isValidSnapshot(v2), false);
+  assert.equal(isValidGraphSnapshot(v2), true);
 });

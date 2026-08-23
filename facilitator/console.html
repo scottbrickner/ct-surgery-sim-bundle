@@ -98,6 +98,9 @@
   .ov-status{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-2px 0 8px; padding:6px 8px; background:var(--warn-wash); border:1px solid var(--warn); border-radius:var(--radius-sm); font-size:10.5px;}
   .ov-status[hidden]{display:none;} /* author `.ov-status{display:flex}` otherwise beats the UA stylesheet's [hidden]{display:none} regardless of source order (author > user-agent cascade origin) */
   .ov-status .txt{color:var(--warn); font-family:var(--font-mono); flex:1 1 auto; min-width:100px;}
+
+  .file-input-wrap{position:relative; overflow:hidden; text-align:center;}
+  .file-input-wrap input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer; width:100%;}
 </style>
 </head>
 <body>
@@ -116,16 +119,36 @@
     <details class="rail-group" id="grp_scenario">
       <summary><span>Scenario &amp; Stage</span><span class="chev">▸</span></summary>
       <div class="body">
+        <div class="gl">Load Scenario</div>
         <div class="btnrow">
-          <button class="act" id="fs_part1">Part 1</button>
-          <button class="act" id="fs_part2">Part 2</button>
-          <button class="act" id="fs_part3">Part 3</button>
+          <button class="act" id="load_v1_flagship">CT Surgery Flagship (v1)</button>
+          <label class="act file-input-wrap">Import v2 JSON<input type="file" id="load_v2_file" accept="application/json"></label>
         </div>
-        <div class="btnrow">
-          <button class="act big" id="fs_prev">‹ Prev</button>
-          <button class="act big" id="fs_next">Next ›</button>
-          <button class="act" id="fs_reset">Reset</button>
+        <div class="hint" id="engineModeHint">Loading…</div>
+
+        <div id="v1_nav">
+          <div class="btnrow">
+            <button class="act" id="fs_part1">Part 1</button>
+            <button class="act" id="fs_part2">Part 2</button>
+            <button class="act" id="fs_part3">Part 3</button>
+          </div>
+          <div class="btnrow">
+            <button class="act big" id="fs_prev">‹ Prev</button>
+            <button class="act big" id="fs_next">Next ›</button>
+            <button class="act" id="fs_reset">Reset</button>
+          </div>
         </div>
+
+        <div id="v2_nav" style="display:none">
+          <div class="row"><label>Jump to stage</label></div>
+          <select id="v2_stage_jump"></select>
+          <div class="btnrow" id="v2_branch_buttons"></div>
+          <div class="btnrow">
+            <button class="act big" id="v2_advance">Advance ›</button>
+            <button class="act" id="v2_reset">Reset</button>
+          </div>
+        </div>
+
         <div style="margin-top:8px"><span id="partTitle">Loading…</span> <span id="stepId"></span></div>
         <div id="coach" style="margin-top:6px"></div>
         <div id="decompTimer" style="margin-top:6px"></div>
@@ -323,8 +346,19 @@
 
 <script type="module">
 import { getEffectiveRhythm, getEffectiveHR } from '../engine/physiology.js';
+// v1 (part/step, linear) - the module every function below was originally
+// written against. Kept as the "sr" (scenarioRunner) alias throughout, same
+// names as before this phase, to keep the diff against a year of prior work
+// minimal. See CLAUDE.md's Phase 4/5 notes for why: tick/checkOverrideReleases/
+// setOverrideWithRelease/releaseOverrideNow/startGradualRelease/getOverrideInfo/
+// applyFacilitatorOverride/startFacilitatorRamp/getRampProgress/
+// getAutoAdvanceCountdown/cancelAutoAdvance are IDENTICAL function references
+// whether the loaded scenario is v1 or v2 (engine/stageRunner.js imports and
+// re-exports them from here unchanged) - so every override slider, the
+// rhythm/pacer/event toggles, and Custom Decline work on EITHER engine mode
+// with zero branching, using these same v1-sourced references throughout.
 import {
-  createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart,
+  next as srNext, prev as srPrev, jumpToPart as srJumpToPart,
   tick as srTick, applyFacilitatorOverride as srOverride,
   getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
@@ -333,38 +367,140 @@ import {
   startGradualRelease as srReleaseGradually, getOverrideInfo as srGetOverrideInfo,
   checkOverrideReleases as srCheckOverrideReleases,
 } from '../engine/scenarioRunner.js';
-import { createDeviceSync, isValidSnapshot } from '../sync/deviceSync.js';
+import * as v1Engine from '../engine/scenarioRunner.js';
+// v2 (stage graph, branching) - only navigation differs from v1, see above.
+import * as v2Engine from '../engine/stageRunner.js';
+import { validateScenarioV2, formatValidationErrors } from '../scenarios/validate.js';
+import { migrateV1ToV2 } from '../scenarios/migrate.js';
+import { createDeviceSync, isValidSnapshot, isValidGraphSnapshot } from '../sync/deviceSync.js';
 const byId=id=>document.getElementById(id);
 
 let runner=null;
+let engineMode="v1"; // 'v1' | 'v2' - which module `runner`'s shape/navigation belongs to. Overrides/ramps/Custom Decline work identically either way (see import comment above); only navigation (next/prev/jumpToPart vs advanceToStage/chooseBranch) and checkAutoAdvance branch on this.
 let sessionMode="training"; // 'training' | 'validation' - synced to the pacemaker's own annunciator mode
 
-async function initFlagshipScenario(){
+function setEngineModeUI(){
+  byId("v1_nav").style.display=engineMode==="v1"?"":"none";
+  byId("v2_nav").style.display=engineMode==="v2"?"":"none";
+  byId("engineModeHint").textContent=engineMode==="v1"
+    ? "Running: CT Surgery Flagship (schema v1)"
+    : "Running: "+(runner&&runner.scenario.title||"imported scenario")+" (schema v2) — Prev/back isn't available in v2; use the stage jump dropdown instead.";
+}
+
+async function loadV1Flagship(){
   const resp=await fetch("../scenarios/ct-surgery-flagship.json");
   if(!resp.ok)throw new Error("HTTP "+resp.status);
   const scenario=await resp.json();
-  runner=createRunner(scenario);
+  engineMode="v1";
+  runner=v1Engine.createRunner(scenario);
   byId("patientSub").textContent=(scenario.patient?scenario.patient.name+" · ":"")+scenario.title;
+  setEngineModeUI();
   syncControlsFromRunner();
   render();
 }
-initFlagshipScenario().catch(err=>{
+loadV1Flagship().catch(err=>{
   console.error("Flagship scenario engine failed to load:",err);
   byId("partTitle").textContent="Shared engine unavailable — serve over http://, not file:// (see serve.js).";
+});
+byId("load_v1_flagship").addEventListener("click",()=>{loadV1Flagship().catch(err=>alert("Could not load the flagship scenario: "+err.message));});
+
+/**
+ * Load a v2 (schema-v2, stage-graph) scenario from an imported JSON file - a
+ * Builder export, or any v1 file (auto-detected and migrated on the way in,
+ * same heuristic the Builder's own import uses: presence of `schemaVersion`).
+ * Refuses to load (with a specific, itemized reason) rather than silently
+ * running a structurally invalid scenario - see validateScenarioV2().
+ */
+function loadV2Scenario(scenario){
+  const v2 = scenario.schemaVersion ? scenario : migrateV1ToV2(scenario);
+  const result = validateScenarioV2(v2);
+  if(!result.valid){
+    alert("This scenario has "+result.errors.length+" validation "+(result.errors.length===1?"error":"errors")+":\n\n"+formatValidationErrors(result).join("\n"));
+    return;
+  }
+  engineMode="v2";
+  runner=v2Engine.createGraphRunner(v2);
+  byId("patientSub").textContent=(v2.patient?v2.patient.name+" · ":"")+v2.title;
+  populateV2StageJump();
+  setEngineModeUI();
+  syncControlsFromRunner();
+  render();
+}
+byId("load_v2_file").addEventListener("change",(e)=>{
+  const file=e.target.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{ loadV2Scenario(JSON.parse(reader.result)); }
+    catch(err){ alert("Could not read that file as scenario JSON: "+err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value="";
 });
 
 /* ---------------- Scenario navigation ---------------- */
 function render(){
   if(!runner)return;
-  const part=runner.scenario.parts[runner.partIndex];
-  const step=runner.stepIndex>=0?part.steps[runner.stepIndex]:null;
-  byId("partTitle").textContent=part.title;
-  byId("stepId").textContent=step?("· "+step.id):"· (part start)";
-  byId("coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
+  if(engineMode==="v1"){
+    const part=runner.scenario.parts[runner.partIndex];
+    const step=runner.stepIndex>=0?part.steps[runner.stepIndex]:null;
+    byId("partTitle").textContent=part.title;
+    byId("stepId").textContent=step?("· "+step.id):"· (part start)";
+    byId("coach").textContent=step?(step.coach||step.note||step.prompt||""):(part.teachingFocus||"");
+  }else{
+    renderV2Nav();
+  }
   renderReadout();
   renderDecompTimer(performance.now());
   renderAllOverrideStatuses(performance.now());
 }
+
+/* ---------------- v2 (stage-graph) navigation ---------------- */
+function populateV2StageJump(){
+  const sel=byId("v2_stage_jump");
+  sel.innerHTML=runner.scenario.stages.map(s=>`<option value="${s.id}">${s.id}${s.label?" — "+s.label:""}</option>`).join("");
+}
+function renderV2Nav(){
+  const stage=v2Engine.currentStage(runner);
+  byId("partTitle").textContent=runner.scenario.title;
+  byId("stepId").textContent="· "+runner.currentStageId+" ("+stage.type+")"+(stage.label?" — "+stage.label:"");
+  byId("coach").textContent=stage.facilitatorNotes||stage.coach||stage.prompt||"";
+  byId("v2_stage_jump").value=runner.currentStageId;
+
+  const branchesEl=byId("v2_branch_buttons");
+  const advanceBtn=byId("v2_advance");
+  if(stage.type==="branch"){
+    branchesEl.innerHTML=(stage.branches||[]).map((b,i)=>`<button class="act primary" data-choose="${i}">${b.label||"(unlabeled)"}</button>`).join("");
+    branchesEl.querySelectorAll("[data-choose]").forEach(btn=>btn.addEventListener("click",()=>{
+      const b=stage.branches[parseInt(btn.getAttribute("data-choose"),10)];
+      if(b&&b.destinationId){runner=v2Engine.chooseBranch(runner,b.destinationId,performance.now());syncControlsFromRunner();render();}
+    }));
+    advanceBtn.disabled=true;
+    advanceBtn.textContent="Pick a branch above";
+  }else{
+    branchesEl.innerHTML="";
+    const idx=runner.scenario.stages.findIndex(s=>s.id===runner.currentStageId);
+    const nextId=stage.destinationIfUnaddressed||(runner.scenario.stages[idx+1]&&runner.scenario.stages[idx+1].id);
+    advanceBtn.disabled=!nextId;
+    advanceBtn.textContent=nextId?("Advance › "+nextId):"Advance (no next stage authored)";
+  }
+}
+byId("v2_stage_jump").addEventListener("change",()=>{
+  if(engineMode!=="v2"||!runner)return;
+  runner=v2Engine.advanceToStage(runner,byId("v2_stage_jump").value,performance.now());
+  syncControlsFromRunner();render();
+});
+byId("v2_advance").addEventListener("click",()=>{
+  if(engineMode!=="v2"||!runner)return;
+  const stage=v2Engine.currentStage(runner);
+  const idx=runner.scenario.stages.findIndex(s=>s.id===runner.currentStageId);
+  const nextId=stage.destinationIfUnaddressed||(runner.scenario.stages[idx+1]&&runner.scenario.stages[idx+1].id);
+  if(nextId){runner=v2Engine.advanceToStage(runner,nextId,performance.now());syncControlsFromRunner();render();}
+});
+byId("v2_reset").addEventListener("click",()=>{
+  if(engineMode!=="v2"||!runner)return;
+  runner=v2Engine.reset(runner);syncControlsFromRunner();render();
+});
 
 /* ---------------- Decompensation timer / auto-advance countdown ---------------- */
 const DECOMP_TIMER_IDS=["decompTimer","cdTimer"];
@@ -390,13 +526,19 @@ function renderDecompTimer(nowMs){
     if(cancelBtn)cancelBtn.addEventListener("click",()=>{runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());});
   });
 }
-byId("fs_next").addEventListener("click",()=>{runner=srNext(runner,performance.now());syncControlsFromRunner();render();});
-byId("fs_prev").addEventListener("click",()=>{runner=srPrev(runner);syncControlsFromRunner();render();});
-byId("fs_reset").addEventListener("click",()=>{runner=srReset(runner);syncControlsFromRunner();render();});
-byId("fs_reset2").addEventListener("click",()=>{runner=srReset(runner);syncControlsFromRunner();render();});
-byId("fs_part1").addEventListener("click",()=>{runner=srJumpToPart(runner,"part1-bedside-settlein");syncControlsFromRunner();render();});
-byId("fs_part2").addEventListener("click",()=>{runner=srJumpToPart(runner,"part2-tamponade-arrest");syncControlsFromRunner();render();});
-byId("fs_part3").addEventListener("click",()=>{runner=srJumpToPart(runner,"part3-ecmo-cannulation");syncControlsFromRunner();render();});
+// v1-only controls - guarded so a stray event (or a leftover keyboard focus
+// from before switching modes) can't call v1Engine.next()/etc. on a v2-shaped
+// runner, which would throw (v2 runners have no partIndex/stepIndex).
+byId("fs_next").addEventListener("click",()=>{if(engineMode!=="v1")return;runner=srNext(runner,performance.now());syncControlsFromRunner();render();});
+byId("fs_prev").addEventListener("click",()=>{if(engineMode!=="v1")return;runner=srPrev(runner);syncControlsFromRunner();render();});
+byId("fs_reset").addEventListener("click",()=>{if(engineMode!=="v1")return;runner=v1Engine.reset(runner);syncControlsFromRunner();render();});
+byId("fs_reset2").addEventListener("click",()=>{
+  if(engineMode==="v1"){runner=v1Engine.reset(runner);}else{runner=v2Engine.reset(runner);}
+  syncControlsFromRunner();render();
+});
+byId("fs_part1").addEventListener("click",()=>{if(engineMode!=="v1")return;runner=srJumpToPart(runner,"part1-bedside-settlein");syncControlsFromRunner();render();});
+byId("fs_part2").addEventListener("click",()=>{if(engineMode!=="v1")return;runner=srJumpToPart(runner,"part2-tamponade-arrest");syncControlsFromRunner();render();});
+byId("fs_part3").addEventListener("click",()=>{if(engineMode!=="v1")return;runner=srJumpToPart(runner,"part3-ecmo-cannulation");syncControlsFromRunner();render();});
 
 /* ---------------- Live readout (hero) ---------------- */
 const READOUT_FIELDS=[
@@ -557,10 +699,13 @@ byId("cd_start").addEventListener("click",()=>{
 function consoleTick(ts){
   if(runner){
     const before=runner;
+    // tick()/checkOverrideReleases() are the same function either way (see
+    // the import comment up top) - only checkAutoAdvance's destination logic
+    // differs (next() vs advanceToStage()), so only that call branches.
     if(runner.activeRamp||Object.keys(runner.releaseRamps).length)runner=srTick(runner,ts);
     if(Object.keys(runner.overrides).length)runner=srCheckOverrideReleases(runner,ts);
     const beforeAutoAdvance=runner;
-    if(runner.pendingAutoAdvance)runner=srCheckAutoAdvance(runner,ts);
+    if(runner.pendingAutoAdvance)runner=(engineMode==="v1"?srCheckAutoAdvance:v2Engine.checkAutoAdvance)(runner,ts);
     if(runner!==beforeAutoAdvance){syncControlsFromRunner();render();}
     // syncControlsFromRunner() moves slider *positions* back to match state
     // (e.g. a duration override auto-releasing, or a gradual release
@@ -579,15 +724,52 @@ function applyModeToUI(){
   byId("mode_validation").classList.toggle("on",sessionMode==="validation");
 }
 function onRemoteSnapshot(snapshot){
-  if(!isValidSnapshot(snapshot)||!runner)return;
-  const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
-  runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
-  if(snapshot.mode==="training"||snapshot.mode==="validation"){sessionMode=snapshot.mode;applyModeToUI();}
-  syncControlsFromRunner();
-  if(navChanged)render();else renderReadout();
+  // Real bug found + fixed during v2-in-console verification: this used to
+  // apply ANY valid v1 ({partIndex,stepIndex,state}) snapshot unconditionally,
+  // with no engineMode check - unlike getSnapshot() just below, which already
+  // branches on engineMode. IntelliVue and HemoSphere ALWAYS run their own
+  // local v1 flagship in parallel (deliberate product decision - "every
+  // monitor independently usable solo, console or no console", see
+  // CLAUDE.md), so they are *always* emitting genuine, validly-shaped v1
+  // heartbeats on the shared bus - not a rare edge case. Every one of those
+  // was silently overwriting this console's v2 `runner.state` (and bolting
+  // bogus partIndex/stepIndex fields onto a graph-runner object that doesn't
+  // use them) on literally every sync cycle while facilitating a v2 scenario.
+  // Root-caused by watching a console-driven v2 value keep reverting to
+  // whatever IntelliVue's idle local baseline happened to be, a few hundred
+  // ms after every console-side change - not visible from a single snapshot
+  // read, only from watching it drift back down over repeated samples.
+  if(isValidSnapshot(snapshot)&&runner&&engineMode==="v1"){
+    const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
+    runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
+    if(snapshot.mode==="training"||snapshot.mode==="validation"){sessionMode=snapshot.mode;applyModeToUI();}
+    syncControlsFromRunner();
+    if(navChanged)render();else renderReadout();
+    return;
+  }
+  // Training/Validation mode is a session-wide setting, not runner state -
+  // let it sync in from a peer regardless of which engine either side is
+  // running, same as it already did pre-v2. (isValidGraphSnapshot alone
+  // covers the v2-peer case; a v1 peer already took the branch above.)
+  if(isValidGraphSnapshot(snapshot)&&(snapshot.mode==="training"||snapshot.mode==="validation")){
+    sessionMode=snapshot.mode;applyModeToUI();
+  }
 }
 const deviceSync=createDeviceSync({
-  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode}:null,
+  // Shape depends on engineMode - v1 devices/consoles correctly ignore a v2
+  // ({currentStageId,...}) broadcast (isValidSnapshot() returns false for
+  // it, by design - see sync/deviceSync.js), same as they'd ignore any other
+  // unrecognized shape. Only IntelliVue/HemoSphere are updated to also apply
+  // a v2 snapshot's `state` for DISPLAY (see their onRemoteSnapshot) - this
+  // console's OWN onRemoteSnapshot deliberately stays v1-only; see CLAUDE.md
+  // for why a second console can't be a full v2 follower without also having
+  // independently imported the identical scenario file (the sync bus never
+  // carries the scenario's stages[] definition, only navigational position).
+  getSnapshot:()=>{
+    if(!runner)return null;
+    if(engineMode==="v1")return{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode};
+    return{currentStageId:runner.currentStageId,state:runner.state,mode:sessionMode};
+  },
   onRemoteSnapshot,
   relayUrl:csUrlParams.get("relay")||"",
   relayCode:csUrlParams.get("code")||"",
@@ -628,8 +810,13 @@ setInterval(()=>{
 /* Testing hook, same rationale as the device files' window.ctSharedEngine */
 window.ctSharedEngine={
   getRunner:()=>runner,getState:()=>runner&&runner.state,
+  getEngineMode:()=>engineMode,
+  loadV1FlagshipNow:()=>loadV1Flagship(),
+  loadV2ScenarioNow:(scenario)=>loadV2Scenario(scenario),
   tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);renderReadout();}return runner&&runner.state;},
-  checkAutoAdvanceNow:(ts)=>{if(!runner)return null;runner=srCheckAutoAdvance(runner,ts);render();return runner.state;},
+  checkAutoAdvanceNow:(ts)=>{if(!runner)return null;runner=(engineMode==="v1"?srCheckAutoAdvance:v2Engine.checkAutoAdvance)(runner,ts);render();return runner.state;},
+  advanceToStageNow:(stageId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.advanceToStage(runner,stageId,ts);syncControlsFromRunner();render();return runner.state;},
+  chooseBranchNow:(destinationId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.chooseBranch(runner,destinationId,ts);syncControlsFromRunner();render();return runner.state;},
   cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
   getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
   getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
