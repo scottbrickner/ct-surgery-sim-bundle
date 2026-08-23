@@ -8,39 +8,567 @@
 <link rel="stylesheet" href="../design-system/tokens.css">
 <link rel="stylesheet" href="../design-system/components.css">
 <style>
-  .stub{max-width:var(--content-max); margin:0 auto; padding:var(--space-7) var(--grid-margin) var(--space-8);}
-  .stub-card{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:var(--space-6); max-width:640px;}
-  .stub-card h2{font-size:var(--text-lg); margin-bottom:var(--space-2);}
-  .stub-list{margin:var(--space-4) 0 0; padding-left:20px; font-size:var(--text-sm); color:var(--ink-soft); max-width:56ch;}
-  .stub-list li{margin-bottom:6px;}
-  .role-note{border-left:3px solid var(--accent); background:var(--accent-wash); padding:var(--space-3) var(--space-4); margin-top:var(--space-5); font-size:var(--text-xs); color:var(--ink-soft); max-width:56ch;}
+  *{-webkit-user-select:none;user-select:none;}
+  input,select,button,textarea{font-family:inherit;-webkit-user-select:auto;user-select:auto;}
+
+  .shell{display:grid; grid-template-columns:340px minmax(0,1fr); min-height:100vh;}
+  @media (max-width:1100px){ .shell{grid-template-columns:1fr;} .rail{position:static; height:auto;} }
+  .rail{position:sticky; top:0; height:100vh; overflow-y:auto; border-right:1px solid var(--rule); padding:var(--space-5) var(--space-4) var(--space-8);}
+  main{min-width:0; padding:var(--space-5) var(--space-6) var(--space-8);}
+
+  .rail-head{padding:0 var(--space-2) var(--space-4);}
+  .rail-head h1{font-size:var(--text-lg);}
+  .rail-head .sub{font-size:10.5px; color:var(--ink-faint); margin-top:6px; line-height:1.5;}
+  .auth-note{font-size:10.5px; color:var(--ink-faint); background:var(--paper-sunken); border:1px solid var(--rule); border-radius:var(--radius-sm); padding:8px 10px; margin-top:10px; line-height:1.5;}
+
+  .gl{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase; color:var(--ink-faint); margin:16px 0 6px; font-weight:600;}
+  .gl:first-child{margin-top:0;}
+  .row{display:flex; flex-direction:column; gap:4px; margin:8px 0;}
+  .row label{font-size:11px; color:var(--ink-faint); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.03em;}
+  .row-inline{display:flex; align-items:center; gap:8px; margin:8px 0;}
+  .row-inline label{font-size:var(--text-xs); color:var(--ink-soft); flex:0 0 auto;}
+  input[type=text],input[type=number],select,textarea{background:var(--paper-sunken); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:7px 8px; font-size:var(--text-xs); width:100%;}
+  textarea{font-family:var(--font-mono); font-size:11.5px; min-height:110px; resize:vertical; line-height:1.5;}
+  textarea.invalid{border-color:var(--critical);}
+  .btnrow{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0;}
+  button.act{background:var(--paper-raised); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:8px 10px; font-size:var(--text-2xs); font-weight:600; cursor:pointer;}
+  button.act:hover{border-color:var(--accent);}
+  button.act.primary{background:var(--accent-wash); border-color:var(--accent); color:var(--accent-ink);}
+  button.act.danger{background:var(--critical-wash); border-color:var(--critical); color:var(--critical);}
+  button.act.mini{padding:4px 8px; font-size:10.5px;}
+  button.act:disabled{opacity:0.4; cursor:not-allowed;}
+
+  /* stage list */
+  .stage-list{display:flex; flex-direction:column; gap:4px; margin-top:8px;}
+  .stage-item{display:flex; align-items:center; gap:6px; padding:8px 9px; border:1px solid var(--rule); border-radius:var(--radius-sm); background:var(--paper-raised); cursor:pointer;}
+  .stage-item:hover{border-color:var(--accent);}
+  .stage-item.selected{border-color:var(--accent); background:var(--accent-wash);}
+  .stage-item .idx{font-family:var(--font-mono); font-size:10px; color:var(--ink-faint); flex:0 0 16px;}
+  .stage-item .info{flex:1; min-width:0;}
+  .stage-item .id{font-size:12.5px; font-weight:600; color:var(--ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .stage-item .type{font-family:var(--font-mono); font-size:9.5px; color:var(--ink-faint); text-transform:uppercase;}
+  .stage-item .mini-btns{display:flex; gap:2px; flex:0 0 auto;}
+  .stage-item .mini-btns button{background:none; border:none; color:var(--ink-faint); cursor:pointer; padding:2px 4px; font-size:11px;}
+  .stage-item .mini-btns button:hover{color:var(--ink);}
+
+  /* main editor */
+  .page-head{margin-bottom:var(--space-5);}
+  .page-head h2{font-size:var(--text-xl);}
+  .card{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:var(--space-5); margin-bottom:var(--space-5);}
+  .card h3{font-size:var(--text-sm); text-transform:uppercase; letter-spacing:0.04em; font-family:var(--font-mono); color:var(--ink-faint); margin-bottom:var(--space-3);}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:var(--space-4);}
+  @media (max-width:700px){ .grid2{grid-template-columns:1fr;} }
+
+  .validation-panel{border:1px solid var(--critical); background:var(--critical-wash); border-radius:var(--radius-md); padding:var(--space-4); margin-bottom:var(--space-5);}
+  .validation-panel.ok{border-color:var(--good); background:var(--good-wash);}
+  .validation-panel h3{color:var(--critical); font-family:var(--font-mono); font-size:11px; text-transform:uppercase; margin-bottom:8px;}
+  .validation-panel.ok h3{color:var(--good);}
+  .validation-panel ul{margin:0; padding-left:18px; font-size:11.5px; color:var(--ink-soft); font-family:var(--font-mono);}
+  .validation-panel li{margin-bottom:4px;}
+
+  .branch-row{display:flex; gap:6px; align-items:center; margin-bottom:6px;}
+  .branch-row input{flex:1;}
+  .branch-row select{flex:1;}
+
+  /* preview */
+  .preview-readout{display:grid; grid-template-columns:repeat(auto-fill,minmax(88px,1fr)); gap:8px; margin:var(--space-3) 0;}
+  .pv{background:var(--paper-sunken); border:1px solid var(--rule); border-radius:var(--radius-sm); padding:8px 10px;}
+  .pv .l{font-family:var(--font-mono); font-size:9.5px; color:var(--ink-faint); text-transform:uppercase;}
+  .pv .v{font-family:var(--font-mono); font-size:17px; font-weight:700; margin-top:2px;}
+  .preview-stage{font-family:var(--font-mono); font-size:11.5px; color:var(--accent-ink); margin-bottom:6px;}
+  .preview-note{font-size:var(--text-xs); color:var(--ink-soft); background:var(--paper-sunken); border:1px solid var(--rule); border-radius:var(--radius-sm); padding:8px 10px; margin:6px 0;}
+
+  .file-input-wrap{position:relative; overflow:hidden; display:inline-block;}
+  .file-input-wrap input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer; width:100%;}
 </style>
 </head>
 <body>
-  <div class="page-head">
-    <div class="eyebrow">Author access · in progress</div>
-    <h1>Scenario Builder</h1>
-    <p class="dek">A standalone authoring tool for building and publishing staged, branching scenarios — schema-validated, version-controlled, reusable across every facilitator once approved.</p>
-    <div class="status-row"><span class="pill warn"><span class="dot"></span>Not yet built</span></div>
-  </div>
-
-  <div class="stub">
-    <div class="stub-card">
-      <h2>What's coming here</h2>
-      <p>This is Phase 4 of the platform plan. It will let an author:</p>
-      <ul class="stub-list">
-        <li>Define a baseline, staged deterioration/branching model, and named endpoints without hand-writing JSON</li>
-        <li>Set trigger conditions, transition/hold durations, success criteria, and reveal rules per stage</li>
-        <li>Import/export scenario JSON with schema validation and clear, line-level error reporting</li>
-        <li>Publish an approved scenario so it's available to every facilitator, not just this machine</li>
-      </ul>
-      <div class="role-note">
-        <strong style="color:var(--ink);">Access model:</strong> authoring is a separate role from running a session. A facilitator can drive and adjust any published scenario live with no login. Building or saving a new scenario here will require a passcode once Supabase Auth is wired in (Phase 3 foundation → enforced here in Phase 4) — this page doesn't gate anything yet because that auth layer doesn't exist yet either.
-      </div>
-      <a class="btn" href="../index.html" style="display:inline-block; margin-top:var(--space-5); text-decoration:none;">&larr; Back to launch</a>
+<div class="shell">
+  <aside class="rail">
+    <div class="rail-head">
+      <div class="eyebrow">Author access</div>
+      <h1>Scenario Builder</h1>
+      <div class="sub">Build, branch, validate, and export staged scenarios. Not a learner or facilitator display.</div>
+      <div class="auth-note">No login is enforced yet - a passcode gate arrives once Supabase Auth is wired in. Anyone with this link can currently build/export locally; nothing is published to other facilitators until then.</div>
     </div>
-  </div>
 
-  <footer class="doc-foot">Clinical Patient Simulator · Scenario Builder stub · see CLAUDE.md for the full phased plan</footer>
+    <div class="gl">Scenario</div>
+    <div class="row"><label>ID</label><input type="text" id="meta_id" placeholder="my-new-scenario"></div>
+    <div class="row"><label>Title</label><input type="text" id="meta_title" placeholder="Scenario title"></div>
+    <div class="row"><label>Population</label><input type="text" id="meta_population" placeholder="e.g. cardiothoracic-surgery"></div>
+    <div class="row"><label>Start stage</label><select id="meta_start"></select></div>
+
+    <div class="gl">File</div>
+    <div class="btnrow">
+      <button class="act" id="btn_new">New</button>
+      <label class="act file-input-wrap">Import JSON<input type="file" id="file_import" accept="application/json"></label>
+      <button class="act" id="btn_export">Export JSON</button>
+    </div>
+    <div class="btnrow">
+      <button class="act" id="btn_load_flagship">Load flagship (migrated from v1)</button>
+    </div>
+
+    <div class="gl">Local Drafts</div>
+    <div class="btnrow">
+      <button class="act" id="btn_save_local">Save Draft</button>
+      <select id="local_drafts"><option value="">— load a saved draft —</option></select>
+      <button class="act mini danger" id="btn_delete_local" title="Delete selected draft">Delete</button>
+    </div>
+    <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Drafts save to THIS browser only (localStorage) - export to a file to share or back up.</div>
+
+    <div class="gl">Stages</div>
+    <div class="btnrow"><button class="act primary" id="btn_add_stage">+ Add Stage</button></div>
+    <div class="stage-list" id="stageList"></div>
+  </aside>
+
+  <main>
+    <div class="page-head">
+      <div class="eyebrow" id="scenarioSub">Untitled scenario</div>
+      <h2 id="scenarioTitle">New Scenario</h2>
+    </div>
+
+    <div id="validationPanel"></div>
+
+    <div class="card" id="editorCard">
+      <h3>Stage Editor</h3>
+      <div id="editorBody"></div>
+    </div>
+
+    <div class="card">
+      <h3>Preview / Test-Drive</h3>
+      <div class="hint" style="margin-bottom:8px">Plays the CURRENT draft live using the real stage-graph engine (`engine/stageRunner.js`) - independent of any device or the Facilitator Console. Validate here before exporting.</div>
+      <div class="preview-stage" id="previewStageLabel">—</div>
+      <div id="previewBranches" class="btnrow"></div>
+      <div class="preview-readout" id="previewReadout"></div>
+      <div class="preview-note" id="previewNote" style="display:none"></div>
+      <div class="btnrow">
+        <button class="act" id="btn_preview_reset">Reset Preview</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import {
+  createGraphRunner, reset as resetRunner, advanceToStage, tick, checkAutoAdvance, chooseBranch, currentStage,
+} from '../engine/stageRunner.js';
+import { getEffectiveRhythm, getEffectiveHR } from '../engine/physiology.js';
+import { validateScenarioV2, formatValidationErrors } from '../scenarios/validate.js';
+import { migrateV1ToV2 } from '../scenarios/migrate.js';
+
+const byId = (id) => document.getElementById(id);
+const LOCAL_KEY = 'ct-sim-builder-drafts-v1';
+
+function blankScenario() {
+  return {
+    schemaVersion: '2.0.0', id: 'new-scenario', title: 'New Scenario', population: '',
+    baseline: { hr: 80, bp: { sbp: 120, dbp: 70, map: 87 } },
+    startStageId: 'stage-1',
+    stages: [{ id: 'stage-1', type: 'baseline' }],
+  };
+}
+
+let scenario = blankScenario();
+let selectedStageId = scenario.stages[0].id;
+let previewRunner = null;
+
+/* ---------------- Rendering ---------------- */
+function render() {
+  byId('meta_id').value = scenario.id || '';
+  byId('meta_title').value = scenario.title || '';
+  byId('meta_population').value = scenario.population || '';
+  byId('scenarioTitle').textContent = scenario.title || 'Untitled';
+  byId('scenarioSub').textContent = (scenario.id || 'no id') + (scenario.population ? ' · ' + scenario.population : '');
+
+  const startSel = byId('meta_start');
+  startSel.innerHTML = scenario.stages.map((s) => `<option value="${escapeAttr(s.id)}">${escapeHtml(s.id)}</option>`).join('');
+  startSel.value = scenario.startStageId || scenario.stages[0]?.id || '';
+
+  renderStageList();
+  renderValidation();
+  renderEditor();
+  refreshPreview();
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function escapeAttr(s) { return escapeHtml(s); }
+
+function renderStageList() {
+  const list = byId('stageList');
+  list.innerHTML = scenario.stages.map((s, i) => `
+    <div class="stage-item ${s.id === selectedStageId ? 'selected' : ''}" data-id="${escapeAttr(s.id)}">
+      <span class="idx">${i + 1}</span>
+      <span class="info"><span class="id">${escapeHtml(s.id)}</span><br><span class="type">${escapeHtml(s.type || '?')}</span></span>
+      <span class="mini-btns">
+        <button data-act="up" title="Move up" ${i === 0 ? 'disabled' : ''}>&#8593;</button>
+        <button data-act="down" title="Move down" ${i === scenario.stages.length - 1 ? 'disabled' : ''}>&#8595;</button>
+        <button data-act="dup" title="Duplicate">&#8862;</button>
+        <button data-act="del" title="Delete">&#215;</button>
+      </span>
+    </div>`).join('');
+  list.querySelectorAll('.stage-item').forEach((el) => {
+    const id = el.getAttribute('data-id');
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-act]')) return;
+      selectedStageId = id; render();
+    });
+    el.querySelectorAll('[data-act]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        stageAction(id, btn.getAttribute('data-act'));
+      });
+    });
+  });
+}
+
+function stageAction(id, action) {
+  const i = scenario.stages.findIndex((s) => s.id === id);
+  if (i === -1) return;
+  if (action === 'up' && i > 0) {
+    [scenario.stages[i - 1], scenario.stages[i]] = [scenario.stages[i], scenario.stages[i - 1]];
+  } else if (action === 'down' && i < scenario.stages.length - 1) {
+    [scenario.stages[i + 1], scenario.stages[i]] = [scenario.stages[i], scenario.stages[i + 1]];
+  } else if (action === 'dup') {
+    const copy = JSON.parse(JSON.stringify(scenario.stages[i]));
+    copy.id = uniqueStageId(copy.id + '-copy');
+    scenario.stages.splice(i + 1, 0, copy);
+    selectedStageId = copy.id;
+  } else if (action === 'del') {
+    if (scenario.stages.length <= 1) { alert('A scenario needs at least one stage.'); return; }
+    scenario.stages.splice(i, 1);
+    if (selectedStageId === id) selectedStageId = scenario.stages[0].id;
+  }
+  render();
+}
+
+function uniqueStageId(base) {
+  const ids = new Set(scenario.stages.map((s) => s.id));
+  let id = base, n = 2;
+  while (ids.has(id)) { id = `${base}-${n}`; n += 1; }
+  return id;
+}
+
+function renderValidation() {
+  const result = validateScenarioV2(scenario);
+  const panel = byId('validationPanel');
+  if (result.valid) {
+    panel.innerHTML = `<div class="validation-panel ok"><h3>✓ Valid schema v2 scenario</h3></div>`;
+  } else {
+    const lines = formatValidationErrors(result);
+    panel.innerHTML = `<div class="validation-panel"><h3>${lines.length} validation ${lines.length === 1 ? 'error' : 'errors'}</h3><ul>${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul></div>`;
+  }
+  byId('btn_export').disabled = false; // exporting an invalid draft is still allowed (facilitator may want to finish elsewhere), errors are just surfaced clearly
+}
+
+function stageFieldRow(label, inputHtml) {
+  return `<div class="row"><label>${label}</label>${inputHtml}</div>`;
+}
+
+function renderEditor() {
+  const stage = scenario.stages.find((s) => s.id === selectedStageId);
+  const body = byId('editorBody');
+  if (!stage) { body.innerHTML = '<div class="hint">No stage selected.</div>'; return; }
+
+  const otherStageIds = scenario.stages.filter((s) => s.id !== stage.id).map((s) => s.id);
+  const destOptions = (selected) => `<option value="">— none —</option>` + otherStageIds.map((id) => `<option value="${escapeAttr(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(id)}</option>`).join('');
+
+  const isBranch = stage.type === 'branch';
+  const isDiscussion = stage.type === 'discussion';
+  const isRampish = !isBranch && !isDiscussion;
+
+  body.innerHTML = `
+    <div class="grid2">
+      ${stageFieldRow('Stage ID', `<input type="text" id="f_id" value="${escapeAttr(stage.id)}">`)}
+      ${stageFieldRow('Type', `<select id="f_type">${['baseline', 'deterioration', 'critical', 'arrest', 'intervention-response', 'rosc', 'branch', 'discussion', 'custom'].map((t) => `<option value="${t}" ${t === stage.type ? 'selected' : ''}>${t}</option>`).join('')}</select>`)}
+    </div>
+    ${stageFieldRow('Label (facilitator-facing name)', `<input type="text" id="f_label" value="${escapeAttr(stage.label || '')}">`)}
+
+    ${isRampish ? `
+      <div class="gl">Physiology Transition</div>
+      ${stageFieldRow('Target (ramp toward - JSON patch, omit for an instant change)', `<textarea id="f_target" placeholder='{"hr": 135, "bp": {"sbp": 72}}'>${escapeHtml(stage.target ? JSON.stringify(stage.target, null, 1) : '')}</textarea>`)}
+      <div class="grid2">
+        ${stageFieldRow('Transition duration (min)', `<input type="number" id="f_transitionDuration" min="0" step="0.5" value="${stage.transitionDuration ?? ''}">`)}
+        ${stageFieldRow('Set (instant JSON patch, e.g. flags/rhythm)', `<textarea id="f_set" style="min-height:70px" placeholder='{"flags": {"arrestActive": true}}'>${escapeHtml(stage.set ? JSON.stringify(stage.set, null, 1) : '')}</textarea>`)}
+      </div>
+      <div class="gl">Unaddressed Timing</div>
+      <div class="grid2">
+        ${stageFieldRow('Hold duration after settling (min)', `<input type="number" id="f_holdDuration" min="0" step="0.5" value="${stage.holdDuration ?? ''}">`)}
+        ${stageFieldRow('Destination if unaddressed', `<select id="f_destinationIfUnaddressed">${destOptions(stage.destinationIfUnaddressed)}</select>`)}
+      </div>
+      ${stageFieldRow('Advance mode', `<select id="f_advanceMode">${['auto', 'manual', 'confirm'].map((m) => `<option value="${m}" ${(stage.advanceMode || 'auto') === m ? 'selected' : ''}>${m}</option>`).join('')}</select>`)}
+      ${stageFieldRow('Destination on successful intervention (authored only - not yet engine-enforced)', `<select id="f_destinationOnIntervention">${destOptions(stage.destinationOnIntervention)}</select>`)}
+    ` : ''}
+
+    ${isBranch ? `
+      <div class="gl">Branches (facilitator picks one, live)</div>
+      <div id="branchList"></div>
+      <div class="btnrow"><button class="act mini" id="btn_add_branch">+ Add Branch</button></div>
+    ` : ''}
+
+    ${isDiscussion ? `
+      ${stageFieldRow('Prompt', `<input type="text" id="f_prompt" value="${escapeAttr(stage.prompt || '')}">`)}
+      ${stageFieldRow('Note (facilitator\'s own answer/rationale)', `<textarea id="f_note" style="min-height:70px">${escapeHtml(stage.note || '')}</textarea>`)}
+    ` : ''}
+
+    <div class="gl">Facilitator &amp; Learner Content</div>
+    ${stageFieldRow('Facilitator notes (hidden from learners)', `<textarea id="f_facilitatorNotes" style="min-height:70px">${escapeHtml(stage.facilitatorNotes || '')}</textarea>`)}
+    ${stageFieldRow('Success criteria (one per line - authored only, not yet auto-evaluated)', `<textarea id="f_successCriteria" style="min-height:60px">${escapeHtml((stage.successCriteria || []).map((c) => (typeof c === 'string' ? c : c.label)).join('\n'))}</textarea>`)}
+    ${stageFieldRow('Debrief markers (one per line)', `<textarea id="f_debriefMarkers" style="min-height:50px">${escapeHtml((stage.debriefMarkers || []).join('\n'))}</textarea>`)}
+  `;
+
+  if (isBranch) renderBranchList(stage, otherStageIds);
+
+  // Wire every field to write back into `scenario` live.
+  const bind = (id, apply) => { const el = byId(id); if (el) el.addEventListener('input', () => { apply(el.value); render(); }); };
+  bind('f_id', (v) => { if (v && v !== stage.id) { const old = stage.id; stage.id = v; selectedStageId = v; retargetReferences(old, v); } });
+  bind('f_type', (v) => { stage.type = v; if (v === 'branch') { delete stage.target; delete stage.set; stage.branches = stage.branches || []; } });
+  bind('f_label', (v) => { stage.label = v; });
+  bind('f_transitionDuration', (v) => { stage.transitionDuration = v === '' ? undefined : parseFloat(v); });
+  bind('f_holdDuration', (v) => { stage.holdDuration = v === '' ? undefined : parseFloat(v); });
+  bind('f_destinationIfUnaddressed', (v) => { stage.destinationIfUnaddressed = v || undefined; });
+  bind('f_destinationOnIntervention', (v) => { stage.destinationOnIntervention = v || undefined; });
+  bind('f_advanceMode', (v) => { stage.advanceMode = v; });
+  bind('f_prompt', (v) => { stage.prompt = v; });
+  bind('f_note', (v) => { stage.note = v; });
+  bind('f_facilitatorNotes', (v) => { stage.facilitatorNotes = v; stage.coach = v; });
+  bind('f_successCriteria', (v) => { stage.successCriteria = v.split('\n').map((s) => s.trim()).filter(Boolean).map((label) => ({ label })); });
+  bind('f_debriefMarkers', (v) => { stage.debriefMarkers = v.split('\n').map((s) => s.trim()).filter(Boolean); });
+
+  bindJsonTextarea('f_target', (v) => { stage.target = v; });
+  bindJsonTextarea('f_set', (v) => { stage.set = v; });
+
+  const addBranchBtn = byId('btn_add_branch');
+  if (addBranchBtn) addBranchBtn.addEventListener('click', () => {
+    stage.branches = stage.branches || [];
+    stage.branches.push({ label: '', destinationId: '' });
+    render();
+  });
+}
+
+function bindJsonTextarea(id, apply) {
+  const el = byId(id);
+  if (!el) return;
+  el.addEventListener('input', () => {
+    const raw = el.value.trim();
+    if (!raw) { el.classList.remove('invalid'); apply(undefined); refreshPreview(); return; }
+    try {
+      const parsed = JSON.parse(raw);
+      el.classList.remove('invalid');
+      apply(parsed);
+    } catch (e) {
+      el.classList.add('invalid'); // don't write back an unparsable patch - keep the last good value in `scenario`
+    }
+    renderValidation();
+    refreshPreview();
+  });
+}
+
+function renderBranchList(stage, otherStageIds) {
+  const el = byId('branchList');
+  const destOpts = (sel) => `<option value="">— pick a destination —</option>` + otherStageIds.map((id) => `<option value="${escapeAttr(id)}" ${id === sel ? 'selected' : ''}>${escapeHtml(id)}</option>`).join('');
+  el.innerHTML = (stage.branches || []).map((b, i) => `
+    <div class="branch-row">
+      <input type="text" placeholder="Label (what the facilitator sees)" value="${escapeAttr(b.label || '')}" data-branch-label="${i}">
+      <select data-branch-dest="${i}">${destOpts(b.destinationId)}</select>
+      <button class="act mini danger" data-branch-del="${i}">&#215;</button>
+    </div>`).join('') || '<div class="hint">No branches yet - add at least one.</div>';
+  el.querySelectorAll('[data-branch-label]').forEach((input) => input.addEventListener('input', () => {
+    stage.branches[parseInt(input.getAttribute('data-branch-label'), 10)].label = input.value;
+    renderValidation(); refreshPreview();
+  }));
+  el.querySelectorAll('[data-branch-dest]').forEach((sel) => sel.addEventListener('change', () => {
+    stage.branches[parseInt(sel.getAttribute('data-branch-dest'), 10)].destinationId = sel.value;
+    renderValidation(); refreshPreview();
+  }));
+  el.querySelectorAll('[data-branch-del]').forEach((btn) => btn.addEventListener('click', () => {
+    stage.branches.splice(parseInt(btn.getAttribute('data-branch-del'), 10), 1);
+    render();
+  }));
+}
+
+/** When a stage id is renamed, every reference to the OLD id elsewhere in the scenario must follow, or the scenario silently breaks (dangling references the validator would then catch, but better to just not break it). */
+function retargetReferences(oldId, newId) {
+  if (scenario.startStageId === oldId) scenario.startStageId = newId;
+  scenario.stages.forEach((s) => {
+    if (s.destinationIfUnaddressed === oldId) s.destinationIfUnaddressed = newId;
+    if (s.destinationOnIntervention === oldId) s.destinationOnIntervention = newId;
+    (s.branches || []).forEach((b) => { if (b.destinationId === oldId) b.destinationId = newId; });
+  });
+}
+
+/* ---------------- Preview / test-drive (real stageRunner.js) ---------------- */
+function refreshPreview() {
+  const result = validateScenarioV2(scenario);
+  if (!result.valid) {
+    byId('previewStageLabel').textContent = 'Fix validation errors above to preview.';
+    byId('previewBranches').innerHTML = '';
+    byId('previewReadout').innerHTML = '';
+    byId('previewNote').style.display = 'none';
+    previewRunner = null;
+    return;
+  }
+  if (!previewRunner || previewRunner.scenario !== scenario) {
+    previewRunner = createGraphRunner(scenario);
+  }
+  renderPreview();
+}
+
+function renderPreview() {
+  if (!previewRunner) return;
+  const stage = currentStage(previewRunner);
+  byId('previewStageLabel').textContent = `${previewRunner.currentStageId} (${stage.type})${stage.label ? ' — ' + stage.label : ''}`;
+
+  const branchesEl = byId('previewBranches');
+  if (stage.type === 'branch') {
+    branchesEl.innerHTML = (stage.branches || []).map((b, i) => `<button class="act primary" data-choose="${i}">${escapeHtml(b.label || '(unlabeled)')}</button>`).join('');
+    branchesEl.querySelectorAll('[data-choose]').forEach((btn) => btn.addEventListener('click', () => {
+      const b = stage.branches[parseInt(btn.getAttribute('data-choose'), 10)];
+      if (b && b.destinationId) { previewRunner = chooseBranch(previewRunner, b.destinationId, performance.now()); renderPreview(); }
+    }));
+  } else {
+    const nextId = stage.destinationIfUnaddressed || null;
+    branchesEl.innerHTML = `<button class="act primary" id="btn_preview_next">Advance ${nextId ? 'to ' + escapeHtml(nextId) : '(pick a stage below)'}</button>`;
+    const nextBtn = byId('btn_preview_next');
+    if (nextBtn) nextBtn.addEventListener('click', () => {
+      const idx = scenario.stages.findIndex((s) => s.id === previewRunner.currentStageId);
+      const target = nextId || (scenario.stages[idx + 1] && scenario.stages[idx + 1].id);
+      if (target) { previewRunner = advanceToStage(previewRunner, target, performance.now()); renderPreview(); }
+    });
+  }
+
+  const s = previewRunner.state;
+  const fields = [['hr', 'HR', getEffectiveHR(s)], ['spo2', 'SpO₂', s.spo2], ['rr', 'RR', s.rr], ['cvp', 'CVP', s.cvp], ['co', 'CO', s.co]];
+  byId('previewReadout').innerHTML = fields.map(([k, l, v]) => `<div class="pv"><div class="l">${l}</div><div class="v">${typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(1)) : v}</div></div>`).join('')
+    + `<div class="pv"><div class="l">BP</div><div class="v">${Math.round(s.bp.sbp)}/${Math.round(s.bp.dbp)}</div></div>`
+    + `<div class="pv"><div class="l">Rhythm</div><div class="v" style="font-size:13px">${getEffectiveRhythm(s)}</div></div>`;
+
+  const noteEl = byId('previewNote');
+  const note = stage.facilitatorNotes || stage.coach || stage.prompt || '';
+  if (note) { noteEl.style.display = 'block'; noteEl.textContent = note; } else { noteEl.style.display = 'none'; }
+}
+byId('btn_preview_reset').addEventListener('click', () => { if (previewRunner) previewRunner = resetRunner(previewRunner); renderPreview(); });
+
+// Live-tick the preview so a ramp/holdDuration actually plays out visibly.
+function previewTick(ts) {
+  if (previewRunner && (previewRunner.activeRamp || previewRunner.pendingAutoAdvance)) {
+    const before = previewRunner;
+    if (previewRunner.activeRamp) previewRunner = tick(previewRunner, ts);
+    if (previewRunner.pendingAutoAdvance) previewRunner = checkAutoAdvance(previewRunner, ts);
+    if (previewRunner !== before) renderPreview();
+  }
+  requestAnimationFrame(previewTick);
+}
+requestAnimationFrame(previewTick);
+
+/* ---------------- Metadata bindings ---------------- */
+byId('meta_id').addEventListener('input', (e) => { scenario.id = e.target.value; renderValidation(); });
+byId('meta_title').addEventListener('input', (e) => { scenario.title = e.target.value; byId('scenarioTitle').textContent = scenario.title || 'Untitled'; });
+byId('meta_population').addEventListener('input', (e) => { scenario.population = e.target.value; });
+byId('meta_start').addEventListener('change', (e) => { scenario.startStageId = e.target.value; refreshPreview(); });
+
+byId('btn_add_stage').addEventListener('click', () => {
+  const id = uniqueStageId('stage-' + (scenario.stages.length + 1));
+  scenario.stages.push({ id, type: 'custom' });
+  selectedStageId = id;
+  render();
+});
+
+/* ---------------- Import / export / migrate ---------------- */
+byId('btn_new').addEventListener('click', () => {
+  if (!confirm('Start a new blank scenario? Unsaved changes to the current draft will be lost unless you\'ve saved/exported it.')) return;
+  scenario = blankScenario(); selectedStageId = scenario.stages[0].id; previewRunner = null; render();
+});
+
+byId('file_import').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      const v2 = parsed.schemaVersion ? parsed : migrateV1ToV2(parsed); // auto-detect a v1 file and migrate it on import
+      scenario = v2;
+      selectedStageId = scenario.stages[0]?.id;
+      previewRunner = null;
+      render();
+    } catch (err) {
+      alert('Could not read that file as scenario JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+byId('btn_export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(scenario, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = (scenario.id || 'scenario') + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+});
+
+byId('btn_load_flagship').addEventListener('click', async () => {
+  try {
+    const resp = await fetch('../scenarios/ct-surgery-flagship.json');
+    const v1 = await resp.json();
+    scenario = migrateV1ToV2(v1);
+    selectedStageId = scenario.stages[0]?.id;
+    previewRunner = null;
+    render();
+  } catch (err) {
+    alert('Could not load/migrate the flagship scenario: ' + err.message);
+  }
+});
+
+/* ---------------- Local drafts (localStorage) ---------------- */
+function loadDrafts() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}'); } catch (e) { return {}; } }
+function saveDrafts(d) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(d)); } catch (e) {} }
+function refreshDraftList() {
+  const drafts = loadDrafts();
+  const sel = byId('local_drafts');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— load a saved draft —</option>' + Object.keys(drafts).map((k) => `<option value="${escapeAttr(k)}">${escapeHtml(k)}</option>`).join('');
+  sel.value = current;
+}
+byId('btn_save_local').addEventListener('click', () => {
+  const drafts = loadDrafts();
+  const key = scenario.id || 'untitled-' + Date.now();
+  drafts[key] = scenario;
+  saveDrafts(drafts);
+  refreshDraftList();
+  byId('local_drafts').value = key;
+});
+byId('local_drafts').addEventListener('change', (e) => {
+  if (!e.target.value) return;
+  const drafts = loadDrafts();
+  if (drafts[e.target.value]) {
+    scenario = drafts[e.target.value];
+    selectedStageId = scenario.stages[0]?.id;
+    previewRunner = null;
+    render();
+  }
+});
+byId('btn_delete_local').addEventListener('click', () => {
+  const key = byId('local_drafts').value;
+  if (!key) return;
+  const drafts = loadDrafts();
+  delete drafts[key];
+  saveDrafts(drafts);
+  refreshDraftList();
+});
+
+/* Testing hook, same rationale as every other page in this project */
+window.ctBuilder = {
+  getScenario: () => scenario,
+  setScenario: (s) => { scenario = s; selectedStageId = scenario.stages[0]?.id; previewRunner = null; render(); },
+  getPreviewRunner: () => previewRunner,
+  validate: () => validateScenarioV2(scenario),
+  loadFlagship: () => byId('btn_load_flagship').click(),
+};
+
+refreshDraftList();
+render();
+</script>
 </body>
 </html>
