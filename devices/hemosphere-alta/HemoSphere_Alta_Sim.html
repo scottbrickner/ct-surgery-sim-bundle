@@ -336,6 +336,7 @@ import {
 } from '../../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot, isValidGraphSnapshot } from '../../sync/deviceSync.js';
 import { getMedicatedHR, getMedicatedMAP, getMedicatedCO } from '../../engine/clinical/pharmacology.js';
+import { getEffectiveSBP, getEffectiveDBP } from '../../engine/clinical/pulsatility.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -651,7 +652,17 @@ loadScn("postop");layout();setView("mon");requestAnimationFrame(frame);
 // a real monitor behaves than adding an override field it wouldn't have.
 function applyEngineValuesLight(es){
   drv.co=getMedicatedCO(es,es.minute);drv.map=getMedicatedMAP(es,es.minute);drv.pr=getMedicatedHR(es,es.minute);drv.cvp=es.cvp;drv.svv=es.svv;drv.ppv=es.ppv;
-  drv.scvo2=es.scvo2;drv.hpi=es.hpi;drv.sys=es.bp.sbp;drv.dia=es.bp.dbp;if(es.temp)drv.temp=es.temp;
+  drv.scvo2=es.scvo2;drv.hpi=es.hpi;
+  // Phase 6: getEffectiveSBP/DBP correctly zero during true arrest and
+  // scale during CPR, same rule getMedicatedMAP already applies - see
+  // engine/clinical/pulsatility.js. deriv()'s own live SVR/CI derivation
+  // (this file, above) reads drv.map/drv.co, which are already
+  // perfusion-aware via getMedicatedMAP/getMedicatedCO, so the derived
+  // values inherit this for free - deeper HemoSphere-specific arrest
+  // fidelity (e.g. its live SVR formula during a true zero-CO arrest) is
+  // Phase 7 (HemoSphere synchronization) territory per the audit's own
+  // phase split, not fully chased here.
+  drv.sys=getEffectiveSBP(es);drv.dia=getEffectiveDBP(es);if(es.temp)drv.temp=es.temp;
 }
 function applyEngineStateFull(es){
   cancelTrans(); // the shared engine owns transitions while the flagship scenario drives state

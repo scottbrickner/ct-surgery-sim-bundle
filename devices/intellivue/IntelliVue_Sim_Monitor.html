@@ -461,6 +461,7 @@
 <script type="module">
 import { getEffectiveRhythm } from '../../engine/physiology.js';
 import { getMedicatedHR } from '../../engine/clinical/pharmacology.js';
+import { isPerfusing, isPulsatile, getEffectiveSBP, getEffectiveDBP, getEffectiveETCO2 } from '../../engine/clinical/pulsatility.js';
 import {
   createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart,
   tick as srTick, applyFacilitatorOverride as srOverride,
@@ -474,6 +475,16 @@ const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const gauss=(t,c,w,a)=>a*Math.exp(-0.5*Math.pow((t-c)/w,2));
 
 /* ---------------- State ---------------- */
+// Phase 6: null while IntelliVue's own native practice-scenario dropdown
+// (loadScenario()) owns rhythm/perfusion - perfusing()/pulsatile() fall
+// back to the original native-rhythm-string-only logic in that case,
+// completely unchanged. Set on every applyEngineValuesLight() call while
+// the shared engine is actively driving (local OR remote-synced), cleared
+// back to null by loadScenario() so switching to a local practice scenario
+// correctly re-engages the native-only fallback. Declared here (not nearer
+// applyEngineValuesLight, further down) because loadScenario("baseline") is
+// called at module-boot time, before that point in the file would execute.
+let sharedPerfusing=null,sharedPulsatile=null;
 const state={
   hr:78,spo2:98,sys:118,dia:64,cvp:8,paSys:26,paDia:12,pawp:10,icp:10,rr:14,etco2:38,co:5.2,temp:36.8,
   rhythm:"sinus",pvcQueued:false,beatCount:0,beatAmp:1,
@@ -527,6 +538,7 @@ function loadScenario(k){const s=SCN[k];if(!s)return;
   state.paCath="PA";state.rvIrrit=false;state.wedge=false;state.wedgeVol=0;state.flush=null;state.flushHold=false;
   state.icpComp=s.icpComp||"normal";state.artSite={abp:"radial",abp2:"femoral"};state.zero={};
   state.trans=null;state.scn=k;
+  sharedPerfusing=null;sharedPulsatile=null; // Phase 6: switching to a local practice scenario re-engages the native-rhythm-string-only perfusing()/pulsatile() fallback
   byId("bed").textContent=s.bed;byId("ptname").textContent=s.name;byId("f_name").value=s.name;
   initDisp();syncControls();refreshToggleUI();refreshClinicalUI();layout();updateCO();
 }
@@ -644,7 +656,19 @@ function icpWave(tb,mean,resp){const{pe}=pulseInfo();let a1=1.0,a2=0.68,a3=0.42,
   return mean+(P1+P2+P3)*1.9+Math.sin(2*Math.PI*resp)*1.3;}
 function capno(rp,et){let n;if(rp<0.05)n=0;else if(rp<0.13)n=Math.pow((rp-0.05)/0.08,0.7)*0.93;
   else if(rp<0.55)n=0.93+0.07*((rp-0.13)/0.42);else if(rp<0.60)n=(1.0)-(rp-0.55)/0.05;else n=0;return clamp(n,0,1)*et;}
-function perfusing(){return !(state.rhythm==="vfib"||state.rhythm==="asystole");}
+// Phase 6: extends rather than replaces the original native-rhythm-string
+// check (per the audit's own instruction) - that logic is now the fallback
+// for when IntelliVue is running its own local practice scenario, unrelated
+// to the shared engine (sharedPerfusing===null). While the shared engine is
+// driving, this correctly reflects PEA/pulseless-VT/tamponade-in-sinus
+// (none of which are "vfib"/"asystole" strings) and CPR/ECMO-restored flow
+// - all of which the old native-only check had no way to represent.
+function perfusing(){return sharedPerfusing===null?!(state.rhythm==="vfib"||state.rhythm==="asystole"):sharedPerfusing;}
+// New this phase: perfusing() alone can't distinguish native/CPR pulsatile
+// flow from ECMO's nonpulsatile-but-adequate flow - see pulsatility-design.md.
+// Native-only fallback (shared engine not driving) has no such distinction,
+// so pulsatile === perfusing there, matching the pre-Phase-6 behavior exactly.
+function pulsatile(){return sharedPulsatile===null?perfusing():sharedPulsatile;}
 function mapPress(b,val){const[lo,hi]=chScale(b);return b.top+b.h*0.92-clamp((val-lo)/(hi-lo),0,1)*b.h*0.84;}
 function zeroing(line){return state.zero[line]!==undefined;}
 function zeroFlatY(b){const[lo,hi]=chScale(b);return b.top+b.h*0.92-((0-lo)/(hi-lo))*b.h*0.84;}
@@ -663,7 +687,20 @@ function sampleChannel(b){const t=b.cfg.type;
     if(zeroing(b.cfg.line))return zeroFlatY(b);
     if(state.flushHold)return mapPress(b,chScale(b)[1]*0.96);
     if(state.flush)return mapPress(b,flushVal(b.cfg.line));
-    if(t==="art"||t==="art2"){if(state.rhythm==="asystole")return mapPress(b,2);if(state.rhythm==="vfib")return mapPress(b,4+Math.random()*3);return mapPress(b,artPressure(b.cfg.line));}
+    if(t==="art"||t==="art2"){
+      // Phase 6: !perfusing() replaces the old direct vfib/asystole check -
+      // that check couldn't catch PEA, pulseless VT, or tamponade-in-sinus
+      // (none map to "vfib"/"asystole" natively; PEA maps to sinus_tach
+      // morphology, see mapEngineRhythm/RHYTHM_MAP). Which near-flat visual
+      // to use (asystole's near-zero vs vfib's low-amplitude noise) stays a
+      // cosmetic choice keyed off the native string, unrelated to the gate.
+      if(!perfusing())return mapPress(b,state.rhythm==="asystole"?2:4+Math.random()*3);
+      // Perfusing but NOT pulsatile (ECMO full support, no native/CPR pulse)
+      // - the exact acceptance criterion this phase is built on: flat-but-
+      // elevated at the derived MAP level, never the arrest-style noise above.
+      if(!pulsatile())return mapPress(b,(state.sys+2*state.dia)/3);
+      return mapPress(b,artPressure(b.cfg.line));
+    }
     if(t==="pap"){const pi=pulseInfo();
       if(state.paCath==="RV")return mapPress(b,rvWave(pi.pe,pi.len));
       if(state.wedge||state.paCath==="wedge")return mapPress(b,wedgeWave(tBeat,state.pawp,respPhase));
@@ -728,7 +765,11 @@ function updateNumerics(){tickDisp(performance.now());if(state.trans){syncContro
   byId("v_spo2").textContent=perf?R(disp.spo2):"--";byId("s_perf").textContent=perf?clamp((disp.spo2-80)/8,0.3,9).toFixed(1):"0.0";
   byId("v_rr").textContent=state.rr<1?"0":R(disp.rr);
   byId("v_nbp").textContent=state.nbpSys+"/"+state.nbpDia;byId("v_nbpmap").textContent=R((state.nbpSys+2*state.nbpDia)/3);byId("nbp_time").textContent=state.nbpTime;
-  if(state.rhythm==="asystole"||state.rhythm==="vfib"){byId("v_abp").textContent="--/--";byId("v_abpmap").textContent="--";}
+  // Phase 6: !perfusing() replaces the direct vfib/asystole check here too -
+  // same reasoning as the ART waveform above. A perfusing-but-nonpulsatile
+  // (ECMO-only) state still shows a real number, never "--/--" - that's the
+  // acceptance criterion this phase exists to satisfy.
+  if(!perfusing()){byId("v_abp").textContent="--/--";byId("v_abpmap").textContent="--";}
   else{const s=R(disp.sys),d=R(disp.dia);byId("v_abp").textContent=numVal("abp",s+"/"+d);byId("v_abpmap").textContent=numVal("abp",R((s+2*d)/3));}
   const s2=R(disp.sys-6),d2=R(disp.dia-2);byId("v_abp2").textContent=numVal("abp2",s2+"/"+d2);byId("v_abp2map").textContent=numVal("abp2",R((s2+2*d2)/3));
   // PAP / RV / wedge
@@ -1065,9 +1106,11 @@ function mapEngineRhythm(effRhythm){const m=RHYTHM_MAP[effRhythm];if(!m){console
 // already samples live. Deliberately does NOT call layout() - layout()->paintBg() does a
 // full canvas fillRect, which would blank the scrolling waveform trace on every tick.
 function applyEngineValuesLight(es){
-  state.hr=getMedicatedHR(es,es.minute);state.sys=es.bp.sbp;state.dia=es.bp.dbp;state.cvp=es.cvp;
+  sharedPerfusing=isPerfusing(es);sharedPulsatile=isPulsatile(es);
+  state.hr=getMedicatedHR(es,es.minute);state.sys=getEffectiveSBP(es);state.dia=getEffectiveDBP(es);state.cvp=es.cvp;
   state.paSys=es.pa.systolic;state.paDia=es.pa.diastolic;state.spo2=es.spo2;
   if(es.rr)state.rr=es.rr;if(es.temp)state.temp=es.temp;state.co=es.co;
+  if(es.etco2!==undefined)state.etco2=getEffectiveETCO2(es,es.minute);
   state.rhythm=mapEngineRhythm(getEffectiveRhythm(es));
   state.nbpSys=Math.round(state.sys);state.nbpDia=Math.round(state.dia);
   rrSec=60/Math.max(20,state.hr);updateCO();
@@ -1170,6 +1213,14 @@ window.ctSharedEngine={
   cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
   getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
   getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
+  // Phase 6 - same rationale as tickNow()/pushNow() elsewhere in this
+  // project: updateNumerics() (which contains the v_abp/v_hr/etc blanking
+  // logic) only runs from the native frame() rAF loop, suspended whenever
+  // document.hidden is true. This exposes perfusing()/pulsatile() directly
+  // and forces one numerics repaint, so automated verification isn't
+  // blocked on a real animation frame ever firing.
+  getPerfusionNow:()=>({perfusing:perfusing(),pulsatile:pulsatile(),sharedPerfusing,sharedPulsatile}),
+  forceNumericsRepaint:()=>{updateNumerics();},
 };
 
 /* ---------------- Cross-device sync + pop-out (Phase 3) ---------------- */

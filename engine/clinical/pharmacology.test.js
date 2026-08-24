@@ -4,7 +4,7 @@ import { createState } from '../physiology.js';
 import { createRunner, advanceSimClock } from '../scenarioRunner.js';
 import {
   administerPush, canAdministerPush, getPushTotalDoseMg, getPushDoseCount,
-  getPushEffectMultiplier, getMedicatedHR, getMedicatedMAP, getMedicatedSVR,
+  getPushEffectMultiplier, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
   setInfusionRate, getInfusionOnsetMultiplier, getMedicationDelta,
 } from './pharmacology.js';
 import { PUSH_DRUGS, INFUSIONS } from './formulary.js';
@@ -180,4 +180,37 @@ test('advanceSimClock is a no-op for zero/negative minutes (defensive, matches o
   const runner = createRunner({ parts: [{ id: 'p1', title: 'P1', initialState: {}, steps: [] }] });
   assert.equal(advanceSimClock(runner, 0), runner);
   assert.equal(advanceSimClock(runner, -5), runner);
+});
+
+/* ---------------- Phase 5/6 composition: medication effects require flow to act through ---------------- */
+
+test('getMedicatedMAP: a vasopressor at max rate cannot raise MAP during true arrest (no flow of any kind) - correctly stays 0, not authored+delta', () => {
+  let s = setInfusionRate(createState({ rhythm: 'PEA', bp: { sbp: 100, dbp: 55, map: 65 } }), 'levo', INFUSIONS.levo.maxRateMcgPerMin, 0);
+  assert.equal(getMedicatedMAP(s, INFUSIONS.levo.onsetMinutes), 0); // effectively-perfusing MAP is 0 with no flow source; medication delta correctly does not apply on top of nothing
+});
+
+test('getMedicatedMAP: the same vasopressor DOES raise the CPR-derived MAP once compressions provide flow to act through', () => {
+  let s = createState({ rhythm: 'Sinus Rhythm', bp: { sbp: 100, dbp: 60, map: 80 } });
+  s = { ...s, rhythm: 'PEA' }; // perfusion lost
+  // manually stamp the perfusion-loss snapshot the way tickCirculation would, without importing pulsatility.js's internals directly into this pharmacology test file
+  s = { ...s, circulation: { ...s.circulation, lastPerfusingAtMinute: 0, atLoss: { bp: { ...s.bp }, etco2: s.etco2 } } };
+  s = { ...s, circulation: { ...s.circulation, cpr: { active: true, quality: 'good' } } };
+  s = setInfusionRate(s, 'levo', INFUSIONS.levo.maxRateMcgPerMin, 0);
+  const withoutDrug = 80 * 0.45; // CPR-derived MAP alone, per pulsatility.js's CPR_MAP_FRACTION.good
+  const withDrug = getMedicatedMAP(s, INFUSIONS.levo.onsetMinutes);
+  assert.ok(withDrug > withoutDrug, 'a vasopressor should meaningfully augment CPR-generated MAP, not be silently dropped');
+  assert.equal(withDrug, withoutDrug + INFUSIONS.levo.effectAtMaxRate.map);
+});
+
+test('getMedicatedHR/getMedicatedRR stay UNGATED by perfusion - electrical and respiratory-center drug effects persist even without mechanical flow (PEA still has an electrical rate atropine can raise; fentanyl still depresses respiration during CPR)', () => {
+  let s = createState({ rhythm: 'PEA', hr: 50, rr: 14 });
+  s = administerPush(s, 'atropine', 0);
+  const drug = PUSH_DRUGS.atropine;
+  assert.equal(getMedicatedHR(s, drug.peakMinutes), 50 + drug.effect.hr); // full effect despite zero flow - not gated
+});
+
+test('getMedicatedSVR/getMedicatedCO also gate their medication delta on isPerfusing, same reasoning as MAP', () => {
+  let s = setInfusionRate(createState({ rhythm: 'PEA', svr: 1200, co: 4 }), 'milrinone', INFUSIONS.milrinone.maxRateMcgPerKgPerMin, 0);
+  assert.equal(getMedicatedSVR(s, INFUSIONS.milrinone.onsetMinutes), 1200); // unchanged - no flow, no drug delta applied
+  assert.equal(getMedicatedCO(s, INFUSIONS.milrinone.onsetMinutes), 4);
 });

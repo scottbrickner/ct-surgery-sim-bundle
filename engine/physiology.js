@@ -13,7 +13,7 @@ export const NUMERIC_PATHS = [
   'minute', 'hr',
   'bp.sbp', 'bp.dbp', 'bp.map',
   'pa.systolic', 'pa.diastolic',
-  'cvp', 'co', 'ci', 'svr', 'svri', 'svv', 'ppv', 'scvo2', 'hpi', 'spo2', 'rr', 'temp',
+  'cvp', 'co', 'ci', 'svr', 'svri', 'svv', 'ppv', 'scvo2', 'hpi', 'spo2', 'rr', 'temp', 'etco2',
   'drips.epi', 'drips.levo', 'drips.milrinone', 'drips.propofol', 'drips.fentanyl', 'drips.vasopressin', 'drips.insulin',
   'chestTubes.rPleural', 'chestTubes.rMediastinal', 'chestTubes.blake', 'chestTubes.lPleural', 'chestTubes.lMediastinal',
   'pacer.rate', 'pacer.outputMa', 'pacer.sensitivityMv',
@@ -39,6 +39,14 @@ const BASE_STATE = Object.freeze({
   spo2: 98,
   rr: 14,
   temp: 37.0,
+  // Phase 6: previously a device-local-only field on IntelliVue, never
+  // touched by the shared engine (confirmed gap - firing an 'event' step
+  // like arrest zeroed rhythm/BP but never etco2, so the capnogram held a
+  // stale pre-arrest plateau through a scripted code). Now a real authored
+  // vital, same tier as rr/spo2/temp - see engine/clinical/pulsatility.js's
+  // getEffectiveETCO2() for the perfusion-aware overlay that actually
+  // decays this when perfusion is lost.
+  etco2: 38,
   drips: { epi: 0, levo: 0, milrinone: 0, propofol: 0, fentanyl: 0, vasopressin: 0, insulin: 0 },
   ivpb: null, // e.g. 'vancomycin' - an intermittent piggyback, not a continuous rate
   chestTubes: { rPleural: 0, rMediastinal: 0, blake: 0, lPleural: 0, lMediastinal: 0 },
@@ -52,6 +60,25 @@ const BASE_STATE = Object.freeze({
   medications: {
     pushes: [], // [{ drug: 'atropine', atMinute: 4.5, doseMg: 1 }, ...] - every administered IV push bolus, in order given
     infusionSetAtMinute: {}, // { epi: 12, levo: null, ... } - state.minute at which each drips.* field's CURRENT rate was last changed (null = never set / still at 0)
+  },
+  // Phase 6 (engine/clinical/pulsatility.js) - same "derived overlay, never
+  // read directly by getEffective*() here" rule as medications above. `cpr`
+  // is facilitator/learner-set (independent of rhythm - see
+  // pulsatility-design.md's REVIEW #1 on why: a patient can present in an
+  // organized-looking rhythm and still be pulseless, e.g. tamponade in
+  // Sinus Rhythm, same physiology as PEA despite the rhythm string).
+  // lastPerfusingAtMinute/atLoss are null while perfusing (nothing to
+  // decay/scale from); pulsatility.js's tickCirculation() stamps both the
+  // instant perfusion is lost (atLoss snapshots bp+etco2 at that exact
+  // moment, since a subsequent arrest 'event' step may go on to zero those
+  // same authored fields - the snapshot is what CPR-derived MAP/etCO2 scale
+  // from, not whatever the live authored value has since become), and
+  // clears both back to null the moment perfusion resumes. Same
+  // state.minute-based pattern medications.infusionSetAtMinute established.
+  circulation: {
+    cpr: { active: false, quality: null }, // quality: 'good' | 'poor' | null
+    lastPerfusingAtMinute: null,
+    atLoss: null, // { bp: {sbp,dbp,map}, etco2 } snapshotted at the instant perfusion was lost
   },
 });
 

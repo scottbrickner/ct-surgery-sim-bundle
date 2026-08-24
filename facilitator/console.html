@@ -233,6 +233,32 @@
           <button class="act danger" id="ev_ecmo">ECMO Cannulated</button>
         </div>
 
+        <div class="gl">CPR</div>
+        <div class="btnrow">
+          <button class="act" id="cpr_good">Start CPR — Good</button>
+          <button class="act" id="cpr_poor">Start CPR — Poor</button>
+          <button class="act" id="cpr_stop">Stop CPR</button>
+        </div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)" id="cprStatus">CPR not active</div>
+
+        <div class="gl">Defibrillation / Cardioversion</div>
+        <div class="btnrow">
+          <button class="act danger" id="btn_shock">Deliver Shock</button>
+          <button class="act danger" id="btn_cardiovert">Synchronized Cardioversion</button>
+        </div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Both are facilitator-chosen outcomes (converts to the rhythm/HR set below, or doesn't) - no energy/joules mechanics, pad placement, or real sync-pulse timing this pass. "Deliver Shock" is for a fibrillating/pulseless rhythm (VF, PEA, pulseless VT); "Synchronized Cardioversion" is for an organized-but-unstable tachyarrhythmia that already has a pulse.</div>
+        <div class="grid2">
+          <div class="row"><label>On success → rhythm</label></div>
+        </div>
+        <select id="shock_target_rhythm">
+          <option value="Sinus Rhythm">Sinus Rhythm</option>
+          <option value="Sinus Tachycardia">Sinus Tachycardia</option>
+          <option value="Atrial Fibrillation">Atrial Fibrillation</option>
+        </select>
+        <div class="row"><label>Target HR</label><input type="number" id="shock_target_hr" value="90" min="20" max="220"></div>
+        <div class="row"><label>Post-event instability (min)</label><input type="number" id="shock_unstable_minutes" value="2" min="0" max="15" step="0.5"></div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">A successful shock ramps toward the target over the instability window instead of snapping straight to it - the common, taught post-event hemodynamic instability - rather than a new tracked ROSC state (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
+
         <div class="gl">Medications (IV Push)</div>
         <div id="pushDrugList"></div>
         <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Doses/timing per AHA 2025 CPR/ECC Part 9 (Adult ALS) - see engine/clinical/formulary.js for full sourcing. A DRAFT clinical model pending RN/MD/APP sign-off, not validated for real clinical use.</div>
@@ -246,7 +272,7 @@
         </div>
         <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Fast-forwards the simulated case clock only - lets a slow-onset medication's peak effect be demonstrated without waiting in real time. Independent of ramps/auto-advance, which still play out over real wall-clock time as before.</div>
 
-        <div class="phase-note">CPR quality, defibrillation/cardioversion, a ROSC state machine, and Zoll R-series connection arrive with the pulsatility/CPR model (a later phase). Rhythm + arrest-flag toggles above are what's real today.</div>
+        <div class="phase-note">Real defibrillator mechanics (energy selection, pad placement, actual sync-pulse timing) and tethering to the separate ZOLL R-series simulator project are a future build, not this pass - see engine/clinical/pulsatility-design.md's REVIEW #6. LVAD/Impella/IABP as distinct mechanical-support flow profiles (ECMO only is modeled today) are also deferred.</div>
       </div>
     </details>
 
@@ -336,7 +362,10 @@
         <h2>Current Vitals</h2>
         <div class="patient-sub" id="patientSub">—</div>
       </div>
-      <div id="sessionBadge">Same-machine sync active</div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+        <div id="sessionBadge">Same-machine sync active</div>
+        <span class="pill neutral" id="perfusionStatus">—</span>
+      </div>
     </div>
 
     <div class="release-pref">
@@ -371,6 +400,9 @@ import {
   setInfusionRate, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
 } from '../engine/clinical/pharmacology.js';
 import { PUSH_DRUGS, INFUSIONS } from '../engine/clinical/formulary.js';
+import {
+  isPerfusing, isPulsatile, tickCirculation, getEffectiveSBP, getEffectiveDBP, getEffectiveETCO2,
+} from '../engine/clinical/pulsatility.js';
 // v1 (part/step, linear) - the module every function below was originally
 // written against. Kept as the "sr" (scenarioRunner) alias throughout, same
 // names as before this phase, to keep the diff against a year of prior work
@@ -601,28 +633,44 @@ byId("fs_part3").addEventListener("click",()=>{if(engineMode!=="v1")return;runne
 const READOUT_FIELDS=[
   ["hr","HR","bpm"],["spo2","SpO₂","%"],["rr","RR","/min"],["temp","Temp","°C"],
   ["cvp","CVP","mmHg"],["co","CO","L/min"],["svv","SVV","%"],["ppv","PPV","%"],
-  ["scvo2","ScvO₂","%"],["hpi","HPI",""],
+  ["scvo2","ScvO₂","%"],["hpi","HPI",""],["etco2","etCO₂","mmHg"],
 ];
 // getMedicated*() (engine/clinical/pharmacology.js) compose ON TOP of
 // physiology.js's own overlays (getEffectiveHR's pacer precedence resolves
 // first, exactly as documented in pharmacology.js) rather than replacing
 // them - same "layer overlays, never fork state" rule the whole engine is
 // built around. currentMinute is always runner.state.minute (the simulated
-// case clock this phase made load-bearing), never nowMs.
+// case clock this phase made load-bearing), never nowMs. etCO2 goes through
+// pulsatility.js's getEffectiveETCO2 directly (not a getMedicated* wrapper -
+// no push/infusion drug in this formulary has a defined etco2 effect) so it
+// correctly decays on an unaddressed arrest instead of holding stale.
 function renderReadout(){
   const s=runner.state;
   const minute=s.minute;
-  const MEDICATED={hr:()=>getMedicatedHR(s,minute),co:()=>getMedicatedCO(s,minute),rr:()=>getMedicatedRR(s,minute)};
+  const MEDICATED={hr:()=>getMedicatedHR(s,minute),co:()=>getMedicatedCO(s,minute),rr:()=>getMedicatedRR(s,minute),etco2:()=>getEffectiveETCO2(s,minute)};
   const rows=READOUT_FIELDS.map(([k,label])=>{
     const v=MEDICATED[k]?MEDICATED[k]():s[k];
     const cls=k==="hr"?"rd hero-primary":"rd";
     return `<div class="${cls}"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
   });
-  rows.push(`<div class="rd hero-primary"><div class="rl">BP</div><div class="rv">${Math.round(s.bp.sbp)}/${Math.round(s.bp.dbp)}</div></div>`);
+  rows.push(`<div class="rd hero-primary"><div class="rl">BP</div><div class="rv">${Math.round(getEffectiveSBP(s))}/${Math.round(getEffectiveDBP(s))}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv">${Math.round(getMedicatedMAP(s,minute))}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv" style="font-size:22px">${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:18px">${getEffectiveRhythm(s)}</div></div>`);
   byId("readout").innerHTML=rows.join("");
+  // Phase 6: perfusion status, at a glance - this is the exact distinction
+  // (perfusing vs pulsatile, not the same question) the whole design doc is
+  // built around. Neutral/perfusing-and-pulsatile (normal); warn/perfusing-
+  // but-nonpulsatile (ECMO-only - NOT arrest styling, the core acceptance
+  // criterion); critical/not-perfusing (genuine arrest, no flow at all).
+  const perf=isPerfusing(s),puls=isPulsatile(s);
+  const statusEl=byId("perfusionStatus");
+  if(statusEl){
+    statusEl.className="pill "+(!perf?"critical":puls?"good":"warn");
+    statusEl.textContent=!perf?"Not perfusing (arrest)":puls?"Perfusing · pulsatile":"Perfusing · nonpulsatile (ECMO)";
+  }
+  const cprEl=byId("cprStatus");
+  if(cprEl)cprEl.textContent=s.circulation.cpr.active?("CPR active — "+s.circulation.cpr.quality+" quality"):"CPR not active";
   byId("ov_captured").textContent="Pacer Capture: "+(s.pacer.captured?"ON":"OFF");
   byId("ov_captured").classList.toggle("on",s.pacer.captured);
   const flags=[["flag_arrest","arrestActive"],["flag_sternotomy","sternotomyPerformed"],["flag_ecmo","ecmoCannulated"]];
@@ -781,6 +829,43 @@ byId("ov_captured").addEventListener("click",()=>{
   });
 });
 
+/* ---------------- CPR ---------------- */
+// state.circulation.cpr is independent of rhythm (see pulsatility-design.md
+// REVIEW #1) - a facilitator can start CPR on any rhythm, correct or not,
+// same as real practice. Requires BOTH active:true and a quality set to
+// count as a flow source (see pulsatility.js's isCPRFlowPresent) - stopping
+// clears quality back to null too, not just active:false, so a stale
+// "good"/"poor" value can't linger and confuse the next start.
+function setCPR(active,quality){
+  if(!runner)return;
+  runner=srOverride(runner,{circulation:{cpr:{active,quality}}});
+  renderReadout();
+}
+byId("cpr_good").addEventListener("click",()=>setCPR(true,"good"));
+byId("cpr_poor").addEventListener("click",()=>setCPR(true,"poor"));
+byId("cpr_stop").addEventListener("click",()=>setCPR(false,null));
+
+/* ---------------- Defibrillation / Cardioversion ---------------- */
+// Both actions are the same underlying state transition (design doc REVIEW
+// #6: "cardioversion... mechanical activity is already organized going in -
+// this changes the rhythm/rate, not the mechanical-activity classification"
+// - true for the shock case too, achieveROSC() doesn't need to know or care
+// which button was pressed). Deliberately reuses startFacilitatorRamp()
+// (already exists) for the post-event instability window rather than a new
+// tracked ROSC state - see REVIEW #5, "thin helper, not a state machine".
+function achieveROSC(){
+  if(!runner)return;
+  const rhythm=byId("shock_target_rhythm").value;
+  const hr=parseFloat(byId("shock_target_hr").value);
+  const unstableMinutes=parseFloat(byId("shock_unstable_minutes").value)||0;
+  runner=srOverride(runner,{rhythm,flags:{arrestActive:false}});
+  if(unstableMinutes>0)runner=srStartFacilitatorRamp(runner,{target:{hr},durationMinutes:unstableMinutes,label:"post-event-stabilization"},performance.now());
+  else runner=srOverride(runner,{hr});
+  syncControlsFromRunner();renderReadout();
+}
+byId("btn_shock").addEventListener("click",achieveROSC);
+byId("btn_cardiovert").addEventListener("click",achieveROSC);
+
 /* ---------------- Custom Decline (facilitator-timed, SME-configured) ---------------- */
 const CD_TARGET_MAP={cd_hr:"hr",cd_sbp:"bp.sbp",cd_dbp:"bp.dbp",cd_map:"bp.map",cd_cvp:"cvp",cd_spo2:"spo2"};
 for(const id in CD_TARGET_MAP){
@@ -818,6 +903,12 @@ byId("cd_start").addEventListener("click",()=>{
 function consoleTick(ts){
   if(runner){
     const before=runner;
+    // Phase 6: reactive perfusion-loss/regain bookkeeping - cheap, idempotent,
+    // must run every tick (not just when a ramp/override is active) since a
+    // CPR toggle, arrest flag, or ECMO cannulation click all happen outside
+    // this function and can flip isPerfusing() at any time. See
+    // engine/clinical/pulsatility.js's tickCirculation() docblock.
+    runner={...runner,state:tickCirculation(runner.state,runner.state.minute)};
     // tick()/checkOverrideReleases() are the same function either way (see
     // the import comment up top) - only checkAutoAdvance's destination logic
     // differs (next() vs advanceToStage()), so only that call branches.
@@ -932,7 +1023,7 @@ window.ctSharedEngine={
   getEngineMode:()=>engineMode,
   loadV1FlagshipNow:()=>loadV1Flagship(),
   loadV2ScenarioNow:(scenario)=>loadV2Scenario(scenario),
-  tickNow:(ts)=>{if(runner&&runner.activeRamp){runner=srTick(runner,ts);renderReadout();}return runner&&runner.state;},
+  tickNow:(ts)=>{if(!runner)return null;runner={...runner,state:tickCirculation(runner.state,runner.state.minute)};if(runner.activeRamp)runner=srTick(runner,ts);renderReadout();return runner.state;},
   checkAutoAdvanceNow:(ts)=>{if(!runner)return null;runner=(engineMode==="v1"?srCheckAutoAdvance:v2Engine.checkAutoAdvance)(runner,ts);render();return runner.state;},
   advanceToStageNow:(stageId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.advanceToStage(runner,stageId,ts);syncControlsFromRunner();render();return runner.state;},
   chooseBranchNow:(destinationId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.chooseBranch(runner,destinationId,ts);syncControlsFromRunner();render();return runner.state;},
@@ -957,6 +1048,11 @@ window.ctSharedEngine={
   advanceSimClockNow:(minutes)=>{if(!runner)return null;runner=srAdvanceSimClock(runner,minutes);renderReadout();return runner.state;},
   getMedicatedHRNow:()=>runner&&getMedicatedHR(runner.state,runner.state.minute),
   getMedicatedMAPNow:()=>runner&&getMedicatedMAP(runner.state,runner.state.minute),
+  setCPRNow:(active,quality)=>{setCPR(active,quality);return runner&&runner.state.circulation.cpr;},
+  achieveROSCNow:()=>{achieveROSC();return runner&&runner.state;},
+  getPerfusionStateNow:()=>runner&&({perfusing:isPerfusing(runner.state),pulsatile:isPulsatile(runner.state)}),
+  getEffectiveETCO2Now:()=>runner&&getEffectiveETCO2(runner.state,runner.state.minute),
+  getEffectiveMAPRawNow:()=>runner&&({sbp:getEffectiveSBP(runner.state),dbp:getEffectiveDBP(runner.state)}),
 };
 </script>
 </body>

@@ -36,6 +36,7 @@
 
 import { PUSH_DRUGS, INFUSIONS } from './formulary.js';
 import { getEffectiveHR, applyInstant } from '../physiology.js';
+import { getEffectiveMAP, isPerfusing } from './pulsatility.js';
 
 /** Every dose of `drugKey` given so far, in the order administered. */
 export function getPushes(state, drugKey) {
@@ -221,16 +222,38 @@ export function getMedicatedHR(state, currentMinute) {
   return getEffectiveHR(state) + getMedicationDelta(state, 'hr', currentMinute);
 }
 
+/**
+ * Phase 6 composition note (added when pulsatility.js landed - see
+ * engine/clinical/pulsatility-design.md): MAP/SVR/CO are hemodynamic
+ * measures that genuinely can't exist without flow - a vasopressor infusion
+ * cannot raise a MAP that fundamentally doesn't exist during true arrest,
+ * no matter what rate it's running at. So these three gate their medication
+ * delta on isPerfusing(state) (0 delta with no flow of any kind - native,
+ * CPR, or mechanical support), and MAP additionally uses
+ * getEffectiveMAP() as its base rather than the raw authored state.bp.map,
+ * so it correctly reflects arrest/CPR-scaling/ECMO-passthrough BEFORE
+ * medication effects layer on top - the same "resolve the non-drug
+ * precedence first, then add drug delta" rule getMedicatedHR already
+ * follows for pacer capture. getMedicatedHR/getMedicatedRR stay ungated -
+ * a chronotropic drug's effect on the SA node and a sedative's effect on
+ * the respiratory center are both real even without mechanical flow (PEA's
+ * electrical rate still responds to atropine; fentanyl still depresses
+ * respiration during CPR) - only the MECHANICAL/HEMODYNAMIC measures need
+ * the flow gate.
+ */
 export function getMedicatedMAP(state, currentMinute) {
-  return state.bp.map + getMedicationDelta(state, 'map', currentMinute);
+  const delta = isPerfusing(state) ? getMedicationDelta(state, 'map', currentMinute) : 0;
+  return getEffectiveMAP(state) + delta;
 }
 
 export function getMedicatedSVR(state, currentMinute) {
-  return state.svr + getMedicationDelta(state, 'svr', currentMinute);
+  const delta = isPerfusing(state) ? getMedicationDelta(state, 'svr', currentMinute) : 0;
+  return state.svr + delta;
 }
 
 export function getMedicatedCO(state, currentMinute) {
-  return state.co + getMedicationDelta(state, 'co', currentMinute);
+  const delta = isPerfusing(state) ? getMedicationDelta(state, 'co', currentMinute) : 0;
+  return state.co + delta;
 }
 
 export function getMedicatedRR(state, currentMinute) {
