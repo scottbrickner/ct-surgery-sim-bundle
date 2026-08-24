@@ -89,7 +89,22 @@
       <div class="eyebrow">Author access</div>
       <h1>Scenario Builder</h1>
       <div class="sub">Build, branch, validate, and export staged scenarios. Not a learner or facilitator display.</div>
-      <div class="auth-note">No login is enforced yet - a passcode gate arrives once Supabase Auth is wired in. Anyone with this link can currently build/export locally; nothing is published to other facilitators until then.</div>
+
+      <div class="pill neutral" id="authPill"><span class="dot"></span><span id="authPillText">Checking session…</span></div>
+      <div id="authSignedOut" style="display:none">
+        <div class="row"><label>Author email</label><input type="email" id="auth_email" placeholder="you@med.usc.edu" autocomplete="email"></div>
+        <div class="btnrow"><button class="act mini" id="btn_send_code">Email me a sign-in code</button></div>
+        <div class="row" id="authCodeRow" style="display:none">
+          <label>6-digit code</label>
+          <input type="text" id="auth_code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6">
+          <div class="btnrow"><button class="act mini primary" id="btn_verify_code">Verify &amp; Sign In</button></div>
+        </div>
+        <div class="auth-note" id="authStatusNote"></div>
+      </div>
+      <div id="authSignedIn" class="btnrow" style="display:none">
+        <button class="act mini" id="btn_sign_out">Sign Out</button>
+      </div>
+      <div class="auth-note">Signing in lets you <b>Publish</b> a scenario so any facilitator can load it live from the Console, no login needed on their end. Building, drafting, and exporting locally never requires signing in.</div>
     </div>
 
     <div class="gl">Scenario</div>
@@ -107,6 +122,20 @@
     <div class="btnrow">
       <button class="act" id="btn_load_flagship">Load flagship (migrated from v1)</button>
     </div>
+
+    <div class="gl">Cloud (Supabase)</div>
+    <div class="btnrow">
+      <button class="act primary" id="btn_publish" disabled>Publish (sign in first)</button>
+    </div>
+    <div class="row">
+      <label>My published/saved scenarios</label>
+      <select id="my_scenarios"><option value="">— none yet —</option></select>
+    </div>
+    <div class="btnrow">
+      <button class="act mini" id="btn_load_mine" disabled>Load</button>
+      <button class="act mini danger" id="btn_unpublish" disabled>Unpublish</button>
+    </div>
+    <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Publish makes the CURRENT draft loadable by any facilitator from the Console's Cloud scenario list. Unpublishing only affects future loads, not a session already running.</div>
 
     <div class="gl">Local Drafts</div>
     <div class="btnrow">
@@ -155,6 +184,7 @@ import {
 import { getEffectiveRhythm, getEffectiveHR } from '../engine/physiology.js';
 import { validateScenarioV2, formatValidationErrors } from '../scenarios/validate.js';
 import { migrateV1ToV2 } from '../scenarios/migrate.js';
+import { supabase } from '../supabase/client.js';
 
 const byId = (id) => document.getElementById(id);
 const LOCAL_KEY = 'ct-sim-builder-drafts-v1';
@@ -558,6 +588,126 @@ byId('btn_delete_local').addEventListener('click', () => {
   refreshDraftList();
 });
 
+/* ---------------- Author auth (Supabase, email-code sign-in) ---------------- */
+// Deliberately code-entry (verifyOtp) rather than a clickable magic-link
+// redirect as the PRIMARY flow, even though Supabase's default email
+// template supports both: a link-triggered top-level redirect can behave
+// unpredictably if this page is ever opened inside a SharePoint/Teams
+// iframe (see index.html's embedding target), while reading a 6-digit code
+// out of an email and typing it into the page works identically everywhere,
+// embedded or not. See supabase/README.md for the one-time dashboard config
+// this depends on (Auth -> URL Configuration redirect allow-list).
+let currentUser = null;
+
+function renderAuthUI() {
+  const pill = byId('authPill'), pillText = byId('authPillText');
+  const signedOut = byId('authSignedOut'), signedIn = byId('authSignedIn');
+  if (currentUser) {
+    pill.className = 'pill good';
+    pillText.textContent = 'Signed in as ' + currentUser.email;
+    signedOut.style.display = 'none';
+    signedIn.style.display = 'flex';
+  } else {
+    pill.className = 'pill neutral';
+    pillText.textContent = 'Not signed in';
+    signedOut.style.display = 'block';
+    signedIn.style.display = 'none';
+  }
+  byId('btn_publish').disabled = !currentUser;
+  byId('btn_publish').textContent = currentUser ? 'Publish' : 'Publish (sign in first)';
+  byId('btn_load_mine').disabled = !currentUser;
+  byId('btn_unpublish').disabled = !currentUser;
+}
+
+supabase.auth.onAuthStateChange((_event, session) => {
+  currentUser = session?.user || null;
+  renderAuthUI();
+  if (currentUser) refreshMyScenarios(); else byId('my_scenarios').innerHTML = '<option value="">— none yet —</option>';
+});
+
+byId('btn_send_code').addEventListener('click', async () => {
+  const email = byId('auth_email').value.trim();
+  if (!email) { alert('Enter an email first.'); return; }
+  const btn = byId('btn_send_code');
+  btn.disabled = true;
+  const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+  btn.disabled = false;
+  byId('authStatusNote').textContent = error
+    ? ('Error: ' + error.message)
+    : 'Sent. Check your email for a 6-digit code (also works as a clickable link, but the code below is the reliable path).';
+  byId('authCodeRow').style.display = error ? 'none' : 'block';
+});
+
+byId('btn_verify_code').addEventListener('click', async () => {
+  const email = byId('auth_email').value.trim();
+  const token = byId('auth_code').value.trim();
+  if (!email || !token) { alert('Need both the email and the code.'); return; }
+  const btn = byId('btn_verify_code');
+  btn.disabled = true;
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  btn.disabled = false;
+  byId('authStatusNote').textContent = error ? ('Error: ' + error.message) : '';
+  // onAuthStateChange fires renderAuthUI() on success - nothing else to do here.
+});
+
+byId('btn_sign_out').addEventListener('click', () => { supabase.auth.signOut(); });
+
+/* ---------------- Publish / load-mine / unpublish (Supabase `scenarios` table) ---------------- */
+byId('btn_publish').addEventListener('click', async () => {
+  if (!currentUser) return;
+  const result = validateScenarioV2(scenario);
+  if (!result.valid) { alert('Fix the ' + result.errors.length + ' validation error(s) above before publishing.'); return; }
+  if (!scenario.id) { alert('Give this scenario an ID first (used as its slug).'); return; }
+  const btn = byId('btn_publish');
+  btn.disabled = true; btn.textContent = 'Publishing…';
+  const { error } = await supabase.from('scenarios').upsert({
+    owner_id: currentUser.id,
+    scenario_slug: scenario.id,
+    title: scenario.title || 'Untitled',
+    population: scenario.population || null,
+    data: scenario,
+    published: true,
+  }, { onConflict: 'owner_id,scenario_slug' });
+  renderAuthUI(); // resets button label/disabled state
+  if (error) { alert('Publish failed: ' + error.message); return; }
+  alert('Published "' + (scenario.title || scenario.id) + '". Facilitators can now load it from the Console\'s Cloud scenario list.');
+  refreshMyScenarios();
+});
+
+async function refreshMyScenarios() {
+  if (!currentUser) return;
+  const { data, error } = await supabase.from('scenarios')
+    .select('id,title,published')
+    .eq('owner_id', currentUser.id)
+    .order('updated_at', { ascending: false });
+  if (error) return;
+  const sel = byId('my_scenarios');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— none yet —</option>' + (data || []).map((r) =>
+    `<option value="${escapeAttr(r.id)}">${escapeHtml(r.title)}${r.published ? '' : ' (unpublished)'}</option>`).join('');
+  sel.value = current;
+}
+
+byId('btn_load_mine').addEventListener('click', async () => {
+  const id = byId('my_scenarios').value;
+  if (!id) return;
+  const { data, error } = await supabase.from('scenarios').select('data').eq('id', id).single();
+  if (error) { alert('Load failed: ' + error.message); return; }
+  scenario = data.data;
+  selectedStageId = scenario.stages[0]?.id;
+  previewRunner = null;
+  render();
+});
+
+byId('btn_unpublish').addEventListener('click', async () => {
+  const id = byId('my_scenarios').value;
+  if (!id) return;
+  if (!confirm('Unpublish this scenario? Facilitators will no longer see it in the Console\'s Cloud list. A session already running from a loaded copy is unaffected.')) return;
+  const { error } = await supabase.from('scenarios').update({ published: false }).eq('id', id);
+  if (error) { alert('Unpublish failed: ' + error.message); return; }
+  refreshMyScenarios();
+});
+
 /* Testing hook, same rationale as every other page in this project */
 window.ctBuilder = {
   getScenario: () => scenario,
@@ -565,7 +715,15 @@ window.ctBuilder = {
   getPreviewRunner: () => previewRunner,
   validate: () => validateScenarioV2(scenario),
   loadFlagship: () => byId('btn_load_flagship').click(),
+  getCurrentUser: () => currentUser,
+  getSupabase: () => supabase,
 };
+
+supabase.auth.getSession().then(({ data }) => {
+  currentUser = data.session?.user || null;
+  renderAuthUI();
+  if (currentUser) refreshMyScenarios();
+});
 
 refreshDraftList();
 render();
