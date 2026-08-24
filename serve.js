@@ -23,8 +23,20 @@ const MIME = {
   '.png': 'image/png',
 };
 
+// Emoji-based favicon so every page (root + all sub-apps) gets a tab icon
+// instead of a harmless-but-noisy 404 for /favicon.ico on each load.
+const FAVICON_SVG = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' +
+  '<text y=".9em" font-size="90">\u{1FAC0}</text></svg>'
+);
+
 http.createServer((req, res) => {
   const urlPath = decodeURIComponent(req.url.split('?')[0]);
+  if (urlPath === '/favicon.ico') {
+    res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+    res.end(FAVICON_SVG);
+    return;
+  }
   const filePath = path.join(ROOT, path.normalize(urlPath));
   if (!filePath.startsWith(ROOT)) { res.writeHead(403); res.end('Forbidden'); return; }
 
