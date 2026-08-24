@@ -137,6 +137,13 @@
 </style>
 </head>
 <body>
+<!-- Phase 10: "training simulation only" notice, present on every surface per the
+     audit's own acceptance criterion. Deliberately a tiny, low-opacity, non-interactive
+     corner watermark rather than a banner - this device's whole point is looking like a
+     real IntelliVue MX, and a prominent disclaimer competing with the primary display
+     would undercut that on purpose-built realism. pointer-events:none so it can never
+     intercept a real click/tap on the monitor underneath it. -->
+<div style="position:fixed;bottom:4px;right:6px;z-index:9999;pointer-events:none;font:600 9px/1.4 -apple-system,sans-serif;letter-spacing:0.04em;color:rgba(255,120,120,0.6);background:rgba(0,0,0,0.4);padding:2px 6px;border-radius:3px;">SIMULATION — TRAINING ONLY</div>
 <div id="app">
   <div id="status">
     <span class="bed" id="bed">CT-7</span><span class="pt" id="ptname">Doe, John</span>
