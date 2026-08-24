@@ -335,7 +335,7 @@ import {
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
 } from '../../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot, isValidGraphSnapshot } from '../../sync/deviceSync.js';
-import { getEffectiveHR } from '../../engine/physiology.js';
+import { getMedicatedHR, getMedicatedMAP, getMedicatedCO } from '../../engine/clinical/pharmacology.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -650,7 +650,7 @@ loadScn("postop");layout();setView("mon");requestAnimationFrame(frame);
 // formula. Preserving this device's live derivation is more faithful to how
 // a real monitor behaves than adding an override field it wouldn't have.
 function applyEngineValuesLight(es){
-  drv.co=es.co;drv.map=es.bp.map;drv.pr=getEffectiveHR(es);drv.cvp=es.cvp;drv.svv=es.svv;drv.ppv=es.ppv;
+  drv.co=getMedicatedCO(es,es.minute);drv.map=getMedicatedMAP(es,es.minute);drv.pr=getMedicatedHR(es,es.minute);drv.cvp=es.cvp;drv.svv=es.svv;drv.ppv=es.ppv;
   drv.scvo2=es.scvo2;drv.hpi=es.hpi;drv.sys=es.bp.sbp;drv.dia=es.bp.dbp;if(es.temp)drv.temp=es.temp;
 }
 function applyEngineStateFull(es){

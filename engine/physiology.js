@@ -44,6 +44,15 @@ const BASE_STATE = Object.freeze({
   chestTubes: { rPleural: 0, rMediastinal: 0, blake: 0, lPleural: 0, lMediastinal: 0 },
   pacer: { mode: 'off', rate: 0, outputMa: 0, sensitivityMv: 0, captured: false },
   flags: { arrestActive: false, sternotomyPerformed: false, ecmoCannulated: false },
+  // Phase 5 (engine/clinical/pharmacology.js) - deliberately NOT in NUMERIC_PATHS
+  // (arrays/maps, not a single ramp-able number) and never read directly by
+  // getEffective*() overlays here; pharmacology.js reads it and composes its
+  // OWN overlay functions on top of these, same "derived, never mutates
+  // authored state" pattern as isPacing()/getEffectiveRhythm() below.
+  medications: {
+    pushes: [], // [{ drug: 'atropine', atMinute: 4.5, doseMg: 1 }, ...] - every administered IV push bolus, in order given
+    infusionSetAtMinute: {}, // { epi: 12, levo: null, ... } - state.minute at which each drips.* field's CURRENT rate was last changed (null = never set / still at 0)
+  },
 });
 
 // Exported (not just internal to rampState) so scenarioRunner.js's override-

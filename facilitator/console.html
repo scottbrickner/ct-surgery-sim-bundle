@@ -206,7 +206,7 @@
         <label class="row">Insulin (u/hr) <input type="range" id="ov_insulin" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_insulin_v">0</span></label>
         <div class="ov-status" id="ov_insulin_status" hidden></div>
 
-        <div class="phase-note">Antiarrhythmics, boluses, IV push, IV piggybacks, and real dose/onset/duration modeling arrive with the formulary-driven intervention engine (a later phase) — these sliders are raw infusion rates only today.</div>
+        <div class="phase-note">Every slider above now has real dose/onset/duration modeling (engine/clinical/pharmacology.js, sourced from CP4-156 Attachment B) — the readout's HR/CO/RR/MAP reflect the formulary's onset lag as you titrate, not just the raw rate. IV push drugs (atropine, adenosine, metoprolol, amiodarone) are under BLS/ACLS below. IV piggybacks and remaining antiarrhythmics are still not modeled.</div>
       </div>
     </details>
 
@@ -232,6 +232,20 @@
           <button class="act danger" id="ev_sternotomy">Sternotomy</button>
           <button class="act danger" id="ev_ecmo">ECMO Cannulated</button>
         </div>
+
+        <div class="gl">Medications (IV Push)</div>
+        <div id="pushDrugList"></div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Doses/timing per AHA 2025 CPR/ECC Part 9 (Adult ALS) - see engine/clinical/formulary.js for full sourcing. A DRAFT clinical model pending RN/MD/APP sign-off, not validated for real clinical use.</div>
+
+        <div class="gl">Simulated Time</div>
+        <div class="row"><label>Case clock</label><span class="val" id="simClockDisplay">t+0.0 min</span></div>
+        <div class="btnrow">
+          <button class="act" id="btn_advance_1">+1 min</button>
+          <button class="act" id="btn_advance_5">+5 min</button>
+          <button class="act" id="btn_advance_15">+15 min</button>
+        </div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Fast-forwards the simulated case clock only - lets a slow-onset medication's peak effect be demonstrated without waiting in real time. Independent of ramps/auto-advance, which still play out over real wall-clock time as before.</div>
+
         <div class="phase-note">CPR quality, defibrillation/cardioversion, a ROSC state machine, and Zoll R-series connection arrive with the pulsatility/CPR model (a later phase). Rhythm + arrest-flag toggles above are what's real today.</div>
       </div>
     </details>
@@ -351,7 +365,12 @@
 </div>
 
 <script type="module">
-import { getEffectiveRhythm, getEffectiveHR } from '../engine/physiology.js';
+import { getEffectiveRhythm, getEffectiveHR, applyInstant } from '../engine/physiology.js';
+import {
+  administerPush, canAdministerPush, getPushDoseCount, getPushTotalDoseMg,
+  setInfusionRate, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
+} from '../engine/clinical/pharmacology.js';
+import { PUSH_DRUGS, INFUSIONS } from '../engine/clinical/formulary.js';
 // v1 (part/step, linear) - the module every function below was originally
 // written against. Kept as the "sr" (scenarioRunner) alias throughout, same
 // names as before this phase, to keep the diff against a year of prior work
@@ -365,7 +384,7 @@ import { getEffectiveRhythm, getEffectiveHR } from '../engine/physiology.js';
 // with zero branching, using these same v1-sourced references throughout.
 import {
   next as srNext, prev as srPrev, jumpToPart as srJumpToPart,
-  tick as srTick, applyFacilitatorOverride as srOverride,
+  tick as srTick, applyFacilitatorOverride as srOverride, advanceSimClock as srAdvanceSimClock,
   getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
   startFacilitatorRamp as srStartFacilitatorRamp,
@@ -584,15 +603,23 @@ const READOUT_FIELDS=[
   ["cvp","CVP","mmHg"],["co","CO","L/min"],["svv","SVV","%"],["ppv","PPV","%"],
   ["scvo2","ScvO₂","%"],["hpi","HPI",""],
 ];
+// getMedicated*() (engine/clinical/pharmacology.js) compose ON TOP of
+// physiology.js's own overlays (getEffectiveHR's pacer precedence resolves
+// first, exactly as documented in pharmacology.js) rather than replacing
+// them - same "layer overlays, never fork state" rule the whole engine is
+// built around. currentMinute is always runner.state.minute (the simulated
+// case clock this phase made load-bearing), never nowMs.
 function renderReadout(){
   const s=runner.state;
+  const minute=s.minute;
+  const MEDICATED={hr:()=>getMedicatedHR(s,minute),co:()=>getMedicatedCO(s,minute),rr:()=>getMedicatedRR(s,minute)};
   const rows=READOUT_FIELDS.map(([k,label])=>{
-    const v=k==="hr"?getEffectiveHR(s):s[k];
+    const v=MEDICATED[k]?MEDICATED[k]():s[k];
     const cls=k==="hr"?"rd hero-primary":"rd";
     return `<div class="${cls}"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
   });
   rows.push(`<div class="rd hero-primary"><div class="rl">BP</div><div class="rv">${Math.round(s.bp.sbp)}/${Math.round(s.bp.dbp)}</div></div>`);
-  rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv">${Math.round(s.bp.map)}</div></div>`);
+  rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv">${Math.round(getMedicatedMAP(s,minute))}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv" style="font-size:22px">${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:18px">${getEffectiveRhythm(s)}</div></div>`);
   byId("readout").innerHTML=rows.join("");
@@ -604,6 +631,37 @@ function renderReadout(){
     el.className="pill "+(s.flags[k]?"critical":"neutral");
   });
   byId("ov_rhythm").value=s.rhythm in {"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1,"Ventricular Tachycardia":1,"Ventricular Fibrillation":1}?s.rhythm:byId("ov_rhythm").value;
+  byId("simClockDisplay").textContent="t+"+s.minute.toFixed(1)+" min";
+  renderPushDrugs();
+}
+
+/**
+ * One button per formulary push drug - label shows dose count/total given so
+ * far, disabled with canAdministerPush()'s own reason as the tooltip once
+ * the max dose/repeat-interval guard blocks the next one. Re-rendered every
+ * renderReadout() call (not just on click) since the repeat-interval guard
+ * clears purely as a function of simulated time passing, with no other
+ * state change to hook.
+ */
+function renderPushDrugs(){
+  const s=runner.state,minute=s.minute;
+  byId("pushDrugList").innerHTML=Object.keys(PUSH_DRUGS).map((key)=>{
+    const drug=PUSH_DRUGS[key];
+    const count=getPushDoseCount(s,key),totalMg=getPushTotalDoseMg(s,key);
+    const guard=canAdministerPush(s,key,minute);
+    const given=count>0?` — ${count} given (${totalMg} mg)`:"";
+    return `<button class="act" id="push_${key}" ${guard.allowed?"":"disabled"} title="${guard.reason?guard.reason.replace(/"/g,"&quot;"):drug.indication.replace(/"/g,"&quot;")}">${drug.label}${given}</button>`;
+  }).join("");
+  Object.keys(PUSH_DRUGS).forEach((key)=>{
+    const btn=byId("push_"+key);
+    if(btn)btn.addEventListener("click",()=>{
+      if(!runner)return;
+      const guard=canAdministerPush(runner.state,key,runner.state.minute);
+      if(!guard.allowed){alert(guard.reason);return;}
+      runner={...runner,state:administerPush(runner.state,key,runner.state.minute)};
+      renderReadout();
+    });
+  });
 }
 
 /* ---------------- Override sliders (release-capable) ---------------- */
@@ -630,13 +688,29 @@ function currentReleaseChoice(){
   return v==="hold" ? {releaseMode:"hold"} : {releaseMode:"duration", releaseMinutes:parseFloat(v)};
 }
 
+// A drips.* path also modeled in the Phase 5 formulary (INFUSIONS) gets its
+// medications.infusionSetAtMinute stamp updated whenever the RATE actually
+// changes - captured from the PRIOR value before srSetOverride writes the
+// new one, since by the time that call returns the "before" value is gone.
+// insulin isn't in INFUSIONS' effect model (see formulary.js) so this is a
+// harmless no-op for it, same as every other unmodeled drip would be.
+function stampInfusionOnsetIfRateChanged(path,priorValue,newValue){
+  if(!path.startsWith("drips."))return;
+  const drugKey=path.slice(6);
+  if(!INFUSIONS[drugKey]?.effectAtMaxRate)return;
+  if(priorValue===newValue)return;
+  runner={...runner,state:applyInstant(runner.state,{medications:{infusionSetAtMinute:{[drugKey]:runner.state.minute}}})};
+}
 for(const id in OVERRIDE_MAP){
   const el=byId(id),vv=byId(id+"_v");
   el.addEventListener("input",()=>{
     const val=parseFloat(el.value);
     vv.textContent=fmtVal(el,val);
     if(!runner)return;
-    runner=srSetOverride(runner,OVERRIDE_MAP[id],val,currentReleaseChoice(),performance.now());
+    const path=OVERRIDE_MAP[id];
+    const priorValue=getPath(runner.state,path);
+    runner=srSetOverride(runner,path,val,currentReleaseChoice(),performance.now());
+    stampInfusionOnsetIfRateChanged(path,priorValue,val);
     renderReadout();
     renderOverrideStatus(id,OVERRIDE_MAP[id]);
   });
@@ -696,6 +770,13 @@ byId("ov_captured").addEventListener("click",()=>{
   byId(id).addEventListener("click",()=>{
     if(!runner)return;
     runner=srOverride(runner,{flags:{[flag]:!runner.state.flags[flag]}});
+    renderReadout();
+  });
+});
+[["btn_advance_1",1],["btn_advance_5",5],["btn_advance_15",15]].forEach(([id,minutes])=>{
+  byId(id).addEventListener("click",()=>{
+    if(!runner)return;
+    runner=srAdvanceSimClock(runner,minutes);
     renderReadout();
   });
 });
@@ -871,6 +952,11 @@ window.ctSharedEngine={
   setSessionMode:(m)=>{if(m==="training"||m==="validation"){sessionMode=m;applyModeToUI();}},
   refreshCloudNow:()=>refreshCloudScenarios(),
   getCloudOptions:()=>Array.from(byId("cloud_scenarios").options).map((o)=>({value:o.value,text:o.textContent})),
+  administerPushNow:(drugKey)=>{if(!runner)return null;runner={...runner,state:administerPush(runner.state,drugKey,runner.state.minute)};renderReadout();return runner.state;},
+  canAdministerPushNow:(drugKey)=>runner&&canAdministerPush(runner.state,drugKey,runner.state.minute),
+  advanceSimClockNow:(minutes)=>{if(!runner)return null;runner=srAdvanceSimClock(runner,minutes);renderReadout();return runner.state;},
+  getMedicatedHRNow:()=>runner&&getMedicatedHR(runner.state,runner.state.minute),
+  getMedicatedMAPNow:()=>runner&&getMedicatedMAP(runner.state,runner.state.minute),
 };
 </script>
 </body>

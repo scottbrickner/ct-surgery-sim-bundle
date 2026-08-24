@@ -15,14 +15,14 @@ import {
   tick as sharedTick,
   checkOverrideReleases, setOverrideWithRelease, releaseOverrideNow,
   startGradualRelease, getOverrideInfo, isOverridden,
-  applyFacilitatorOverride, startFacilitatorRamp,
+  applyFacilitatorOverride, startFacilitatorRamp, advanceSimClock,
   getRampProgress, getAutoAdvanceCountdown, cancelAutoAdvance,
 } from './scenarioRunner.js';
 
 export {
   checkOverrideReleases, setOverrideWithRelease, releaseOverrideNow,
   startGradualRelease, getOverrideInfo, isOverridden,
-  applyFacilitatorOverride, startFacilitatorRamp,
+  applyFacilitatorOverride, startFacilitatorRamp, advanceSimClock,
   getRampProgress, getAutoAdvanceCountdown, cancelAutoAdvance,
 };
 

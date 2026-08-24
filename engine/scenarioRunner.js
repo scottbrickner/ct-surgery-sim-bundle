@@ -278,6 +278,27 @@ export function applyFacilitatorOverride(runner, patch) {
   return { ...runner, state, activeRamp };
 }
 
+/**
+ * Explicitly jump the simulated case clock (state.minute) forward by
+ * `minutesToAdvance` - Phase 5's "accelerated" time model. The existing
+ * ramp/tick machinery above already covers the "realistic" side (a ramp
+ * genuinely takes real wall-clock minutes to play out, per BUILD_PROMPT.md's
+ * original "5-minute ramp means 5 real wall-clock minutes" decision, left
+ * unchanged) - this is the new complementary action for skipping simulated
+ * time forward without literally waiting, e.g. to demonstrate a slow-onset
+ * medication's peak effect. Deliberately reuses applyFacilitatorOverride()
+ * rather than duplicating its ramp-rebasing logic - advancing state.minute
+ * is exactly a facilitator override on one path, nothing more. Medication
+ * effects (engine/clinical/pharmacology.js) are computed as a pure function
+ * of state.minute at read time, so nothing else needs recomputing here -
+ * same "derived overlay, never mutates authored state" precedent as
+ * physiology.js's getEffectiveHR/getEffectiveRhythm.
+ */
+export function advanceSimClock(runner, minutesToAdvance) {
+  if (!(minutesToAdvance > 0)) return runner;
+  return applyFacilitatorOverride(runner, { minute: runner.state.minute + minutesToAdvance });
+}
+
 /* =========================================================================
  * Override release model
  *
