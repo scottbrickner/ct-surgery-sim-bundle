@@ -81,15 +81,42 @@ exercise end-to-end, not a fix. The moment email delivery starts working
 (whether via resolving this Resend issue, trying a different SMTP provider,
 or Resend domain verification), sign-in works too, with zero code changes.
 
+**2026-08-24 follow-up**: rotated the Resend API key (unrelated security
+hygiene - the original key had been pasted into a chat session) and retried
+with the fresh key. Identical result - zero connection attempts in Resend's
+Logs. This rules out a stale/wrong credential as the cause.
+
+Leading hypothesis now: Resend's SMTP relay may enforce stricter
+sender-verification than its HTTP API sandbox does. The dashboard's
+"send a test email" button that worked uses Resend's HTTP API directly with
+relaxed sandbox rules for `onboarding@resend.dev`; the SMTP interface may
+reject/drop an unauthenticated relay attempt from an unverified sending
+domain before it would ever create a log entry - which fits every symptom
+observed (API always succeeds client-side, SMTP never registers server-side,
+regardless of port or credential).
+
+The user does not currently own a domain to verify (the standard fix for
+this class of issue), so as of this writing the plan is: a support request
+has been drafted describing the exact symptom (SMTP invisible to Logs, API
+works) for Resend to check server-side - see chat history around
+2026-08-24 for the drafted message text, or re-derive it from this file's
+description above. Sending it, and following up with Resend support's
+answer, is the next concrete step whenever this gets picked back up.
+
 Things worth trying if you pick this back up:
-- Resend domain verification (moves off the `onboarding@resend.dev` sandbox
-  address onto a fully-supported sending path - may sidestep whatever
-  sandbox-specific restriction is in play)
+- Send the drafted Resend support request (see above) and act on their
+  answer - this is the most likely fastest path to a real diagnosis at
+  this point, now that credential/port/rate-limit/template have all been
+  ruled out.
+- Domain verification, if a domain becomes available later (own one for
+  another project, buy one for ~$10-15/yr, etc.) - moves off the sandbox
+  restrictions entirely regardless of what the actual root cause turns out
+  to be.
 - Supabase support / status page, in case this is a known platform-side
-  issue at the time you're reading this
+  issue at the time you're reading this.
 - A different SMTP provider (Postmark, SendGrid) as a process of elimination
   - if a second provider also shows zero connection attempts, that's a
-  stronger signal the issue is Supabase-side, not Resend-side
+  stronger signal the issue is Supabase-side, not Resend-side.
 
 ## What's NOT part of this foundation
 
