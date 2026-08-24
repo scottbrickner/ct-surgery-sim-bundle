@@ -36,7 +36,7 @@
 
 import { PUSH_DRUGS, INFUSIONS } from './formulary.js';
 import { getEffectiveHR, applyInstant } from '../physiology.js';
-import { getEffectiveMAP, isPerfusing } from './pulsatility.js';
+import { getEffectiveMAP, getEffectiveCO, isPerfusing } from './pulsatility.js';
 
 /** Every dose of `drugKey` given so far, in the order administered. */
 export function getPushes(state, drugKey) {
@@ -253,7 +253,7 @@ export function getMedicatedSVR(state, currentMinute) {
 
 export function getMedicatedCO(state, currentMinute) {
   const delta = isPerfusing(state) ? getMedicationDelta(state, 'co', currentMinute) : 0;
-  return state.co + delta;
+  return getEffectiveCO(state) + delta; // Phase 7: composes on getEffectiveCO (Phase 6's base layer) instead of raw state.co, mirroring getMedicatedMAP's fix - a CPR-augmenting drug (e.g. epi during arrest) can meaningfully boost compression-generated flow, so the delta still applies on top of CPR's representative low-flow value, same isPerfusing() gate as before
 }
 
 export function getMedicatedRR(state, currentMinute) {

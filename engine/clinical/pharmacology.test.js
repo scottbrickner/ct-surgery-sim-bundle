@@ -209,8 +209,12 @@ test('getMedicatedHR/getMedicatedRR stay UNGATED by perfusion - electrical and r
   assert.equal(getMedicatedHR(s, drug.peakMinutes), 50 + drug.effect.hr); // full effect despite zero flow - not gated
 });
 
-test('getMedicatedSVR/getMedicatedCO also gate their medication delta on isPerfusing, same reasoning as MAP', () => {
-  let s = setInfusionRate(createState({ rhythm: 'PEA', svr: 1200, co: 4 }), 'milrinone', INFUSIONS.milrinone.maxRateMcgPerKgPerMin, 0);
+test('getMedicatedSVR gates its medication delta on isPerfusing, same reasoning as MAP - SVR itself is not perfusion-aware (out of Phase 6/7 scope), so it stays at the raw authored value with no drug delta', () => {
+  let s = setInfusionRate(createState({ rhythm: 'PEA', svr: 1200 }), 'milrinone', INFUSIONS.milrinone.maxRateMcgPerKgPerMin, 0);
   assert.equal(getMedicatedSVR(s, INFUSIONS.milrinone.onsetMinutes), 1200); // unchanged - no flow, no drug delta applied
-  assert.equal(getMedicatedCO(s, INFUSIONS.milrinone.onsetMinutes), 4);
+});
+
+test('getMedicatedCO (Phase 7: now composes on getEffectiveCO) correctly reads 0 during true arrest, not the stale raw authored value - this is the exact gap Phase 7 closed, was still returning 4 (the raw state.co) before that fix', () => {
+  let s = setInfusionRate(createState({ rhythm: 'PEA', co: 4 }), 'milrinone', INFUSIONS.milrinone.maxRateMcgPerKgPerMin, 0);
+  assert.equal(getMedicatedCO(s, INFUSIONS.milrinone.onsetMinutes), 0);
 });

@@ -78,7 +78,7 @@ const BASE_STATE = Object.freeze({
   circulation: {
     cpr: { active: false, quality: null }, // quality: 'good' | 'poor' | null
     lastPerfusingAtMinute: null,
-    atLoss: null, // { bp: {sbp,dbp,map}, etco2 } snapshotted at the instant perfusion was lost
+    atLoss: null, // { bp: {sbp,dbp,map}, etco2, co, scvo2 } snapshotted at the instant perfusion was lost - co/scvo2 added Phase 7 (HemoSphere synchronization), same snapshot, same reason
   },
 });
 

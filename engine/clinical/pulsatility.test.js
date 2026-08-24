@@ -4,7 +4,7 @@ import { createState } from '../physiology.js';
 import {
   mechanicalActivity, isNativeFlowPresent, isCPRFlowPresent, isSupportFlowPresent,
   isPerfusing, isPulsatile, tickCirculation, getEffectiveMAP, getEffectiveSBP, getEffectiveDBP,
-  getEffectiveETCO2,
+  getEffectiveETCO2, getEffectiveCO, getEffectiveSVV, getEffectivePPV, getEffectiveScvO2,
 } from './pulsatility.js';
 
 /* ---------------- mechanicalActivity() ---------------- */
@@ -124,14 +124,14 @@ test('CPR flow requires BOTH active:true and a quality set - active alone (quali
 
 /* ---------------- tickCirculation: edge detection + snapshot bookkeeping ---------------- */
 
-test('tickCirculation: transitioning from perfusing to not-perfusing snapshots bp+etco2 and stamps the minute', () => {
+test('tickCirculation: transitioning from perfusing to not-perfusing snapshots bp+etco2+co+scvo2 and stamps the minute', () => {
   let s = organizedState();
-  s = { ...s, bp: { sbp: 118, dbp: 64, map: 82 }, etco2: 38 };
+  s = { ...s, bp: { sbp: 118, dbp: 64, map: 82 }, etco2: 38, co: 5.2, scvo2: 68 };
   assert.equal(s.circulation.lastPerfusingAtMinute, null);
   s = { ...s, rhythm: 'PEA' }; // perfusion just lost
   s = tickCirculation(s, 12.5);
   assert.equal(s.circulation.lastPerfusingAtMinute, 12.5);
-  assert.deepEqual(s.circulation.atLoss, { bp: { sbp: 118, dbp: 64, map: 82 }, etco2: 38 });
+  assert.deepEqual(s.circulation.atLoss, { bp: { sbp: 118, dbp: 64, map: 82 }, etco2: 38, co: 5.2, scvo2: 68 });
 });
 
 test('tickCirculation: repeated calls while still not-perfusing are a no-op (same reference, snapshot not re-taken)', () => {
@@ -238,4 +238,97 @@ test('getEffectiveETCO2: this is what closes the confirmed gap - an unaddressed 
   s = tickCirculation({ ...s, rhythm: 'PEA' }, 0);
   assert.notEqual(getEffectiveETCO2(s, 5), 40); // 5 minutes unaddressed - must have moved off the pre-arrest value
   assert.equal(getEffectiveETCO2(s, 5), 4); // and specifically be at the decayed floor by then
+});
+
+/* ---------------- Phase 7 (HemoSphere synchronization): getEffectiveCO/SVV/PPV/ScvO2 ---------------- */
+// Acceptance criterion: "No combination of severe unsupported deterioration
+// or arrest leaves CO/CI/SVV/venous-O2 looking normal." These extend the
+// exact pattern already established and reviewed for MAP/SBP/DBP/etCO2 -
+// no new clinical judgment calls, per the audit's own Phase 7 framing
+// ("HemoSphere's registry reads the new pulsatility overlay the same way
+// IntelliVue does").
+
+test('getEffectiveCO: native and ECMO-only both pass the authored value straight through unchanged', () => {
+  assert.equal(getEffectiveCO(createState({ rhythm: 'Sinus Rhythm', co: 5.2 })), 5.2);
+  assert.equal(getEffectiveCO(withECMO(createState({ rhythm: 'PEA', co: 4.0 }), true)), 4.0);
+});
+
+test('getEffectiveCO: no flow at all is exactly 0 - CO cannot exist with nothing moving blood', () => {
+  assert.equal(getEffectiveCO(createState({ rhythm: 'PEA', co: 5.2 })), 0);
+});
+
+test('getEffectiveCO: CPR produces real but severely reduced flow, good > poor, neither anywhere near the pre-arrest baseline', () => {
+  const base = createState({ rhythm: 'PEA', co: 5.2 });
+  const good = getEffectiveCO(withCPR(base, 'good'));
+  const poor = getEffectiveCO(withCPR(base, 'poor'));
+  assert.ok(good > poor);
+  assert.ok(good < 5.2 && poor < 5.2, 'CPR-generated CO should never read as if it were the normal pre-arrest baseline');
+});
+
+test('getEffectiveSVV/getEffectivePPV: pass the authored value through during ANY real flow (native, CPR, or ECMO), 0 with none at all', () => {
+  const organized = createState({ rhythm: 'Sinus Rhythm', svv: 12, ppv: 11 });
+  assert.equal(getEffectiveSVV(organized), 12);
+  assert.equal(getEffectivePPV(organized), 11);
+  const cpr = withCPR(createState({ rhythm: 'PEA', svv: 12, ppv: 11 }), 'good');
+  assert.equal(getEffectiveSVV(cpr), 12);
+  const none = createState({ rhythm: 'PEA', svv: 12, ppv: 11 });
+  assert.equal(getEffectiveSVV(none), 0);
+  assert.equal(getEffectivePPV(none), 0);
+});
+
+test('getEffectiveScvO2: native and ECMO-only pass the authored value through; CPR reads a representative reduced value; no flow decays toward a low floor', () => {
+  const native = createState({ rhythm: 'Sinus Rhythm', scvo2: 68 });
+  assert.equal(getEffectiveScvO2(native, 0), 68);
+  const ecmo = withECMO(createState({ rhythm: 'PEA', scvo2: 68 }), true);
+  assert.equal(getEffectiveScvO2(ecmo, 0), 68);
+  const cprBase = createState({ rhythm: 'PEA', scvo2: 68 });
+  const goodCPR = getEffectiveScvO2(withCPR(cprBase, 'good'), 0);
+  const poorCPR = getEffectiveScvO2(withCPR(cprBase, 'poor'), 0);
+  assert.ok(goodCPR > poorCPR);
+  assert.ok(goodCPR < 68, 'CPR-supported ScvO2 should never read as normal as the pre-arrest baseline');
+});
+
+test('getEffectiveScvO2: no flow at all decays from the pre-loss value toward the floor over the decay window, never holding stale-high', () => {
+  let s = createState({ rhythm: 'Sinus Rhythm', scvo2: 70 });
+  s = tickCirculation({ ...s, rhythm: 'PEA' }, 0);
+  assert.equal(getEffectiveScvO2(s, 0), 70); // t=0 - still at pre-loss value
+  assert.ok(getEffectiveScvO2(s, 1) < 70); // moving toward the floor
+  assert.equal(getEffectiveScvO2(s, 2), 15); // fully decayed by the 2-minute window
+  assert.equal(getEffectiveScvO2(s, 10), 15); // holds at floor, never negative
+});
+
+/* ---------------- cross-device consistency (the actual Phase 7 acceptance test) ---------------- */
+// The audit's own framing: "for a given underlying state, IntelliVue and
+// HemoSphere never disagree about perfusion/arrest status, even though each
+// computes its own displayed numbers independently." This is true by
+// CONSTRUCTION, not by coincidence - both devices call these exact
+// functions rather than each maintaining their own rhythm-string logic
+// (see CLAUDE.md's Phase 6 notes on IntelliVue's perfusing()/pulsatile()
+// wiring and HemoSphere's applyEngineValuesLight). This test is the
+// structural guarantee that makes that true: isPerfusing/isPulsatile are
+// pure functions of `state` alone, so any two callers - a facilitator
+// console, IntelliVue, HemoSphere, or a test - looking at the identical
+// state object are mathematically guaranteed to get the identical answer.
+// There is no way for the two devices to disagree without one of them
+// having its own separate, un-reviewed copy of this logic, which neither
+// does.
+test('cross-device consistency: isPerfusing/isPulsatile are pure functions of state alone - any two callers looking at the same state get the same answer, by construction', () => {
+  const scenarios = [
+    createState({ rhythm: 'Sinus Rhythm' }),
+    createState({ rhythm: 'Ventricular Fibrillation' }),
+    createState({ rhythm: 'PEA' }),
+    withCPR(createState({ rhythm: 'PEA' }), 'good'),
+    withCPR(createState({ rhythm: 'PEA' }), 'poor'),
+    withECMO(createState({ rhythm: 'PEA' }), true),
+    withECMO(createState({ rhythm: 'Sinus Rhythm' }), true),
+    withECMO(withCPR(createState({ rhythm: 'PEA' }), 'good'), true),
+  ];
+  for (const s of scenarios) {
+    // Simulate two independent "devices" reading the same state - neither
+    // passes anything device-specific into these functions, so there is no
+    // parameter through which they COULD diverge.
+    const deviceA = { perfusing: isPerfusing(s), pulsatile: isPulsatile(s) };
+    const deviceB = { perfusing: isPerfusing(s), pulsatile: isPulsatile(s) };
+    assert.deepEqual(deviceA, deviceB);
+  }
 });

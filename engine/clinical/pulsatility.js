@@ -84,7 +84,7 @@ export function tickCirculation(state, currentMinute) {
       circulation: {
         ...state.circulation,
         lastPerfusingAtMinute: currentMinute,
-        atLoss: { bp: { ...state.bp }, etco2: state.etco2 },
+        atLoss: { bp: { ...state.bp }, etco2: state.etco2, co: state.co, scvo2: state.scvo2 },
       },
     };
   }
@@ -137,10 +137,76 @@ export function getEffectiveDBP(state) {
 export function getEffectiveETCO2(state, currentMinute) {
   if (isNativeFlowPresent(state) || isSupportFlowPresent(state)) return state.etco2;
   if (isCPRFlowPresent(state)) return CPR_ETCO2_MMHG[state.circulation.cpr.quality];
+  return decayFromLoss(state, currentMinute, 'etco2', ETCO2_FLOOR_MMHG, ETCO2_DECAY_MINUTES);
+}
+
+/** Shared linear-decay-toward-a-floor logic for a no-flow-at-all state, used by getEffectiveETCO2 and getEffectiveScvO2 - see either function's docblock for why this shape (not an instant snap to floor, matching real physiology's gradual falloff) fits both. Falls back to the authored value if tickCirculation hasn't run yet / perfusion isn't actually marked lost, rather than guessing. */
+function decayFromLoss(state, currentMinute, field, floor, decayMinutes) {
   const atLoss = state.circulation.atLoss;
-  if (!atLoss || state.circulation.lastPerfusingAtMinute === null) return state.etco2; // tickCirculation hasn't run yet / not actually lost - fall back to authored value rather than guessing
+  if (!atLoss || state.circulation.lastPerfusingAtMinute === null) return state[field];
   const elapsed = currentMinute - state.circulation.lastPerfusingAtMinute;
-  if (elapsed >= ETCO2_DECAY_MINUTES) return ETCO2_FLOOR_MMHG;
-  const fraction = Math.max(0, elapsed) / ETCO2_DECAY_MINUTES;
-  return atLoss.etco2 + (ETCO2_FLOOR_MMHG - atLoss.etco2) * fraction;
+  if (elapsed >= decayMinutes) return floor;
+  const fraction = Math.max(0, elapsed) / decayMinutes;
+  return atLoss[field] + (floor - atLoss[field]) * fraction;
+}
+
+const CPR_CO_LPM = { good: 1.5, poor: 0.6 }; // representative "some real but severely reduced flow" values during compressions - NOT independently cited, same reasoning class as the onset/peak/duration timing values in formulary.js (internally consistent, not claimed as a validated PK/PD study number)
+
+/**
+ * What CO should actually read. Phase 7 (HemoSphere synchronization)
+ * extension of the exact Phase 6 pattern already established for MAP/SBP/
+ * DBP - native and support-only flow pass the authored value through
+ * unchanged (no ECMO special-case, same reasoning as MAP); CPR uses fixed
+ * representative low-flow values (compressions generate real but severely
+ * reduced cardiac output, not a fraction of the pre-arrest number - CO
+ * doesn't scale the same way MAP does, same reasoning getEffectiveETCO2
+ * already uses for its CPR bands); no flow at all is exactly 0 (unlike
+ * MAP's CPR-scaling nuance, CO genuinely is zero with no mechanism moving
+ * blood at all - no snapshot/decay needed here).
+ */
+export function getEffectiveCO(state) {
+  if (isNativeFlowPresent(state) || isSupportFlowPresent(state)) return state.co;
+  if (isCPRFlowPresent(state)) return CPR_CO_LPM[state.circulation.cpr.quality];
+  return 0;
+}
+
+/**
+ * SVV/PPV (stroke-volume/pulse-pressure variation) are only clinically
+ * interpretable with a real arterial waveform driven by mechanical
+ * ventilation and organized cardiac activity - deliberately a simpler
+ * binary rule than MAP/CO's multi-tier one: perfusing (native, CPR, or
+ * support - any real flow at all) passes the authored value through
+ * unchanged; no flow is 0 (matches how a real monitor would show an
+ * invalid/unavailable reading rather than a number that implies a waveform
+ * that doesn't exist).
+ */
+export function getEffectiveSVV(state) {
+  return isPerfusing(state) ? state.svv : 0;
+}
+
+export function getEffectivePPV(state) {
+  return isPerfusing(state) ? state.ppv : 0;
+}
+
+const CPR_SCVO2_PCT = { good: 45, poor: 25 }; // NOT independently cited (see docblock) - reasoned representative values for inadequate-but-present perfusion during compressions
+const SCVO2_FLOOR_PCT = 15;
+const SCVO2_DECAY_MINUTES = 2; // slower than etCO2's ~1 min - ScvO2 reflects accumulated tissue oxygen extraction from static, non-refreshed blood, not breath-to-breath gas exchange
+
+/**
+ * What venous oximetry (ScvO2) should actually read - Phase 7's
+ * "coordinated with Phase 6's pulsatility model" goal. Same shape as
+ * getEffectiveETCO2 (native/support passthrough, CPR uses fixed
+ * representative values, no-flow-at-all decays from the value at the
+ * moment perfusion was lost toward a floor) but NOT built from a real
+ * cited threshold the way etCO2's CPR bands were - the available reference
+ * library (AHA 2025 CPR/ECC volumes, STS-2017) doesn't cover central
+ * venous oxygen saturation during CPR specifically (only found jugular
+ * venous saturation in a post-arrest NEUROmonitoring context, a different
+ * clinical question). Flagged plainly rather than presented as sourced -
+ * revisit if a better reference turns up.
+ */
+export function getEffectiveScvO2(state, currentMinute) {
+  if (isNativeFlowPresent(state) || isSupportFlowPresent(state)) return state.scvo2;
+  if (isCPRFlowPresent(state)) return CPR_SCVO2_PCT[state.circulation.cpr.quality];
+  return decayFromLoss(state, currentMinute, 'scvo2', SCVO2_FLOOR_PCT, SCVO2_DECAY_MINUTES);
 }

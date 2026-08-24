@@ -336,7 +336,7 @@ import {
 } from '../../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot, isValidGraphSnapshot } from '../../sync/deviceSync.js';
 import { getMedicatedHR, getMedicatedMAP, getMedicatedCO } from '../../engine/clinical/pharmacology.js';
-import { getEffectiveSBP, getEffectiveDBP } from '../../engine/clinical/pulsatility.js';
+import { getEffectiveSBP, getEffectiveDBP, getEffectiveSVV, getEffectivePPV, getEffectiveScvO2 } from '../../engine/clinical/pulsatility.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -501,10 +501,23 @@ byId("nb_screen").addEventListener("click",()=>{let i=SCREENS.indexOf(view);i=(i
 /* alarms / status */
 function activeAlarms(){const out=[];keyParams.forEach(k=>{if(!paramAvailable(k).ok)return;if(statusClass(k)==="bad"){const p=P[k],v=p.val();const dir=(p.lowGood||v>p.hi)?"above high":"below low";out.push("Acumen IQ sensor "+p.lab+" is "+dir+" limit");}});return out;}
 let silenced=false;
+// Phase 7: this used to always show "connect oximetry cable" whenever
+// mode==="Swan", regardless of whether oximetry was ACTUALLY connected or
+// calibrated - a decorative string keyed only to drv.mode, not real sensor/
+// calibration state (the audit's own flagged gap - "HemoSphere's
+// venous-oximetry warning is real, stateful, multi-step logic... only one
+// status-bar string is stale/decorative, not the whole feature"). Now reuses
+// paramAvailable("scvo2") - the SAME check that already correctly gates the
+// ScvO2 tile itself - instead of a second, independent copy of the logic.
+function swanOximetryStatus(){
+  const av=paramAvailable("scvo2");
+  if(av.ok)return "Venous Oximetry — ScvO₂ "+Math.round(drv.scvo2)+"% · calibrated";
+  return "Venous Oximetry — "+av.msg;
+}
 function updateStatus(){const al=activeAlarms();const on=al.length>0&&!silenced;
   byId("status").classList.toggle("alarm",on);byId("nb_alarm").classList.toggle("active",on);
   byId("alarmLab").textContent=on?"Alarm":(silenced?"Silenced":"Alarms");
-  byId("noteTxt").textContent=on?("Alarm: "+al[0]):(drv.mode==="Swan"?"Venous Oximetry — connect oximetry cable for venous oximetry monitoring":drv.mode==="ClearSight"?"ClearSight — non-invasive finger cuff active":"FloTrac — arterial pressure-based monitoring");
+  byId("noteTxt").textContent=on?("Alarm: "+al[0]):(drv.mode==="Swan"?swanOximetryStatus():drv.mode==="ClearSight"?"ClearSight — non-invasive finger cuff active":"FloTrac — arterial pressure-based monitoring");
   byId("hrIco").textContent=Math.round(drv.pr);byId("snLab").textContent=drv.patId;}
 
 /* mode */
@@ -651,17 +664,18 @@ loadScn("postop");layout();setView("mon");requestAnimationFrame(frame);
 // formula. Preserving this device's live derivation is more faithful to how
 // a real monitor behaves than adding an override field it wouldn't have.
 function applyEngineValuesLight(es){
-  drv.co=getMedicatedCO(es,es.minute);drv.map=getMedicatedMAP(es,es.minute);drv.pr=getMedicatedHR(es,es.minute);drv.cvp=es.cvp;drv.svv=es.svv;drv.ppv=es.ppv;
-  drv.scvo2=es.scvo2;drv.hpi=es.hpi;
+  drv.co=getMedicatedCO(es,es.minute);drv.map=getMedicatedMAP(es,es.minute);drv.pr=getMedicatedHR(es,es.minute);drv.cvp=es.cvp;
+  // Phase 7 (HemoSphere synchronization): SVV/PPV/ScvO2 now go through the
+  // same perfusion-aware overlay MAP/CO already use, closing this phase's
+  // named acceptance criterion ("No combination of severe unsupported
+  // deterioration or arrest leaves CO/CI/SVV/venous-O2 looking normal").
+  drv.svv=getEffectiveSVV(es);drv.ppv=getEffectivePPV(es);drv.scvo2=getEffectiveScvO2(es,es.minute);drv.hpi=es.hpi;
   // Phase 6: getEffectiveSBP/DBP correctly zero during true arrest and
   // scale during CPR, same rule getMedicatedMAP already applies - see
   // engine/clinical/pulsatility.js. deriv()'s own live SVR/CI derivation
   // (this file, above) reads drv.map/drv.co, which are already
   // perfusion-aware via getMedicatedMAP/getMedicatedCO, so the derived
-  // values inherit this for free - deeper HemoSphere-specific arrest
-  // fidelity (e.g. its live SVR formula during a true zero-CO arrest) is
-  // Phase 7 (HemoSphere synchronization) territory per the audit's own
-  // phase split, not fully chased here.
+  // values inherit this for free.
   drv.sys=getEffectiveSBP(es);drv.dia=getEffectiveDBP(es);if(es.temp)drv.temp=es.temp;
 }
 function applyEngineStateFull(es){
@@ -758,6 +772,11 @@ window.ctSharedEngine={
   cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
   getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
   getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
+  // Phase 7 - same rationale as IntelliVue's forceNumericsRepaint(): the
+  // noteTxt status line (including the fixed venous-oximetry text) only
+  // updates from the native frame() rAF loop, suspended in this
+  // environment's automated tabs.
+  forceStatusRepaint:()=>{updateStatus();},
 };
 
 /* ---------------- Cross-device sync + pop-out (Phase 3) ---------------- */
