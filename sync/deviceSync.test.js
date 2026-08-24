@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { genCode, shouldPush, shouldApplyRemote, isValidSnapshot, isValidGraphSnapshot } from './deviceSync.js';
+import { genCode, shouldPush, shouldApplyRemote, isValidSnapshot, isValidGraphSnapshot, isValidAssessmentMessage } from './deviceSync.js';
 
 test('genCode returns a 6-character code drawn only from the unambiguous alphabet', () => {
   for (let i = 0; i < 200; i++) {
@@ -93,4 +93,29 @@ test('isValidSnapshot and isValidGraphSnapshot are mutually exclusive - a v1 sna
   assert.equal(isValidGraphSnapshot(v1), false);
   assert.equal(isValidSnapshot(v2), false);
   assert.equal(isValidGraphSnapshot(v2), true);
+});
+
+test('isValidAssessmentMessage accepts a well-formed {tiles, requests} Phase 8 payload', () => {
+  assert.equal(isValidAssessmentMessage({ tiles: [], requests: {} }), true);
+  assert.equal(isValidAssessmentMessage({ tiles: [{ id: 'a' }], requests: { a: { status: 'pending' } } }), true);
+});
+
+test('isValidAssessmentMessage rejects missing/malformed fields', () => {
+  assert.equal(isValidAssessmentMessage(null), false);
+  assert.equal(isValidAssessmentMessage(undefined), false);
+  assert.equal(isValidAssessmentMessage({}), false);
+  assert.equal(isValidAssessmentMessage({ tiles: [] }), false); // no requests
+  assert.equal(isValidAssessmentMessage({ tiles: 'not-an-array', requests: {} }), false);
+  assert.equal(isValidAssessmentMessage({ tiles: [], requests: null }), false);
+  assert.equal(isValidAssessmentMessage({ tiles: [], requests: [] }), false); // an array is not a valid requests map
+});
+
+test('isValidAssessmentMessage is mutually exclusive with both physiology snapshot shapes - all three coexist safely on one channel', () => {
+  const v1 = { partIndex: 0, stepIndex: -1, state: { hr: 90 } };
+  const v2 = { currentStageId: 'stage-1', state: { hr: 90 } };
+  const assessment = { tiles: [], requests: {} };
+  assert.equal(isValidAssessmentMessage(v1), false);
+  assert.equal(isValidAssessmentMessage(v2), false);
+  assert.equal(isValidSnapshot(assessment), false);
+  assert.equal(isValidGraphSnapshot(assessment), false);
 });

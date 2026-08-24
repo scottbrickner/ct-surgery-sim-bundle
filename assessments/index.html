@@ -8,36 +8,421 @@
 <link rel="stylesheet" href="../design-system/tokens.css">
 <link rel="stylesheet" href="../design-system/components.css">
 <style>
-  .stub{max-width:var(--content-max); margin:0 auto; padding:var(--space-7) var(--grid-margin) var(--space-8);}
-  .stub-card{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:var(--space-6); max-width:640px;}
-  .stub-card h2{font-size:var(--text-lg); margin-bottom:var(--space-2);}
-  .stub-list{margin:var(--space-4) 0 0; padding-left:20px; font-size:var(--text-sm); color:var(--ink-soft); max-width:56ch;}
-  .stub-list li{margin-bottom:6px;}
+  /* body.learner hides all facilitator-only chrome, same convention every
+     device's ?role=learner pop-out already uses (see IntelliVue/HemoSphere/
+     pacemaker). The learner surface (tile grid) is NOT wrapped in a
+     facilitator-only guard - it's always visible, since the facilitator's
+     own window shows both panels side by side for local single-window use. */
+  body.learner .facilitator-only{display:none!important;}
+
+  .shell{max-width:var(--content-max); margin:0 auto; padding:0 var(--grid-margin) var(--space-8); display:grid; grid-template-columns:360px minmax(0,1fr); gap:var(--space-6);}
+  @media (max-width:1000px){ .shell{grid-template-columns:1fr;} }
+  body.learner .shell{grid-template-columns:1fr;}
+
+  /* ---- facilitator rail (mirrors console.html's collapsible-group pattern) ---- */
+  .rail-group{border:1px solid var(--rule); border-radius:var(--radius-md); background:var(--paper-raised); margin-bottom:var(--space-4);}
+  .rail-group summary{padding:var(--space-3) var(--space-4); cursor:pointer; font-family:var(--font-mono); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); display:flex; justify-content:space-between; align-items:center; list-style:none;}
+  .rail-group summary::-webkit-details-marker{display:none;}
+  .rail-group .chev{transition:transform 0.15s;}
+  .rail-group[open] .chev{transform:rotate(90deg);}
+  .rail-group .body{padding:0 var(--space-4) var(--space-4);}
+  .gl{font-family:var(--font-mono); font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase; color:var(--ink-faint); margin:14px 0 6px;}
+  .gl:first-child{margin-top:0;}
+  .row{display:flex; flex-direction:column; gap:4px; margin:8px 0;}
+  .row label{font-size:11px; color:var(--ink-faint); font-family:var(--font-mono); text-transform:uppercase; letter-spacing:0.03em;}
+  input[type=text],select,textarea{background:var(--paper-sunken); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:7px 8px; font-size:var(--text-xs); width:100%;}
+  textarea{font-family:var(--font-body); min-height:70px; resize:vertical; line-height:1.5;}
+  .btnrow{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0;}
+  .act{background:var(--paper-sunken); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:7px 10px; font-size:11.5px; font-weight:600; cursor:pointer;}
+  .act:hover{border-color:var(--accent);}
+  .act.mini{padding:4px 8px; font-size:10.5px;}
+  .act.primary{background:var(--accent-wash); border-color:var(--accent); color:var(--accent-ink);}
+  .act.danger{background:var(--critical-wash); border-color:var(--critical); color:var(--critical);}
+  .hint{font-size:10.5px; color:var(--ink-faint); line-height:1.5; margin-top:4px;}
+  .checkrow{display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink-soft); margin:6px 0;}
+
+  .tile-list{display:flex; flex-direction:column; gap:6px;}
+  .tile-row{border:1px solid var(--rule); border-radius:var(--radius-sm); background:var(--paper-sunken); padding:8px 10px; cursor:pointer;}
+  .tile-row.selected{border-color:var(--accent); background:var(--accent-wash);}
+  .tile-row .tr-top{display:flex; justify-content:space-between; align-items:center; gap:6px;}
+  .tile-row .tr-label{font-size:12.5px; font-weight:600;}
+  .tile-row .tr-meta{font-family:var(--font-mono); font-size:9.5px; color:var(--ink-faint); text-transform:uppercase; margin-top:2px;}
+
+  .queue-item{border:1px solid var(--rule); border-radius:var(--radius-sm); padding:8px 10px; margin-bottom:6px; background:var(--paper-sunken);}
+  .queue-item.delayed{border-color:var(--warn);}
+  .queue-item .qi-top{display:flex; justify-content:space-between; align-items:center; gap:6px; font-size:12px;}
+  .queue-item .qi-wait{font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint);}
+  .queue-item.delayed .qi-wait{color:var(--warn);}
+
+  .summary-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
+  .summary-cell{background:var(--paper-sunken); border:1px solid var(--rule); border-radius:var(--radius-sm); padding:8px; text-align:center;}
+  .summary-cell .n{font-family:var(--font-mono); font-size:18px; font-weight:700;}
+  .summary-cell .l{font-size:9.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.03em;}
+
+  /* ---- learner surface: large touch targets, no hover-only affordances ---- */
+  .learner-surface{min-width:0;}
+  .priority-row{display:flex; gap:var(--space-3); overflow-x:auto; padding-bottom:4px; margin-bottom:var(--space-5);}
+  .priority-row:empty{display:none;}
+  .priority-tile{flex:0 0 auto; min-width:160px;}
+
+  .tab-bar{display:flex; gap:4px; border-bottom:1px solid var(--rule); margin-bottom:var(--space-5); overflow-x:auto;}
+  .tab-btn{background:none; border:none; border-bottom:2px solid transparent; color:var(--ink-faint); font-family:var(--font-mono); font-size:12px; text-transform:uppercase; letter-spacing:0.03em; padding:10px 16px; cursor:pointer; white-space:nowrap;}
+  .tab-btn.active{color:var(--ink); border-bottom-color:var(--accent);}
+  .tab-btn:hover{color:var(--ink);}
+
+  .tile-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:var(--space-4);}
+  .assess-tile{
+    min-height:100px; border-radius:var(--radius-md); border:1px solid var(--rule-strong); background:var(--paper-raised);
+    padding:var(--space-4); display:flex; flex-direction:column; justify-content:space-between; gap:8px;
+    cursor:pointer; text-align:left; color:var(--ink); font-family:inherit;
+  }
+  .assess-tile:active{transform:scale(0.98);}
+  .assess-tile .at-label{font-size:15px; font-weight:700; line-height:1.3;}
+  .assess-tile .at-status{font-family:var(--font-mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.03em;}
+  .assess-tile.available{border-color:var(--rule-strong);}
+  .assess-tile.pending{border-color:var(--warn); background:var(--warn-wash);}
+  .assess-tile.pending .at-status{color:var(--warn);}
+  .assess-tile.revealed{border-color:var(--good); background:var(--good-wash);}
+  .assess-tile.revealed .at-status{color:var(--good);}
+  .assess-tile.denied{border-color:var(--critical); background:var(--critical-wash); opacity:0.85;}
+  .assess-tile.denied .at-status{color:var(--critical);}
+  .assess-tile .at-findings{font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:0; padding-left:16px;}
+  .assess-tile .at-findings li{margin-bottom:3px;}
+
+  .empty-state{color:var(--ink-faint); font-size:13px; padding:var(--space-6) 0; text-align:center;}
 </style>
 </head>
 <body>
   <div class="page-head">
-    <div class="eyebrow">Learner surface · in progress</div>
+    <div class="eyebrow">Learner surface</div>
     <h1>Patient Assessments Monitor</h1>
-    <p class="dek">A touch-friendly, learner-facing surface for outputs, physical assessment, sounds, therapies, and patient findings — driven by the same shared physiology engine as the other monitors.</p>
-    <div class="status-row"><span class="pill warn"><span class="dot"></span>Not yet built</span></div>
-  </div>
-
-  <div class="stub">
-    <div class="stub-card">
-      <h2>What's coming here</h2>
-      <p>This surface is scoped for Phase 8 of the platform plan. When it lands, it will give a learner:</p>
-      <ul class="stub-list">
-        <li>A top row of 3–6 facilitator-selected priority findings</li>
-        <li>Tabs for Outputs, Assessment, Sounds, Therapies/Devices, and Patient</li>
-        <li>Interactive assessment requests — inspect a chest tube, check urine output, auscultate, ask the patient a question — each revealed automatically, held for facilitator approval, or hidden per the scenario author's rules</li>
-        <li>A full requested/revealed/missed/delayed trail for debrief, with zero facilitator-only content ever visible here</li>
-      </ul>
-      <p style="margin-top:var(--space-4);">Until then, use the Facilitator Console's override sliders and event toggles to convey assessment findings verbally during a session.</p>
-      <a class="btn" href="../index.html" style="display:inline-block; margin-top:var(--space-4); text-decoration:none;">&larr; Back to launch</a>
+    <p class="dek">Touch-friendly outputs, physical assessment, sounds, therapies, and patient findings — configured by the facilitator, requested by the learner, revealed automatically, on approval, or not at all.</p>
+    <div class="status-row">
+      <span class="pill neutral" id="syncStatus"><span class="dot"></span>Same-machine sync</span>
+      <span class="pill neutral facilitator-only" id="scenarioLabel">No scenario loaded</span>
     </div>
   </div>
 
-  <footer class="doc-foot">Clinical Patient Simulator · Patient Assessments Monitor stub · see CLAUDE.md for the full phased plan</footer>
+  <div class="shell">
+    <aside class="facilitator-only">
+      <details class="rail-group" open>
+        <summary><span>Scenario</span><span class="chev">▸</span></summary>
+        <div class="body">
+          <div class="row"><label>Scenario ID</label><input type="text" id="scenarioId" placeholder="ct-surgery-flagship"></div>
+          <div class="btnrow">
+            <button class="act" id="btn_seed_default">Load Default Set</button>
+            <button class="act" id="btn_new">Clear All</button>
+          </div>
+          <div class="row"><label>Local drafts</label></div>
+          <select id="local_drafts"><option value="">— load a saved draft —</option></select>
+          <div class="btnrow">
+            <button class="act mini" id="btn_save_local">Save Draft</button>
+            <button class="act mini danger" id="btn_delete_local">Delete</button>
+          </div>
+          <div class="hint">Drafts save to this browser only (localStorage), same convention as the Scenario Builder.</div>
+          <div class="gl">Learner Link</div>
+          <div class="btnrow">
+            <button class="act mini" id="btn_copy_link">Copy Learner Link</button>
+            <button class="act mini" id="btn_open_link">Open Learner Display</button>
+          </div>
+        </div>
+      </details>
+
+      <details class="rail-group" open>
+        <summary><span>Tiles</span><span class="chev">▸</span></summary>
+        <div class="body">
+          <div class="btnrow"><button class="act primary" id="btn_add_tile">+ Add Tile</button></div>
+          <div class="tile-list" id="tileList"></div>
+        </div>
+      </details>
+
+      <details class="rail-group" id="grp_editor">
+        <summary><span>Tile Editor</span><span class="chev">▸</span></summary>
+        <div class="body" id="tileEditor"><div class="hint">Select a tile above to edit it.</div></div>
+      </details>
+
+      <details class="rail-group" open>
+        <summary><span>Pending Requests</span><span class="chev">▸</span></summary>
+        <div class="body" id="pendingQueue"></div>
+      </details>
+
+      <details class="rail-group">
+        <summary><span>Session Summary</span><span class="chev">▸</span></summary>
+        <div class="body">
+          <div class="summary-grid" id="summaryGrid"></div>
+          <div class="hint">Live counts for this session only — not exported, not a debrief report. Debrief stays live-facilitated conversation.</div>
+        </div>
+      </details>
+    </aside>
+
+    <main class="learner-surface">
+      <div class="priority-row" id="priorityRow"></div>
+      <div class="tab-bar" id="tabBar"></div>
+      <div class="tile-grid" id="tileGrid"></div>
+    </main>
+  </div>
+
+  <div class="disclaimer" style="display:block; max-width:var(--content-max); margin:var(--space-6) auto 0; margin-left:var(--grid-margin); margin-right:var(--grid-margin);">Training simulation only — not for clinical use.</div>
+  <footer class="doc-foot">Clinical Patient Simulator · Patient Assessments Monitor · findings are text-only in v1, structured so audio can be added later without restructuring</footer>
+
+<script type="module">
+import {
+  CATEGORIES, REVEAL_RULES, createAssessmentState, addTile, updateTile, removeTile,
+  requestTile, resolveRequest, getTileStatus, getPendingRequests, getSessionSummary,
+} from './model.js';
+import { createDeviceSync, isValidAssessmentMessage } from '../sync/deviceSync.js';
+
+const byId = (id) => document.getElementById(id);
+const LOCAL_KEY = 'ct-sim-assessments-drafts-v1';
+const CATEGORY_LABELS = { outputs: 'Outputs', assessment: 'Assessment', sounds: 'Sounds', therapies: 'Therapies', patient: 'Patient' };
+
+/**
+ * A reasonable starter set so this page is immediately useful/demoable
+ * rather than blank, tied to fields that already exist in the shared
+ * physiology engine (the five chest-tube sites, drips-as-therapies) where
+ * possible - facilitator UI-workflow content, not fabricated dosing/
+ * physiology data, so lower-risk to author generically than formulary.js's
+ * clinical numbers were. Fully editable/removable once loaded.
+ */
+function defaultTiles() {
+  return [
+    { id: 'ct-rpleural', category: 'outputs', label: 'R Pleural Chest Tube', revealRule: 'auto', priority: true, findings: ['Serosanguinous, 15 mL/hr', 'No air leak'] },
+    { id: 'ct-rmediastinal', category: 'outputs', label: 'R Mediastinal Chest Tube', revealRule: 'auto', priority: false, findings: ['Serosanguinous, 25 mL/hr'] },
+    { id: 'foley', category: 'outputs', label: 'Urine Output', revealRule: 'auto', priority: true, findings: ['Clear yellow, 40 mL/hr via Foley'] },
+    { id: 'heart-sounds', category: 'sounds', label: 'Heart Sounds', revealRule: 'approve', priority: true, findings: ['S1/S2 present, no murmur appreciated', 'Regular rate and rhythm'] },
+    { id: 'lung-sounds', category: 'sounds', label: 'Lung Sounds', revealRule: 'approve', priority: false, findings: ['Bilateral breath sounds, diminished at bases'] },
+    { id: 'incision', category: 'assessment', label: 'Sternotomy Incision', revealRule: 'auto', priority: false, findings: ['Clean, dry, intact', 'Steri-strips in place, no erythema'] },
+    { id: 'perfusion', category: 'assessment', label: 'Peripheral Perfusion', revealRule: 'auto', priority: false, findings: ['Warm extremities, cap refill < 3 sec', 'Pedal pulses 2+ bilaterally'] },
+    { id: 'pacer-settings', category: 'therapies', label: 'Pacer Settings', revealRule: 'auto', priority: false, findings: ['Mode/rate reflect the shared engine live — check the Facilitator Console for current values'] },
+    { id: 'vasoactive-drips', category: 'therapies', label: 'Vasoactive Drips', revealRule: 'approve', priority: false, findings: ['Rates reflect the shared engine live — check the Facilitator Console for current values'] },
+    { id: 'pain-question', category: 'patient', label: 'Ask About Pain', revealRule: 'approve', priority: true, findings: ['"About a 4 out of 10, mostly at the incision."'] },
+    { id: 'orientation-question', category: 'patient', label: 'Orientation Check', revealRule: 'hidden', priority: false, findings: [] },
+  ];
+}
+
+let state = createAssessmentState('');
+let selectedTileId = null;
+let activeTab = CATEGORIES[0];
+
+/* ---------------- Facilitator: tile list + editor ---------------- */
+function renderTileList() {
+  byId('tileList').innerHTML = state.tiles.map((t) => `
+    <div class="tile-row ${t.id === selectedTileId ? 'selected' : ''}" data-id="${escapeAttr(t.id)}">
+      <div class="tr-top">
+        <span class="tr-label">${escapeHtml(t.label)}${t.priority ? ' ★' : ''}</span>
+        <button class="act mini danger" data-del="${escapeAttr(t.id)}" title="Delete">&#215;</button>
+      </div>
+      <div class="tr-meta">${escapeHtml(CATEGORY_LABELS[t.category] || t.category)} · ${escapeHtml(t.revealRule)}</div>
+    </div>`).join('') || '<div class="hint">No tiles yet — Add Tile or Load Default Set.</div>';
+  byId('tileList').querySelectorAll('.tile-row').forEach((el) => {
+    const id = el.getAttribute('data-id');
+    el.addEventListener('click', (e) => { if (e.target.closest('[data-del]')) return; selectedTileId = id; byId('grp_editor').open = true; render(); });
+  });
+  byId('tileList').querySelectorAll('[data-del]').forEach((btn) => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); state = removeTile(state, btn.getAttribute('data-del')); if (selectedTileId === btn.getAttribute('data-del')) selectedTileId = null; render(); });
+  });
+}
+
+function renderTileEditor() {
+  const el = byId('tileEditor');
+  const tile = state.tiles.find((t) => t.id === selectedTileId);
+  if (!tile) { el.innerHTML = '<div class="hint">Select a tile to edit it.</div>'; return; }
+  el.innerHTML = `
+    <div class="row"><label>Label</label><input type="text" id="f_label" value="${escapeAttr(tile.label)}"></div>
+    <div class="row"><label>Category</label><select id="f_category">${CATEGORIES.map((c) => `<option value="${c}" ${c === tile.category ? 'selected' : ''}>${CATEGORY_LABELS[c]}</option>`).join('')}</select></div>
+    <div class="row"><label>Reveal rule</label><select id="f_revealRule">${REVEAL_RULES.map((r) => `<option value="${r}" ${r === tile.revealRule ? 'selected' : ''}>${r}</option>`).join('')}</select></div>
+    <label class="checkrow"><input type="checkbox" id="f_priority" ${tile.priority ? 'checked' : ''}> Show in priority row</label>
+    <div class="row"><label>Findings (one per line, revealed to the learner)</label><textarea id="f_findings">${escapeHtml(tile.findings.join('\n'))}</textarea></div>
+  `;
+  const bind = (id, apply) => { const input = byId(id); input.addEventListener('input', () => { apply(input); render(); }); };
+  bind('f_label', (i) => { state = updateTile(state, tile.id, { label: i.value }); });
+  bind('f_category', (i) => { state = updateTile(state, tile.id, { category: i.value }); });
+  bind('f_revealRule', (i) => { state = updateTile(state, tile.id, { revealRule: i.value }); });
+  bind('f_priority', (i) => { state = updateTile(state, tile.id, { priority: i.checked }); });
+  bind('f_findings', (i) => { state = updateTile(state, tile.id, { findings: i.value.split('\n').map((s) => s.trim()).filter(Boolean) }); });
+}
+
+byId('btn_add_tile').addEventListener('click', () => {
+  state = addTile(state, { id: 'new-tile', category: 'assessment', label: 'New Tile', revealRule: 'auto', priority: false, findings: [] });
+  selectedTileId = state.tiles[state.tiles.length - 1].id;
+  byId('grp_editor').open = true;
+  render();
+});
+byId('btn_seed_default').addEventListener('click', () => {
+  if (state.tiles.length && !confirm('Replace the current tile list with the default set?')) return;
+  state = { ...state, tiles: defaultTiles(), requests: {} };
+  selectedTileId = null;
+  render();
+});
+byId('btn_new').addEventListener('click', () => {
+  if (!confirm('Clear all tiles and requests?')) return;
+  state = createAssessmentState(state.scenarioId);
+  selectedTileId = null;
+  render();
+});
+byId('scenarioId').addEventListener('input', (e) => { state = { ...state, scenarioId: e.target.value }; render(); });
+
+/* ---------------- Facilitator: pending queue ---------------- */
+function renderPendingQueue() {
+  const queue = getPendingRequests(state, Date.now());
+  const el = byId('pendingQueue');
+  el.innerHTML = queue.length ? queue.map((q) => `
+    <div class="queue-item ${q.delayed ? 'delayed' : ''}">
+      <div class="qi-top">
+        <span>${escapeHtml(q.tile ? q.tile.label : q.tileId)}</span>
+        <span class="qi-wait">${Math.round(q.waitingMs / 1000)}s${q.delayed ? ' — delayed' : ''}</span>
+      </div>
+      <div class="btnrow" style="margin-top:6px">
+        <button class="act mini primary" data-approve="${escapeAttr(q.tileId)}">Approve</button>
+        <button class="act mini danger" data-deny="${escapeAttr(q.tileId)}">Deny</button>
+      </div>
+    </div>`).join('') : '<div class="hint">No pending requests.</div>';
+  el.querySelectorAll('[data-approve]').forEach((btn) => btn.addEventListener('click', () => { state = resolveRequest(state, btn.getAttribute('data-approve'), 'approve', Date.now()); render(); }));
+  el.querySelectorAll('[data-deny]').forEach((btn) => btn.addEventListener('click', () => { state = resolveRequest(state, btn.getAttribute('data-deny'), 'deny', Date.now()); render(); }));
+}
+
+function renderSummary() {
+  const s = getSessionSummary(state);
+  byId('summaryGrid').innerHTML = [
+    ['Revealed', s.revealed], ['Pending', s.pending], ['Denied', s.denied], ['Missed', s.missed],
+  ].map(([label, n]) => `<div class="summary-cell"><div class="n">${n}</div><div class="l">${label}</div></div>`).join('');
+}
+
+/* ---------------- Learner surface ---------------- */
+function renderPriorityRow() {
+  const tiles = state.tiles.filter((t) => t.priority && t.revealRule !== 'hidden');
+  byId('priorityRow').innerHTML = tiles.map((t) => assessTileHtml(t, true)).join('');
+  wireTileButtons(byId('priorityRow'));
+}
+
+function renderTabBar() {
+  byId('tabBar').innerHTML = CATEGORIES.map((c) => `<button class="tab-btn ${c === activeTab ? 'active' : ''}" data-tab="${c}">${CATEGORY_LABELS[c]}</button>`).join('');
+  byId('tabBar').querySelectorAll('[data-tab]').forEach((btn) => btn.addEventListener('click', () => { activeTab = btn.getAttribute('data-tab'); render(); }));
+}
+
+function renderTileGrid() {
+  const tiles = state.tiles.filter((t) => t.category === activeTab && t.revealRule !== 'hidden');
+  byId('tileGrid').innerHTML = tiles.length ? tiles.map((t) => assessTileHtml(t, false)).join('') : '<div class="empty-state">Nothing configured for this category yet.</div>';
+  wireTileButtons(byId('tileGrid'));
+}
+
+function assessTileHtml(tile, isPriority) {
+  const status = getTileStatus(state, tile.id);
+  const statusLabel = { available: 'Tap to request', pending: 'Waiting for facilitator…', revealed: 'Revealed', denied: 'Not available right now' }[status] || status;
+  const findingsHtml = status === 'revealed' && tile.findings.length ? `<ul class="at-findings">${tile.findings.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>` : '';
+  return `<button class="assess-tile ${status} ${isPriority ? 'priority-tile' : ''}" data-request="${escapeAttr(tile.id)}">
+    <span class="at-label">${escapeHtml(tile.label)}</span>
+    ${findingsHtml}
+    <span class="at-status">${escapeHtml(statusLabel)}</span>
+  </button>`;
+}
+
+function wireTileButtons(container) {
+  container.querySelectorAll('[data-request]').forEach((btn) => {
+    btn.addEventListener('click', () => { state = requestTile(state, btn.getAttribute('data-request'), Date.now()); render(); });
+  });
+}
+
+/* ---------------- Shared helpers ---------------- */
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function escapeAttr(s) { return escapeHtml(s); }
+
+function render() {
+  byId('scenarioLabel').textContent = state.scenarioId ? ('Scenario: ' + state.scenarioId) : 'No scenario loaded';
+  renderTileList();
+  renderTileEditor();
+  renderPendingQueue();
+  renderSummary();
+  renderPriorityRow();
+  renderTabBar();
+  renderTileGrid();
+}
+
+/* ---------------- Local drafts (localStorage), same pattern as the Scenario Builder ---------------- */
+function loadDrafts() { try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || '{}'); } catch (e) { return {}; } }
+function saveDrafts(d) { try { localStorage.setItem(LOCAL_KEY, JSON.stringify(d)); } catch (e) {} }
+function refreshDraftList() {
+  const drafts = loadDrafts();
+  const sel = byId('local_drafts');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">— load a saved draft —</option>' + Object.keys(drafts).map((k) => `<option value="${escapeAttr(k)}">${escapeHtml(k)}</option>`).join('');
+  sel.value = current;
+}
+byId('btn_save_local').addEventListener('click', () => {
+  const drafts = loadDrafts();
+  const key = state.scenarioId || 'untitled-' + Date.now();
+  drafts[key] = state;
+  saveDrafts(drafts);
+  refreshDraftList();
+  byId('local_drafts').value = key;
+});
+byId('local_drafts').addEventListener('change', (e) => {
+  if (!e.target.value) return;
+  const drafts = loadDrafts();
+  if (drafts[e.target.value]) { state = drafts[e.target.value]; selectedTileId = null; render(); }
+});
+byId('btn_delete_local').addEventListener('click', () => {
+  const key = byId('local_drafts').value;
+  if (!key) return;
+  const drafts = loadDrafts();
+  delete drafts[key];
+  saveDrafts(drafts);
+  refreshDraftList();
+});
+
+/* ---------------- ?role=learner pop-out, same convention as every device ---------------- */
+const urlParams = new URLSearchParams(location.search);
+const ROLE = urlParams.get('role') === 'learner' ? 'learner' : 'facilitator';
+if (ROLE === 'learner') document.body.classList.add('learner');
+
+byId('btn_copy_link').addEventListener('click', async () => {
+  const url = new URL(location.href);
+  url.searchParams.set('role', 'learner');
+  try { await navigator.clipboard.writeText(url.toString()); alert('Learner link copied.'); } catch (e) { prompt('Copy this link:', url.toString()); }
+});
+byId('btn_open_link').addEventListener('click', () => {
+  const url = new URL(location.href);
+  url.searchParams.set('role', 'learner');
+  window.open(url.toString(), '_blank', 'noopener');
+});
+
+/* ---------------- Sync (Phase 8: reuses sync/deviceSync.js, same channel/relay every device already uses) ---------------- */
+const deviceSync = createDeviceSync({
+  getSnapshot: () => ({ tiles: state.tiles, requests: state.requests }),
+  onRemoteSnapshot: (snapshot) => {
+    // Physiology broadcasts from the console/IntelliVue/HemoSphere/pacemaker
+    // arrive on this exact channel too - isValidAssessmentMessage() is what
+    // lets this receiver ignore them safely, same mutually-exclusive-shapes
+    // pattern the v1/v2 physiology snapshots already use with each other.
+    if (!isValidAssessmentMessage(snapshot)) return;
+    state = { ...state, tiles: snapshot.tiles, requests: snapshot.requests };
+    render();
+  },
+});
+setInterval(() => { deviceSync.pushNow(); }, 140);
+setInterval(() => {
+  byId('syncStatus').className = 'pill ' + (deviceSync.isLinked() ? 'good' : 'neutral');
+  byId('syncStatus').innerHTML = '<span class="dot"></span>' + (deviceSync.isLinked() ? 'Synced' : 'Same-machine sync');
+  renderPendingQueue(); // re-render to keep "delayed" waiting-time labels live even with no state change
+}, 1000);
+
+/* Testing hook, same rationale as every other page in this project */
+window.ctAssessments = {
+  getState: () => state,
+  setState: (s) => { state = s; render(); },
+  requestTileNow: (tileId) => { state = requestTile(state, tileId, Date.now()); render(); return state; },
+  resolveRequestNow: (tileId, outcome) => { state = resolveRequest(state, tileId, outcome, Date.now()); render(); return state; },
+  getTileStatusNow: (tileId) => getTileStatus(state, tileId),
+  getPendingRequestsNow: () => getPendingRequests(state, Date.now()),
+  getSessionSummaryNow: () => getSessionSummary(state),
+  loadDefaultTiles: () => { state = { ...state, tiles: defaultTiles(), requests: {} }; render(); return state; },
+  pushNow: () => deviceSync.pushNow(),
+  heartbeatNow: () => deviceSync.heartbeatNow(),
+  setActiveTab: (c) => { activeTab = c; render(); },
+};
+
+refreshDraftList();
+render();
+</script>
 </body>
 </html>

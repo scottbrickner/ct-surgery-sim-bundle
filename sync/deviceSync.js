@@ -83,6 +83,28 @@ export function isValidGraphSnapshot(snapshot) {
     && snapshot.state !== null && typeof snapshot.state === 'object';
 }
 
+/**
+ * Phase 8 (Patient Assessments Monitor) - a THIRD, structurally distinct
+ * shape this bus can carry: {tiles, requests} from assessments/index.html.
+ * Deliberately reuses createDeviceSync() (same channel, same relay, same
+ * winId/self-echo guard) rather than a parallel sync module, per this
+ * project's standing "do not introduce a second transport" rule - but this
+ * payload has NOTHING in common structurally with either physiology
+ * snapshot shape (no partIndex/stepIndex/currentStageId/state), so a
+ * physiology-only receiver's isValidSnapshot()/isValidGraphSnapshot() both
+ * correctly return false for it automatically, the same "mutually exclusive
+ * shapes on one channel" pattern already proven for v1/v2. The Assessments
+ * Monitor's own onRemoteSnapshot, symmetrically, must call THIS function
+ * first and ignore anything that isn't - a v1/v2 physiology broadcast from
+ * the console/IntelliVue/HemoSphere/pacemaker will otherwise also arrive on
+ * this exact channel, since it's the same bus.
+ */
+export function isValidAssessmentMessage(snapshot) {
+  return !!snapshot
+    && Array.isArray(snapshot.tiles)
+    && snapshot.requests !== null && typeof snapshot.requests === 'object' && !Array.isArray(snapshot.requests);
+}
+
 export function shouldApplyRemote(msg, { winId, lastSyncStr }) {
   if (!msg || typeof msg.data !== 'string') return false;
   if (msg.win === winId) return false;
