@@ -469,6 +469,7 @@ import {
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
 } from '../../engine/scenarioRunner.js';
 import { createDeviceSync, isValidSnapshot, isValidGraphSnapshot } from '../../sync/deviceSync.js';
+import { cloudClient, findSessionByCode, joinSession, hydrateSnapshot, sessionChannelName, parseSessionParams } from '../../sync/cloudSession.js';
 const byId=id=>document.getElementById(id);
 const cssv=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
@@ -1281,12 +1282,36 @@ const syncCopyBtn=byId("sync_copyLink");if(syncCopyBtn)syncCopyBtn.addEventListe
 });
 if(fsUrlParams.get("relay"))byId("sync_relayUrl").value=fsUrlParams.get("relay");
 window.ctSharedEngine.syncPushNow=()=>deviceSync.pushNow();window.ctSharedEngine.syncHeartbeatNow=()=>deviceSync.heartbeatNow();window.ctSharedEngine.syncSetRelay=(url,code)=>deviceSync.setRelay(url,code); // testing hooks only - see sync/deviceSync.js
-window.ctSharedEngine.getSyncStatus=()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay});
+window.ctSharedEngine.getSyncStatus=()=>({linked:deviceSync.isLinked(),peers:deviceSync.peerCount(),relay:deviceSync.relay,cloud:deviceSync.cloud,cloudLinked:deviceSync.isCloudLinked()});
 window.ctSharedEngine.getSessionMode=()=>sessionMode;
 setInterval(()=>{
   const st=byId("sync_status");if(st)st.textContent=deviceSync.isLinked()?"● Linked — showing a synced patient with at least one other window/device.":"Same-machine sync active — open another window/tab of this page (or HemoSphere Alta) and they'll show the same patient live.";
   const rst=byId("sync_relayStatus");if(rst&&deviceSync.relay.url)rst.textContent=(deviceSync.relay.ws&&deviceSync.relay.ws.readyState===1?"● Connected":"Connecting…")+" — code "+deviceSync.relay.code+", "+deviceSync.peerCount()+" peer(s) in room.";
 },1000);
+
+/* ---------------- Cloud Session join (Phase 9) ---------------- */
+// A device opened via a Facilitator Console "Cloud Session" link
+// (?session=CODE&role=learner) joins that session's physiology channel as a
+// LEARNER by default - deliberately never the writer of durable state (the
+// console owns that; see supabase/schema-sessions.sql's RLS). This is
+// purely additive: a device with no ?session= param behaves exactly as
+// every prior phase, unaffected.
+(async function joinCloudSessionFromUrl(){
+  const {code,role,device}=parseSessionParams(fsUrlParams);
+  if(!code)return;
+  const st=byId("sync_status");
+  try{
+    const session=await findSessionByCode(code);
+    if(!session){if(st)st.textContent="Cloud Session "+code+" not found or has ended.";return;}
+    await joinSession(session,{role,deviceLabel:device||"intellivue"});
+    deviceSync.setCloud(cloudClient,sessionChannelName(session.code,"physiology"));
+    const row=await hydrateSnapshot(session.id,"physiology");
+    if(row&&row.data&&Object.keys(row.data).length)onRemoteSnapshot(row.data);
+    if(st)st.textContent="● Cloud Session "+code+" — connected as "+role+".";
+  }catch(e){
+    if(st)st.textContent="Could not join Cloud Session "+code+": "+e.message;
+  }
+})();
 </script>
 </body>
 </html>

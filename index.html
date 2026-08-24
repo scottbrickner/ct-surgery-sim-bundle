@@ -83,6 +83,24 @@
 <script type="module">
 import { watchSameMachinePresence } from './design-system/presence.js';
 
+// Phase 9: a facilitator's Cloud Session QR points here (this homepage
+// already lists every device as its own launch card, so it's the natural
+// "pick your surface" landing spot for a learner who scanned a code without
+// knowing yet which device they need) - propagate ?session=/?role= onto
+// every launch card's href so clicking through carries the session with it,
+// same "carry the params forward" pattern the pacemaker's own learner link
+// already used pre-Phase-9 for ?relay=/?code=.
+const carryParams = new URLSearchParams(location.search);
+const sessionCode = carryParams.get('session');
+if (sessionCode) {
+  document.querySelectorAll('.launch-card[href]').forEach(a => {
+    const url = new URL(a.getAttribute('href'), location.href);
+    url.searchParams.set('session', sessionCode);
+    url.searchParams.set('role', carryParams.get('role') === 'facilitator' ? 'facilitator' : 'learner');
+    a.setAttribute('href', url.pathname + url.search);
+  });
+}
+
 const pill = document.getElementById('presencePill');
 const text = document.getElementById('presenceText');
 const presence = watchSameMachinePresence();

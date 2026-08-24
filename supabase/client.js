@@ -23,7 +23,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 // NEVER put the service_role/secret key here or anywhere else client-side -
 // that key bypasses RLS entirely and is meant for a trusted server process
 // only, which this project has none of (it's a static site with no backend).
-const SUPABASE_URL = 'https://ixzjhchfgicxgaqhmkku.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_5MEQDil_WX4DGO0SHK099w_mSYoOMYA';
+export const SUPABASE_URL = 'https://ixzjhchfgicxgaqhmkku.supabase.co';
+export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_5MEQDil_WX4DGO0SHK099w_mSYoOMYA';
 
+// URL/key exported (Phase 9) alongside the ready-made client below, for
+// sync/cloudSession.js to build its OWN separate client with different auth
+// storage - see that file's cloudClient for why one shared client isn't
+// correct for Cloud Session's anonymous participant identity.
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);

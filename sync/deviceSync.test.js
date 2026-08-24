@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { genCode, shouldPush, shouldApplyRemote, isValidSnapshot, isValidGraphSnapshot, isValidAssessmentMessage } from './deviceSync.js';
+import { genCode, shouldPush, shouldBroadcast, shouldApplyRemote, isValidSnapshot, isValidGraphSnapshot, isValidAssessmentMessage, isValidPacerControlMessage } from './deviceSync.js';
 
 test('genCode returns a 6-character code drawn only from the unambiguous alphabet', () => {
   for (let i = 0; i < 200; i++) {
@@ -26,6 +26,17 @@ test('shouldPush is false when the snapshot is identical to what was last sent (
 
 test('shouldPush is true on the very first push (lastSentStr is null)', () => {
   assert.equal(shouldPush('{"hr":90}', null), true);
+});
+
+test('shouldBroadcast: while paused, nothing broadcasts even if the state genuinely changed - the Phase 9 hidden-rehearsal mechanism', () => {
+  assert.equal(shouldBroadcast({ paused: true, nextStr: '{"hr":90}', lastStr: '{"hr":80}' }), false);
+  assert.equal(shouldBroadcast({ paused: true, nextStr: '{"hr":90}', lastStr: null }), false); // even the very-first-push case
+});
+
+test('shouldBroadcast: while unpaused, behaves exactly like shouldPush', () => {
+  assert.equal(shouldBroadcast({ paused: false, nextStr: '{"hr":90}', lastStr: '{"hr":80}' }), true);
+  assert.equal(shouldBroadcast({ paused: false, nextStr: '{"hr":90}', lastStr: '{"hr":90}' }), false);
+  assert.equal(shouldBroadcast({ paused: false, nextStr: '{"hr":90}', lastStr: null }), true);
 });
 
 test('shouldApplyRemote rejects a message from our own window (self-echo guard)', () => {
@@ -118,4 +129,35 @@ test('isValidAssessmentMessage is mutually exclusive with both physiology snapsh
   assert.equal(isValidAssessmentMessage(v2), false);
   assert.equal(isValidSnapshot(assessment), false);
   assert.equal(isValidGraphSnapshot(assessment), false);
+});
+
+test('isValidPacerControlMessage accepts a well-formed {s, P, conn, N} pacemaker control-panel payload', () => {
+  assert.equal(isValidPacerControlMessage({ s: { mode: 'DDD', rate: 80 }, P: {}, conn: {}, N: {} }), true);
+});
+
+test('isValidPacerControlMessage rejects missing/malformed fields', () => {
+  assert.equal(isValidPacerControlMessage(null), false);
+  assert.equal(isValidPacerControlMessage(undefined), false);
+  assert.equal(isValidPacerControlMessage({}), false);
+  assert.equal(isValidPacerControlMessage({ s: {}, P: {} }), false); // no N (conn is allowed to be absent from the check but N is not - matches snapState()'s always-present fields)
+  assert.equal(isValidPacerControlMessage({ s: null, P: {}, conn: {}, N: {} }), false);
+  assert.equal(isValidPacerControlMessage({ s: [], P: {}, conn: {}, N: {} }), false); // array, not a plain object
+});
+
+test('isValidPacerControlMessage is mutually exclusive with all three other shapes - all four coexist safely on one channel', () => {
+  const v1 = { partIndex: 0, stepIndex: -1, state: { hr: 90 } };
+  const v2 = { currentStageId: 'stage-1', state: { hr: 90 } };
+  const assessment = { tiles: [], requests: {} };
+  const pacerControl = { s: { mode: 'DDD' }, P: {}, conn: {}, N: {} };
+
+  assert.equal(isValidPacerControlMessage(v1), false);
+  assert.equal(isValidPacerControlMessage(v2), false);
+  assert.equal(isValidPacerControlMessage(assessment), false);
+
+  assert.equal(isValidSnapshot(pacerControl), false);
+  assert.equal(isValidGraphSnapshot(pacerControl), false);
+  assert.equal(isValidAssessmentMessage(pacerControl), false);
+
+  // and the real one is accepted
+  assert.equal(isValidPacerControlMessage(pacerControl), true);
 });

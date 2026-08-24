@@ -732,6 +732,10 @@ let bc=null; try{ if(ROLE!=='practice') bc=new BroadcastChannel('sim5392'); }cat
 let syncReady=(ROLE==='control'), lastSync='', lastRecvTime=0;
 /* cross-device relay (self-hosted WebSocket) */
 const relay={ url:qp.get('relay')||(function(){try{return localStorage.getItem('sim5392_relay')||'';}catch(e){return'';}})(), code:qp.get('code')||'', ws:null, peers:0, want:false, backoff:RELAY_BACKOFF_START_MS };
+/* Cloud Session (Phase 9) - additive second transport for this SAME
+   dashboard<->learner pairing, alongside (not replacing) the relay above.
+   See the join block near the end of this script for why. */
+let cloudChannel=null, cloudSubscribed=false;
 
 /* ========= STATE ========= */
 const S={
@@ -2304,12 +2308,28 @@ function snapState(){ const s={}; SYNC_S.forEach(k=>s[k]=S[k]); return JSON.stri
 function sendSync(str){ lastSync=str; const msg={win:WIN_ID,data:str};
   try{ localStorage.setItem(SYNC_KEY,JSON.stringify(msg)); }catch(e){}
   if(bc){ try{ bc.postMessage(msg); }catch(e){} }
-  if(relay.ws&&relay.ws.readyState===1){ try{ relay.ws.send(JSON.stringify({type:'state',code:relay.code,win:WIN_ID,data:str})); }catch(e){} } }
+  if(relay.ws&&relay.ws.readyState===1){ try{ relay.ws.send(JSON.stringify({type:'state',code:relay.code,win:WIN_ID,data:str})); }catch(e){} }
+  if(cloudChannel&&cloudSubscribed){ try{ cloudChannel.send({type:'broadcast',event:'state',payload:msg}); }catch(e){} } }
+/* Phase 9 fix: this device's OWN sync previously trusted ANY message shape
+   arriving on its relay room ("the other direction working by luck, not a
+   guarantee" - see sync/deviceSync.js's isValidPacerControlMessage() doc
+   comment, which now guards the SAME collision on the physiology-bridge
+   side). A console-generated pacemaker learner link puts this system and
+   the separate physiology-bridge script (bottom of this file) in the same
+   relay room - a v1/v2 physiology snapshot has no .s/.P/.N fields, so the
+   `if(o.s)...` lines below already no-op'd harmlessly on one, but only by
+   coincidence of loose truthy checks, not a real guard. This makes it real. */
+function isPacerControlShape(o){
+  return !!o && o.s&&typeof o.s==='object'&&!Array.isArray(o.s)
+    && o.P&&typeof o.P==='object'&&!Array.isArray(o.P)
+    && o.N&&typeof o.N==='object'&&!Array.isArray(o.N);
+}
 function applyRemote(msg){
   if(ROLE==='practice') return;
   if(!msg||msg.win===WIN_ID||msg.data===lastSync) return;
   lastSync=msg.data; lastRecvTime=Date.now();
   let o; try{ o=JSON.parse(msg.data); }catch(e){ return; }
+  if(!isPacerControlShape(o)) return; // not this device's own shape - e.g. a v1/v2 physiology snapshot sharing the same relay room
   if(o.s) SYNC_S.forEach(k=>{ if(k in o.s) S[k]=o.s[k]; });
   if(o.P) Object.assign(P,o.P); if(o.conn) Object.assign(conn,o.conn); if(o.N) Object.assign(N,o.N);
   syncOutFlags(); syncReady=true;
@@ -2371,6 +2391,39 @@ function connectRelay(){
   ws.onerror=()=>{ try{ ws.close(); }catch(e){} };
 }
 setInterval(()=>{ if(relay.ws&&relay.ws.readyState===1){ try{ relay.ws.send(JSON.stringify({type:'ping'})); }catch(e){} } },RELAY_PING_MS);
+
+/* ===== Cloud Session join (Phase 9) =====
+   Additive, opt-in second transport for THIS SAME dashboard<->learner
+   control-panel pairing, layered alongside the relay/BroadcastChannel
+   system above rather than replacing it - see CLAUDE.md's Phase 9 section
+   for the reasoning (this is a delicate, real-hardware-matching file; a
+   full transport rewrite here was judged higher risk than the value it
+   would add, unlike the other three device pages, which import
+   sync/deviceSync.js directly). Uses dynamic import() specifically because
+   this is a classic, non-module <script> - the rest of this IIFE is
+   untouched by that choice; import() works from any script context.
+   Deliberately its OWN 'pacer_control' channel, not 'physiology' - that's
+   the separate Phase 5 bridge script below this one's closing tag, joining
+   independently for the shared patient state's state.pacer fields. */
+if(ROLE!=='practice'){
+  (async function(){
+    const sessionCode=(qp.get('session')||'').trim().toUpperCase();
+    if(!sessionCode) return;
+    try{
+      const {cloudClient,findSessionByCode,joinSession,hydrateSnapshot,sessionChannelName}=await import('../../sync/cloudSession.js');
+      const session=await findSessionByCode(sessionCode);
+      if(!session) return;
+      const cloudRole=(ROLE==='control')?'facilitator':'learner';
+      await joinSession(session,{role:cloudRole,deviceLabel:'pacemaker-control'});
+      const ch=cloudClient.channel(sessionChannelName(session.code,'pacer_control'),{config:{broadcast:{self:false,ack:false}}});
+      ch.on('broadcast',{event:'state'},({payload})=>applyRemote(payload));
+      ch.subscribe(status=>{ cloudSubscribed=(status==='SUBSCRIBED'); if(cloudSubscribed&&syncReady) sendSync(snapState()); updateRelayUI(); });
+      cloudChannel=ch;
+      const row=await hydrateSnapshot(session.id,'pacer_control');
+      if(row&&row.data&&isPacerControlShape(row.data)) applyRemote({win:'cloud-hydrate',data:JSON.stringify(row.data)});
+    }catch(e){ /* Cloud Session join failure isn't fatal - relay/BroadcastChannel pairing is unaffected */ }
+  })();
+}
 
 function applyRole(){
   if(ROLE==='learner'){
@@ -2452,6 +2505,7 @@ window.__pacerBridge={
 // has broadcast at least once, there's nothing to overlay onto, so nothing is sent - this
 // device is a follower/contributor, never the shared session's origin.
 import { createDeviceSync, isValidSnapshot } from '../../sync/deviceSync.js';
+import { cloudClient, findSessionByCode, joinSession, hydrateSnapshot, sessionChannelName, parseSessionParams } from '../../sync/cloudSession.js';
 const bridgeUrlParams=new URLSearchParams(location.search);
 let lastSnapshot=null;
 function onRemoteSnapshot(snapshot){
@@ -2477,11 +2531,29 @@ const pacerDeviceSync=createDeviceSync({
 // Testing/introspection hook, same rationale as the monitors' window.ctSharedEngine.
 window.ctPacerBridgeSync={
   getLastSnapshot:()=>lastSnapshot,
-  getSyncStatus:()=>({linked:pacerDeviceSync.isLinked(),peers:pacerDeviceSync.peerCount(),relay:pacerDeviceSync.relay}),
+  getSyncStatus:()=>({linked:pacerDeviceSync.isLinked(),peers:pacerDeviceSync.peerCount(),relay:pacerDeviceSync.relay,cloud:pacerDeviceSync.cloud,cloudLinked:pacerDeviceSync.isCloudLinked()}),
   pushNow:()=>pacerDeviceSync.pushNow(),
   heartbeatNow:()=>pacerDeviceSync.heartbeatNow(),
   setRelay:(url,code)=>pacerDeviceSync.setRelay(url,code),
 };
+
+/* ---------------- Cloud Session join (Phase 9) ---------------- */
+// Joins the session's `physiology` channel (NOT `pacer_control` - that's
+// this device's own separate dashboard<->learner control-panel pairing,
+// migrated onto Cloud Session independently below) - same mechanism as
+// IntelliVue/HemoSphere's identical additions.
+(async function joinCloudSessionFromUrl(){
+  const {code,role}=parseSessionParams(bridgeUrlParams);
+  if(!code)return;
+  try{
+    const session=await findSessionByCode(code);
+    if(!session)return;
+    await joinSession(session,{role,deviceLabel:"pacemaker"});
+    pacerDeviceSync.setCloud(cloudClient,sessionChannelName(session.code,"physiology"));
+    const row=await hydrateSnapshot(session.id,"physiology");
+    if(row&&row.data&&Object.keys(row.data).length)onRemoteSnapshot(row.data);
+  }catch(e){ /* Cloud Session join failure isn't fatal - BroadcastChannel/relay bridging is unaffected */ }
+})();
 </script>
 </body>
 </html>

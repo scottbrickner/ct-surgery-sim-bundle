@@ -171,6 +171,7 @@ import {
   requestTile, resolveRequest, getTileStatus, getPendingRequests, getSessionSummary,
 } from './model.js';
 import { createDeviceSync, isValidAssessmentMessage } from '../sync/deviceSync.js';
+import { cloudClient, findSessionByCode, joinSession, hydrateSnapshot, writeSnapshot, sessionChannelName, parseSessionParams } from '../sync/cloudSession.js';
 
 const byId = (id) => document.getElementById(id);
 const LOCAL_KEY = 'ct-sim-assessments-drafts-v1';
@@ -405,6 +406,36 @@ setInterval(() => {
   byId('syncStatus').innerHTML = '<span class="dot"></span>' + (deviceSync.isLinked() ? 'Synced' : 'Same-machine sync');
   renderPendingQueue(); // re-render to keep "delayed" waiting-time labels live even with no state change
 }, 1000);
+
+/* ---------------- Cloud Session join (Phase 9) ---------------- */
+// Same ?session=/?role=/?device= mechanism as every other device page (see
+// IntelliVue's identical addition for the full rationale) - the `assessments`
+// channel is writable by facilitator AND learner participants alike (RLS
+// policy, see supabase/schema-sessions.sql), matching this page's own
+// existing model where a learner's own tile tap writes the shared state
+// directly, not just the facilitator.
+let cloudSessionId = null;
+(async function joinCloudSessionFromUrl() {
+  const { code, role, device } = parseSessionParams(new URLSearchParams(location.search));
+  if (!code) return;
+  try {
+    const session = await findSessionByCode(code);
+    if (!session) return;
+    await joinSession(session, { role, deviceLabel: device || 'assessments' });
+    cloudSessionId = session.id;
+    deviceSync.setCloud(cloudClient, sessionChannelName(session.code, 'assessments'));
+    const row = await hydrateSnapshot(session.id, 'assessments');
+    if (row && row.data && Array.isArray(row.data.tiles)) { state = { ...state, tiles: row.data.tiles, requests: row.data.requests || {} }; render(); }
+  } catch (e) { /* Cloud Session join failure isn't fatal - same-machine sync and local use are unaffected */ }
+})();
+let lastAssessmentsDurableWrite = '';
+setInterval(async () => {
+  if (!cloudSessionId) return;
+  const str = JSON.stringify({ tiles: state.tiles, requests: state.requests });
+  if (str === lastAssessmentsDurableWrite) return;
+  lastAssessmentsDurableWrite = str;
+  try { await writeSnapshot(cloudSessionId, 'assessments', { tiles: state.tiles, requests: state.requests }); } catch (e) {}
+}, 3000);
 
 /* Testing hook, same rationale as every other page in this project */
 window.ctAssessments = {

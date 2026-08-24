@@ -105,6 +105,48 @@ export function isValidAssessmentMessage(snapshot) {
     && snapshot.requests !== null && typeof snapshot.requests === 'object' && !Array.isArray(snapshot.requests);
 }
 
+/**
+ * Phase 9 (Cross-device real-time sessions) - a FOURTH structurally distinct
+ * shape this bus can carry: {s, P, conn, N} from the pacemaker's own
+ * dashboard<->learner control-panel pairing (devices/pacemaker/5392-pacemaker-simulator.html's
+ * `snapState()`), now migrated onto this shared transport instead of its own
+ * hand-rolled BroadcastChannel('sim5392')/relay implementation - closing the
+ * "two incompatible sync systems coexist in the same relay room" gap the
+ * audit named (§2, §12): previously, a console-generated pacemaker learner
+ * link put BOTH systems in the same relay room, and only ONE direction of
+ * that collision was actually guarded (isValidSnapshot() correctly rejects a
+ * {s,P,conn,N} payload) - the OTHER direction (the pacemaker's own
+ * unguarded `if(o.s)...if(o.P)...` applyRemote silently no-op'ing on a v1/v2
+ * physiology snapshot) worked, in the code's own prior comment, "by luck,
+ * not a guarantee." This function is the real fix: the pacemaker's control-
+ * panel sync now checks this explicitly before applying anything, same
+ * pattern as every other shape on this bus.
+ */
+export function isValidPacerControlMessage(snapshot) {
+  return !!snapshot
+    && snapshot.s !== null && typeof snapshot.s === 'object' && !Array.isArray(snapshot.s)
+    && snapshot.P !== null && typeof snapshot.P === 'object' && !Array.isArray(snapshot.P)
+    && snapshot.N !== null && typeof snapshot.N === 'object' && !Array.isArray(snapshot.N);
+}
+
+/**
+ * Phase 9's pause gate: while paused, NOTHING broadcasts on ANY transport
+ * (BroadcastChannel, relay, cloud) - this is the actual mechanism behind
+ * "pause freezes all three device categories" and the "hidden resume
+ * snapshot" acceptance criterion. It is deliberately simpler than a
+ * per-transport gate (only silencing the cloud arm, say): freezing every
+ * transport uniformly means a facilitator's local rehearsal (clicking
+ * Next/overrides while paused, to stage what comes next) never leaks to
+ * ANY connected peer, same-machine or cross-device, until resume - not just
+ * to remote learners. See sync/cloudSession.js's preparePending()/
+ * publishPending() for the durable (Postgres) half of this flow, which is
+ * what a REFRESHING/reconnecting device hydrates from while paused.
+ */
+export function shouldBroadcast({ paused, nextStr, lastStr }) {
+  if (paused) return false;
+  return shouldPush(nextStr, lastStr);
+}
+
 export function shouldApplyRemote(msg, { winId, lastSyncStr }) {
   if (!msg || typeof msg.data !== 'string') return false;
   if (msg.win === winId) return false;
@@ -119,15 +161,25 @@ export function shouldApplyRemote(msg, { winId, lastSyncStr }) {
  *   returns the current slice of local state to publish, every push tick.
  * @param {(snapshot:{partIndex:number, stepIndex:number, state:object}) => void} onRemoteSnapshot
  *   called whenever a peer's snapshot should be applied locally.
- * @param {string} [relayUrl] - wss:// endpoint for cross-device pairing.
+ * @param {string} [relayUrl] - wss:// endpoint for cross-device pairing (legacy WS relay, unchanged).
  * @param {string} [relayCode] - session code; pass none and call setRelay() later to generate one.
+ * @param {object} [cloudClient] - a Supabase client (sync/cloudSession.js's `supabase` export), for
+ *   Phase 9's opt-in Cloud Session transport. Omit entirely to leave this device on the legacy
+ *   BroadcastChannel/relay-only path, unchanged from every phase before this one.
+ * @param {string} [cloudChannelName] - Realtime Broadcast channel name (sync/cloudSession.js's
+ *   sessionChannelName()); pass none and call setCloud() later once a session code exists.
  */
-export function createDeviceSync({ getSnapshot, onRemoteSnapshot, relayUrl, relayCode }) {
+export function createDeviceSync({ getSnapshot, onRemoteSnapshot, relayUrl, relayCode, cloudClient, cloudChannelName }) {
   const winId = Math.random().toString(36).slice(2);
   let lastSyncStr = null;
   let lastRecvAt = 0;
 
   const relay = { url: relayUrl || '', code: relayCode || '', ws: null, peers: 0, want: false, backoff: BACKOFF_START_MS };
+  // Cloud (Phase 9) is deliberately a much lighter object than `relay` - it
+  // has no reconnect/backoff state of its own because supabase-js's Realtime
+  // client already owns reconnection internally; `channel`/`subscribed` are
+  // the only two things sendRaw() and setCloud() need to touch.
+  const cloud = { client: cloudClient || null, channelName: cloudChannelName || '', channel: null, subscribed: false };
 
   function sendRaw(str) {
     lastSyncStr = str;
@@ -136,6 +188,9 @@ export function createDeviceSync({ getSnapshot, onRemoteSnapshot, relayUrl, rela
     if (bc) { try { bc.postMessage(msg); } catch (e) {} }
     if (relay.ws && relay.ws.readyState === 1) {
       try { relay.ws.send(JSON.stringify({ type: 'state', code: relay.code, win: winId, data: str })); } catch (e) {}
+    }
+    if (cloud.channel && cloud.subscribed) {
+      try { cloud.channel.send({ type: 'broadcast', event: 'state', payload: msg }); } catch (e) {}
     }
   }
 
@@ -155,12 +210,13 @@ export function createDeviceSync({ getSnapshot, onRemoteSnapshot, relayUrl, rela
     if (e.key === SYNC_KEY && e.newValue) { try { applyRemote(JSON.parse(e.newValue)); } catch (e2) {} }
   });
 
+  let paused = false;
   function pushSync() {
     const str = JSON.stringify(getSnapshot());
-    if (!shouldPush(str, lastSyncStr)) return;
+    if (!shouldBroadcast({ paused, nextStr: str, lastStr: lastSyncStr })) return;
     sendRaw(str);
   }
-  function sendHeartbeat() { sendRaw(JSON.stringify(getSnapshot())); } // unconditional, so a newly-opened peer catches up even with no state change
+  function sendHeartbeat() { if (paused) return; sendRaw(JSON.stringify(getSnapshot())); } // unconditional-when-unpaused, so a newly-opened peer catches up even with no state change
   setInterval(pushSync, PUSH_MS);
   setInterval(sendHeartbeat, HEARTBEAT_MS);
 
@@ -189,8 +245,31 @@ export function createDeviceSync({ getSnapshot, onRemoteSnapshot, relayUrl, rela
   if (relay.url && relay.code) connectRelay();
   setInterval(() => { if (relay.ws && relay.ws.readyState === 1) { try { relay.ws.send(JSON.stringify({ type: 'ping' })); } catch (e) {} } }, 25000);
 
+  /**
+   * Open (or reopen) the Supabase Realtime Broadcast channel for the cloud
+   * transport. `{config:{broadcast:{self:false}}}` mirrors the self-echo
+   * guard the BroadcastChannel/relay arms already get for free from
+   * shouldApplyRemote()'s winId check - Realtime's own `self:false` option
+   * does the equivalent at the subscription level, so applyRemote() never
+   * even sees this window's own broadcasts back.
+   */
+  function connectCloud() {
+    if (!cloud.client || !cloud.channelName) return;
+    if (cloud.channel) { try { cloud.client.removeChannel(cloud.channel); } catch (e) {} }
+    cloud.subscribed = false;
+    const ch = cloud.client.channel(cloud.channelName, { config: { broadcast: { self: false, ack: false } } });
+    ch.on('broadcast', { event: 'state' }, ({ payload }) => applyRemote(payload));
+    ch.subscribe((status) => {
+      cloud.subscribed = (status === 'SUBSCRIBED');
+      if (cloud.subscribed) sendRaw(JSON.stringify(getSnapshot())); // catch a newly-joined peer up immediately, don't wait for the next interval tick
+    });
+    cloud.channel = ch;
+  }
+  if (cloud.client && cloud.channelName) connectCloud();
+
   return {
     relay,
+    cloud,
     /** Set/replace the relay endpoint and (re)connect. Generates a session code if none is given. Returns the code in use. */
     setRelay(url, code) {
       relay.want = false;
@@ -201,8 +280,20 @@ export function createDeviceSync({ getSnapshot, onRemoteSnapshot, relayUrl, rela
       connectRelay();
       return relay.code;
     },
+    /** Set/replace the cloud (Supabase Realtime) channel and (re)connect - the Phase 9 equivalent of setRelay() above, same late-binding rationale (a session code may not exist yet at createDeviceSync() call time). */
+    setCloud(client, channelName) {
+      cloud.client = client;
+      cloud.channelName = channelName;
+      connectCloud();
+    },
     isLinked: () => Date.now() - lastRecvAt < STALE_MS,
+    isCloudLinked: () => cloud.subscribed,
     peerCount: () => relay.peers,
+    /** Freeze all outbound broadcasting (every transport) - see shouldBroadcast()'s doc comment above for why this is "all three device categories", not just cloud. */
+    pause() { paused = true; },
+    /** Resume outbound broadcasting. The next interval tick immediately sends current getSnapshot() - callers doing a Publish flow should write their durable pending_data->data copy BEFORE calling this, so the first live broadcast after resume already reflects the published state. */
+    resume() { paused = false; },
+    isPaused: () => paused,
     /**
      * Force an immediate push, bypassing the PUSH_MS interval. Real users
      * never need this (the interval runs fine on a normal foreground tab) -

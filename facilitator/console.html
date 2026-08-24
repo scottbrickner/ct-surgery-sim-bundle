@@ -345,12 +345,40 @@
       </div>
     </details>
 
+    <details class="rail-group deemph" id="grp_cloud">
+      <summary><span>Cloud Session</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="hint">Real-time cross-device pairing over Supabase — a new, opt-in alternative to the relay above. Same-machine devices already sync with zero setup either way.</div>
+        <div class="btnrow" style="margin-top:8px"><button class="act" id="cloudStart">Start Cloud Session</button></div>
+        <div class="hint" id="cloudStatus">Not started.</div>
+        <div id="cloudPairBox" style="display:none">
+          <div class="gl">Code</div>
+          <div id="cloudCode" style="font-family:var(--font-mono);font-size:20px;letter-spacing:0.1em;font-weight:700;margin-bottom:8px">—</div>
+          <canvas id="cloudQr" style="width:132px;height:132px;image-rendering:pixelated;border:1px solid var(--rule-strong);border-radius:4px;margin-bottom:10px"></canvas>
+          <div class="gl">Send a device this session</div>
+          <div class="linkrow"><input type="text" id="cloudLinkIntelliVue" readonly><button class="act mini" id="cloudCopyIntelliVue">Copy</button></div>
+          <div class="linkrow"><input type="text" id="cloudLinkHemoSphere" readonly><button class="act mini" id="cloudCopyHemoSphere">Copy</button></div>
+          <div class="linkrow"><input type="text" id="cloudLinkPacemaker" readonly><button class="act mini" id="cloudCopyPacemaker">Copy</button></div>
+          <div class="linkrow"><input type="text" id="cloudLinkAssessments" readonly><button class="act mini" id="cloudCopyAssessments">Copy</button></div>
+          <div class="gl">Connected</div>
+          <div class="hint" id="cloudRoster">Just you so far.</div>
+        </div>
+      </div>
+    </details>
+
     <details class="rail-group deemph" id="grp_session">
       <summary><span>Session, Pause &amp; Reset</span><span class="chev">▸</span></summary>
       <div class="body">
         <div class="hint">Training/Validation mode is set above. Reset returns to Part 1's baseline.</div>
         <div class="btnrow" style="margin-top:8px"><button class="act" id="fs_reset2">Reset Scenario</button></div>
-        <div class="phase-note">Pause with a learner-facing message ("TIME OUT" / "Let's Chat!") and a hidden resume snapshot are planned for a later phase, alongside the full cross-device session upgrade.</div>
+        <div class="hint" style="margin-top:14px">Pause freezes every connected device's display — same-machine and Cloud Session alike — so you can rehearse the next moment without it being visible anywhere else, then reveal it in one step.</div>
+        <div class="btnrow" style="margin-top:8px">
+          <button class="act" id="cloudPause">Pause</button>
+          <button class="act" id="cloudPrepare" disabled>Prepare Next State</button>
+          <button class="act" id="cloudPublish" disabled>Resume &amp; Publish</button>
+        </div>
+        <div class="hint" id="pauseStatus">Not paused.</div>
+        <div class="phase-note">Pause/Prepare/Publish requires an active Cloud Session — start one above first.</div>
       </div>
     </details>
   </aside>
@@ -431,6 +459,12 @@ import { validateScenarioV2, formatValidationErrors } from '../scenarios/validat
 import { migrateV1ToV2 } from '../scenarios/migrate.js';
 import { createDeviceSync, isValidSnapshot, isValidGraphSnapshot } from '../sync/deviceSync.js';
 import { supabase } from '../supabase/client.js';
+import {
+  cloudClient, createSession, findSessionByCode, joinSession, fetchRoster, touchPresence,
+  hydrateSnapshot, writeSnapshot, preparePending, publishPending, setPaused as setCloudPaused,
+  sessionChannelName, buildSessionLink, parseSessionParams,
+} from '../sync/cloudSession.js';
+import { renderToCanvas as renderQr } from '../sync/qr.js';
 const byId=id=>document.getElementById(id);
 
 let runner=null;
@@ -1016,6 +1050,148 @@ setInterval(()=>{
   const rst=byId("relayStatus");
   if(deviceSync.relay.url)rst.textContent=(deviceSync.relay.ws&&deviceSync.relay.ws.readyState===1?"● Connected":"Connecting…")+" — code "+deviceSync.relay.code+", "+deviceSync.peerCount()+" peer(s) in room.";
 },1000);
+
+/* ---------------- Cloud Session (Phase 9) ---------------- */
+// Feature-flagged, additive alongside the relay above (user's explicit
+// Phase 9 rollout choice, see CLAUDE.md) - nothing here runs unless the
+// facilitator clicks "Start Cloud Session" or opens the console via a
+// `?session=` link. The BroadcastChannel/relay transports above are
+// completely unaffected either way.
+let cloudSession=null; // {id, code, ...} once started/joined
+let cloudPending=false; // has anything been staged into pending_data since the last Pause?
+
+function cloudSnapshot(){ return deviceSync ? (engineMode==="v1"?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode}:{currentStageId:runner.currentStageId,state:runner.state,mode:sessionMode}) : null; }
+
+function cloudDeviceLink(devicePath,deviceLabel){
+  if(!cloudSession)return "";
+  return buildSessionLink(location.href.split("?")[0].split("#")[0].replace(/facilitator\/console\.html$/,devicePath),cloudSession.code,{role:"learner",device:deviceLabel});
+}
+function refreshCloudLinks(){
+  byId("cloudLinkIntelliVue").value=cloudDeviceLink("devices/intellivue/IntelliVue_Sim_Monitor.html","intellivue");
+  byId("cloudLinkHemoSphere").value=cloudDeviceLink("devices/hemosphere-alta/HemoSphere_Alta_Sim.html","hemosphere");
+  byId("cloudLinkPacemaker").value=cloudDeviceLink("devices/pacemaker/5392-pacemaker-simulator.html","pacemaker");
+  byId("cloudLinkAssessments").value=cloudDeviceLink("assessments/index.html","assessments");
+}
+["IntelliVue","HemoSphere","Pacemaker","Assessments"].forEach(name=>{
+  byId("cloudCopy"+name).addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("cloudLink"+name).value);}catch(e){}});
+});
+
+function renderCloudPairing(){
+  if(!cloudSession)return;
+  byId("cloudPairBox").style.display="block";
+  byId("cloudCode").textContent=cloudSession.code;
+  // QR points at the homepage (which already lists every device as its own
+  // launch card and now propagates ?session=/?role= onto each one - see
+  // index.html) rather than any single device, since a scanning learner
+  // hasn't chosen which surface they need yet.
+  renderQr(byId("cloudQr"),buildSessionLink(location.href.split("?")[0].split("#")[0].replace(/facilitator\/console\.html$/,"index.html"),cloudSession.code,{role:"learner"}),{cell:4});
+  refreshCloudLinks();
+}
+async function renderCloudRoster(){
+  if(!cloudSession)return;
+  try{
+    const roster=await fetchRoster(cloudSession.id);
+    if(roster.length<=1){byId("cloudRoster").textContent="Just you so far.";return;}
+    byId("cloudRoster").textContent=roster.map(p=>{
+      const ageS=Math.max(0,Math.round((Date.now()-new Date(p.last_seen_at).getTime())/1000));
+      return (p.role==="facilitator"?"Facilitator":"Learner")+(p.device_label?" · "+p.device_label:"")+" ("+ageS+"s ago)";
+    }).join(" · ");
+  }catch(e){ /* roster read failure isn't fatal - the live sync itself doesn't depend on it */ }
+}
+
+async function startCloudSession(){
+  byId("cloudStart").disabled=true;
+  byId("cloudStatus").textContent="Starting…";
+  try{
+    const session=await createSession({engineMode,deviceLabel:"console"});
+    cloudSession=session;
+    deviceSync.setCloud(cloudClient,sessionChannelName(session.code,"physiology"));
+    byId("cloudStart").style.display="none";
+    byId("cloudStatus").textContent="● Cloud Session live.";
+    renderCloudPairing();
+  }catch(e){
+    byId("cloudStatus").textContent="Could not start a Cloud Session: "+e.message;
+    byId("cloudStart").disabled=false;
+  }
+}
+byId("cloudStart").addEventListener("click",()=>{startCloudSession().catch(()=>{});});
+
+// Rejoin an existing Cloud Session from a link (a facilitator who refreshed
+// mid-scenario, or opened the console via a link another facilitator sent) -
+// the audit's own "facilitator refresh mid-scenario recovers full state, not
+// a blank slate" acceptance criterion.
+(async function rejoinCloudSessionFromUrl(){
+  const {code}=parseSessionParams(csUrlParams);
+  if(!code)return;
+  byId("cloudStatus").textContent="Reconnecting to session "+code+"…";
+  try{
+    const session=await findSessionByCode(code);
+    if(!session){byId("cloudStatus").textContent="Session "+code+" not found or has ended.";return;}
+    await joinSession(session,{role:"facilitator",deviceLabel:"console"});
+    cloudSession=session;
+    deviceSync.setCloud(cloudClient,sessionChannelName(session.code,"physiology"));
+    const row=await hydrateSnapshot(session.id,"physiology");
+    if(row&&row.data&&Object.keys(row.data).length)onRemoteSnapshot(row.data);
+    if(session.paused){deviceSync.pause();byId("cloudPause").disabled=true;byId("cloudPrepare").disabled=false;byId("cloudPublish").disabled=false;byId("pauseStatus").textContent="Paused (rejoined already-paused session).";}
+    byId("cloudStart").style.display="none";
+    byId("cloudStatus").textContent="● Cloud Session live (reconnected).";
+    renderCloudPairing();
+  }catch(e){
+    byId("cloudStatus").textContent="Could not reconnect: "+e.message;
+  }
+})();
+
+// Durable write - the slow path that a REFRESHING device hydrates from
+// (live ticks travel over Realtime Broadcast instead, see deviceSync.js).
+// Only runs while unpaused - a paused session's durable `data` column
+// deliberately stays at its last-published value; see preparePending()
+// below for what happens to changes made while paused.
+let lastDurableWrite="";
+setInterval(async ()=>{
+  if(!cloudSession||deviceSync.isPaused())return;
+  const snap=cloudSnapshot(); if(!snap)return;
+  const str=JSON.stringify(snap);
+  if(str===lastDurableWrite)return;
+  lastDurableWrite=str;
+  try{await writeSnapshot(cloudSession.id,"physiology",snap);}catch(e){}
+},3000);
+setInterval(()=>{ if(cloudSession)renderCloudRoster(); },4000);
+setInterval(async ()=>{
+  if(!cloudSession)return;
+  try{
+    const {data:{session}}=await cloudClient.auth.getSession();
+    if(session)await touchPresence(cloudSession.id,session.user.id);
+  }catch(e){}
+},20000);
+
+byId("cloudPause").addEventListener("click",async ()=>{
+  if(!cloudSession)return;
+  deviceSync.pause();
+  cloudPending=false;
+  byId("cloudPause").disabled=true; byId("cloudPrepare").disabled=false; byId("cloudPublish").disabled=false;
+  byId("pauseStatus").textContent="● Paused — every connected device is frozen at its last published state. Navigate freely, then Prepare + Publish when ready.";
+  try{await setCloudPaused(cloudSession.id,true);}catch(e){}
+});
+byId("cloudPrepare").addEventListener("click",async ()=>{
+  if(!cloudSession)return;
+  const snap=cloudSnapshot(); if(!snap)return;
+  try{
+    await preparePending(cloudSession.id,"physiology",snap);
+    cloudPending=true;
+    byId("pauseStatus").textContent="● Paused — next state staged (hidden from every learner display). Publish when ready, or Prepare again after navigating further.";
+  }catch(e){ byId("pauseStatus").textContent="Could not stage the next state: "+e.message; }
+});
+byId("cloudPublish").addEventListener("click",async ()=>{
+  if(!cloudSession)return;
+  try{
+    if(cloudPending)await publishPending(cloudSession.id,"physiology");
+    await setCloudPaused(cloudSession.id,false);
+    deviceSync.resume();
+    cloudPending=false;
+    byId("cloudPause").disabled=false; byId("cloudPrepare").disabled=true; byId("cloudPublish").disabled=true;
+    byId("pauseStatus").textContent="Not paused.";
+  }catch(e){ byId("pauseStatus").textContent="Could not publish/resume: "+e.message; }
+});
 
 /* Testing hook, same rationale as the device files' window.ctSharedEngine */
 window.ctSharedEngine={

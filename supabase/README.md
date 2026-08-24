@@ -128,14 +128,95 @@ Things worth trying if you pick this back up:
   too permissive for a real deployment, the fix is a Postgres auth hook or a
   domain check in the `insert`/`update` policies in `schema.sql`, not a
   schema rewrite.
-- **No session-sync migration to Supabase Realtime.** Cross-device sync
-  during a live session still runs entirely on `sync/deviceSync.js`
-  (BroadcastChannel + the existing WebSocket relay on Render). This
-  foundation is scoped to scenario storage/sharing + author auth only - a
-  session real-time database on top of `sync/deviceSync.js`'s wire format is
-  a separate, later piece if it's ever needed (same-machine and relay sync
-  both already work without it).
 - **Facilitator role still has no login of any kind** - by design. The
   Console's new "Cloud" scenario browser reads `published = true` rows
   through the anon/publishable key with no session at all, exactly matching
   how the Console already works today.
+
+## Phase 9: Cross-device real-time sessions
+
+Adds real-time session infrastructure on top of the foundation above -
+`schema-sessions.sql`, `sync/cloudSession.js`, and a new Cloud transport arm
+inside `sync/deviceSync.js`'s `createDeviceSync()`. **Feature-flagged and
+additive**, per the explicit rollout decision made before building this:
+the existing BroadcastChannel (same-machine, always-on) and WebSocket relay
+(cross-device, opt-in, on Render) both keep working completely unchanged.
+Nothing in this phase runs unless a facilitator clicks "Start Cloud
+Session" in the Console, or a device is opened via a link carrying
+`?session=`.
+
+### To apply (two dashboard steps, once)
+
+1. **Run the schema.** Paste `supabase/schema-sessions.sql` into the SQL
+   Editor (same place `schema.sql` was applied) and run it. Idempotent -
+   safe to re-run.
+2. **Enable Anonymous Sign-ins.** Dashboard → Authentication → Providers →
+   turn on "Anonymous Sign-Ins". This does NOT add a login screen anywhere -
+   facilitators and learners still see none. It gives each browser tab a
+   stable `auth.uid()` so Postgres Row Level Security can actually tell "a
+   facilitator of THIS session" apart from "anyone who has the code" -
+   which the pre-Phase-9 relay genuinely could not do (see the audit's own
+   §5 finding: "anyone with the URL and the 6-character code can join and
+   inject state"). It's unrelated to the Scenario Builder's separate
+   email+OTP author login in `schema.sql`.
+
+### What it adds
+
+- **Session codes + QR joining.** "Start Cloud Session" in the Console
+  generates a 6-character code (same alphabet/generator as the relay's
+  codes) and renders a real QR code (`sync/qr.js` - a dependency-free
+  encoder found already built inside the pacemaker sim for its own relay
+  pairing, extracted here rather than reinventing one) pointing at the
+  homepage with `?session=` attached. The homepage propagates that param
+  onto every launch card, so a learner who scans it picks their device from
+  the same launcher a facilitator would use.
+- **Role-gated writes, enforced server-side.** `session_participants` holds
+  each anonymous user's role (`facilitator` | `learner`) per session.
+  `session_snapshots` RLS lets a learner write the `assessments` channel
+  (matches Phase 8's existing "a learner's own tap writes shared state"
+  model) but never `physiology` or `pacer_control` - a genuine, tested
+  security boundary, not just a UI that doesn't offer the control. See
+  `sync/cloudSessionLogic.js`'s `canWriteChannel()` for the client-side
+  mirror used for local UI gating (not itself the security boundary - RLS
+  is).
+- **Full-state hydration on reconnect.** `session_snapshots.data` is a
+  durable row per (session, channel), written every ~3s from whichever
+  device is driving. A refreshing/reconnecting device does one `SELECT`
+  against it on join - real state recovery, not the old relay's "wait for
+  the next 600ms heartbeat and hope" (audit §5).
+- **Pause / hidden resume snapshot.** The Console's Pause button freezes
+  broadcasting on every transport at once (`createDeviceSync`'s new
+  `pause()`/`resume()`, gated by `shouldBroadcast()`) - same-machine devices
+  freeze too, not just cloud-connected ones. While paused, "Prepare Next
+  State" stages the facilitator's in-progress navigation into
+  `session_snapshots.pending_data` (a column no learner-facing UI ever
+  reads); "Resume & Publish" copies it into the visible `data` column and
+  un-freezes broadcasting in one step.
+- **Pacemaker migration.** The pacemaker's own pre-existing
+  dashboard↔learner control-panel pairing (its own `BroadcastChannel
+  ('sim5392')`/relay code, entirely separate from the physiology bridge)
+  now ALSO accepts a Cloud Session join for its `pacer_control` channel,
+  and its `applyRemote()` gained an explicit shape guard
+  (`isPacerControlShape()`) instead of relying on loose truthy checks -
+  this is the actual fix for the audit's long-flagged "two incompatible
+  sync systems coexist in the same relay room... working by luck, not a
+  guarantee" gap (§2, §12). Deliberately NOT a full rewrite of that file's
+  transport internals onto `sync/deviceSync.js` - see CLAUDE.md's Phase 9
+  section for why a lower-risk, additive approach was chosen for this one
+  real-hardware-matching file specifically, unlike the other three device
+  pages (which import `sync/deviceSync.js` directly, unchanged).
+
+### What's honestly still open
+
+- **Never verified against real separate hardware.** Every check this
+  phase got was multiple browser tabs on one machine standing in for
+  "devices" - genuinely the best available in this environment, but not the
+  same as a real second laptop + tablet. The audit's own risk note called
+  this out explicitly ("stage it behind a feature flag... until the
+  Supabase path is independently verified with a real second physical
+  device") - that verification is still the user's to do, whenever
+  convenient, not claimed as done here.
+- **No session cleanup job.** A `sessions` row has `ended_at`, but nothing
+  currently sets it - an old session's code just sits inert once nobody's
+  pushing to it. Fine at this scale (a single sim lab), worth a scheduled
+  cleanup if this ever needs to outlive one class's worth of sessions.
