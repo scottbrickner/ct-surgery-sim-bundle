@@ -45,10 +45,10 @@
   .gl:first-child{margin-top:0;}
   .phase-note{font-size:var(--text-2xs); color:var(--ink-faint); background:var(--paper-sunken); border:1px solid var(--rule); border-radius:var(--radius-sm); padding:8px 10px; margin-top:8px; line-height:1.5;}
 
-  .row{display:flex; align-items:center; justify-content:space-between; gap:8px; margin:7px 0; font-size:var(--text-xs);}
-  .row label{color:var(--ink-soft); flex:0 0 108px;}
-  .row input[type=range]{flex:1; accent-color:var(--accent);}
-  .row .val{width:48px; text-align:right; font-family:var(--font-mono); font-weight:600; font-size:var(--text-xs);}
+  .row{display:flex; align-items:center; justify-content:space-between; gap:6px; margin:7px 0; font-size:var(--text-xs);}
+  .row label{color:var(--ink-soft); flex:0 0 82px;}
+  .row input[type=range]{flex:1 1 auto; min-width:44px; accent-color:var(--accent);}
+  .row .val{width:36px; flex:0 0 auto; text-align:right; font-family:var(--font-mono); font-weight:600; font-size:var(--text-xs);}
 
   .btnrow{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0;}
   button.act{flex:1 1 auto; background:var(--paper-raised); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:8px 9px; font-size:var(--text-2xs); font-weight:600; cursor:pointer;}
@@ -94,10 +94,41 @@
 
   .section-gap{margin-top:var(--space-7);}
 
-  /* ---- override status row: only rendered when a field IS currently overridden ---- */
-  .ov-status{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin:-2px 0 8px; padding:6px 8px; background:var(--warn-wash); border:1px solid var(--warn); border-radius:var(--radius-sm); font-size:10.5px;}
-  .ov-status[hidden]{display:none;} /* author `.ov-status{display:flex}` otherwise beats the UA stylesheet's [hidden]{display:none} regardless of source order (author > user-agent cascade origin) */
-  .ov-status .txt{color:var(--warn); font-family:var(--font-mono); flex:1 1 auto; min-width:100px;}
+  /* ---- override badge: reuses the existing .ov-status element/id per
+     slider (same DOM, same renderOverrideStatus() hook points) but redesigned
+     from a big always-loud inline box with its own Release buttons into a
+     small passive dot+text indicator - release actions now live ONLY in the
+     consolidated "Active Overrides" panel in <main> (renderActiveOverridesPanel).
+     Redesigned per direct user feedback that the old box made it hard to
+     tell what was active vs. not, scattered across a long scrolling rail. ---- */
+  .ov-status{display:none; align-items:center; gap:5px; margin:-4px 0 6px; font-family:var(--font-mono); font-size:9.5px; color:var(--warn);}
+  .ov-status.on{display:flex;}
+  .ov-status[hidden]{display:none;} /* author `.ov-status.on{display:flex}` otherwise beats the UA stylesheet's [hidden]{display:none} regardless of source order (author > user-agent cascade origin) - keep both rules */
+  .ov-status .dot{width:6px; height:6px; border-radius:50%; background:var(--warn); flex:0 0 auto;}
+  .row{flex-wrap:wrap;}
+  /* input[type=number]{width:100%} (below) otherwise beats .manual-entry's
+     width on specificity (element+attribute > class) regardless of source
+     order - same category of cascade-origin/specificity bug already
+     documented in this file's history (the [hidden] vs .ov-status note) -
+     qualifying the selector with the element type fixes it the same way. */
+  input[type=number].manual-entry{width:44px; flex:0 0 auto; padding:4px 4px; font-size:10.5px; margin-left:0;}
+
+  /* ---- consolidated Active Overrides panel (main area) ---- */
+  .overrides-panel{display:flex; flex-direction:column; gap:6px;}
+  .overrides-empty{font-size:var(--text-2xs); color:var(--ink-faint); font-style:italic;}
+  .ov-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:var(--warn-wash); border:1px solid var(--warn); border-radius:var(--radius-sm); padding:8px 10px; font-size:10.5px;}
+  .ov-row .ov-name{font-weight:700; color:var(--ink); min-width:90px;}
+  .ov-row .ov-val{font-family:var(--font-mono); color:var(--ink-soft);}
+  .ov-row .ov-txt{color:var(--warn); font-family:var(--font-mono); flex:1 1 auto; min-width:120px;}
+  .ov-row .ov-actions{display:flex; gap:6px;}
+
+  /* ---- facilitator change log (main area, own reference only) ---- */
+  .change-log{display:flex; flex-direction:column; gap:2px; max-height:260px; overflow-y:auto; border:1px solid var(--rule); border-radius:var(--radius-sm); background:var(--paper-raised);}
+  .change-log-empty{font-size:var(--text-2xs); color:var(--ink-faint); font-style:italic; padding:10px;}
+  .cl-row{display:flex; gap:10px; padding:6px 10px; font-size:10.5px; border-bottom:1px solid var(--rule);}
+  .cl-row:last-child{border-bottom:none;}
+  .cl-row .cl-time{font-family:var(--font-mono); color:var(--ink-faint); flex:0 0 52px;}
+  .cl-row .cl-label{color:var(--ink-soft); flex:1 1 auto;}
 
   .file-input-wrap{position:relative; overflow:hidden; text-align:center;}
   .file-input-wrap input[type=file]{position:absolute; inset:0; opacity:0; cursor:pointer; width:100%;}
@@ -181,6 +212,88 @@
         <input type="text" id="cd_label" placeholder="Countdown label (optional)" style="margin-top:8px">
         <div class="btnrow" style="margin-top:8px"><button class="act big danger" id="cd_start">Start Custom Decline</button></div>
         <div id="cdTimer" style="margin-top:6px"></div>
+      </div>
+    </details>
+
+    <!-- Reordered to sit right under Scenario & Stage, per direct user
+         feedback: "patient assessment and parameters should be primary task
+         in rail" - this is now the first thing a facilitator sees after
+         choosing/navigating a scenario, ahead of Interventions/BLS-ACLS. -->
+    <details class="rail-group" id="grp_assessments" open>
+      <summary><span>Patient Assessments &amp; Outputs</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="gl">Presenting Rhythm</div>
+        <!-- Read-only here - a monitored finding, not a control. The actual
+             interactive rhythm dropdown stays in BLS/ACLS below, where it's
+             used alongside shock/cardioversion/CPR - per direct user
+             feedback that rhythm belongs in BOTH places, each with a
+             different role. -->
+        <div class="row"><label>Rhythm</label><span class="val" id="assess_rhythm_v" style="width:auto;font-size:var(--text-xs)">—</span></div>
+
+        <div class="gl">Cardiac / Hemodynamics</div>
+        <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
+        <div class="ov-status" id="ov_hr_status" hidden></div>
+        <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
+        <div class="ov-status" id="ov_sbp_status" hidden></div>
+        <label class="row">BP dia <input type="range" id="ov_dbp" min="20" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
+        <div class="ov-status" id="ov_dbp_status" hidden></div>
+        <label class="row">MAP <input type="range" id="ov_map" min="30" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
+        <div class="ov-status" id="ov_map_status" hidden></div>
+        <label class="row">PA sys <input type="range" id="ov_pasys" min="10" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
+        <div class="ov-status" id="ov_pasys_status" hidden></div>
+        <label class="row">PA dia <input type="range" id="ov_padia" min="2" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
+        <div class="ov-status" id="ov_padia_status" hidden></div>
+        <label class="row">CVP <input type="range" id="ov_cvp" min="0" max="30" value="8"><span class="val" id="ov_cvp_v">8</span></label>
+        <div class="ov-status" id="ov_cvp_status" hidden></div>
+        <label class="row">CO <input type="range" id="ov_co" min="1.5" max="12" step="0.1" value="5.0"><span class="val" id="ov_co_v">5.0</span></label>
+        <div class="ov-status" id="ov_co_status" hidden></div>
+
+        <div class="gl">Perfusion / Respiratory</div>
+        <label class="row">SVV <input type="range" id="ov_svv" min="2" max="35" value="10"><span class="val" id="ov_svv_v">10</span></label>
+        <div class="ov-status" id="ov_svv_status" hidden></div>
+        <label class="row">PPV <input type="range" id="ov_ppv" min="2" max="35" value="10"><span class="val" id="ov_ppv_v">10</span></label>
+        <div class="ov-status" id="ov_ppv_status" hidden></div>
+        <label class="row">ScvO₂ <input type="range" id="ov_scvo2" min="30" max="90" value="65"><span class="val" id="ov_scvo2_v">65</span></label>
+        <div class="ov-status" id="ov_scvo2_status" hidden></div>
+        <label class="row">HPI <input type="range" id="ov_hpi" min="0" max="100" value="0"><span class="val" id="ov_hpi_v">0</span></label>
+        <div class="ov-status" id="ov_hpi_status" hidden></div>
+        <label class="row">SpO₂ <input type="range" id="ov_spo2" min="50" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
+        <div class="ov-status" id="ov_spo2_status" hidden></div>
+        <label class="row">RR <input type="range" id="ov_rr" min="0" max="50" value="14"><span class="val" id="ov_rr_v">14</span></label>
+        <div class="ov-status" id="ov_rr_status" hidden></div>
+        <label class="row">Temp <input type="range" id="ov_temp" min="32" max="42" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
+        <div class="ov-status" id="ov_temp_status" hidden></div>
+
+        <div class="gl">Neuro</div>
+        <label class="row">ICP <input type="range" id="ov_icp" min="0" max="60" value="10"><span class="val" id="ov_icp_v">10</span></label>
+        <div class="ov-status" id="ov_icp_status" hidden></div>
+        <div class="row"><label>CPP (calculated)</label><span class="val" id="assess_cpp_v" style="width:auto;font-size:var(--text-xs)">—</span></div>
+        <div class="hint" style="margin-top:0">CPP = MAP − ICP, computed live from the readout's current MAP - not itself settable. Overriding ICP or MAP updates it immediately.</div>
+
+        <div class="gl">Renal / GU</div>
+        <div class="row"><label>Collection device</label></div>
+        <select id="ov_urine_device">
+          <option value="foley">Foley (indwelling urinary catheter)</option>
+          <option value="external">External urinary diversion device</option>
+          <option value="urinal_bedpan">Urinal / bedpan</option>
+        </select>
+        <label class="row">Urine output (mL) <input type="range" id="ov_urine" min="0" max="500" step="5" value="0"><span class="val" id="ov_urine_v">0</span></label>
+        <div class="ov-status" id="ov_urine_status" hidden></div>
+        <div class="hint" style="margin-top:0">Collection device is documentation only - it doesn't change how the output value itself works.</div>
+
+        <div class="gl">Chest Tube Output (mL)</div>
+        <label class="row">R Pleural <input type="range" id="ov_rpleural" min="0" max="200" step="5" value="0"><span class="val" id="ov_rpleural_v">0</span></label>
+        <div class="ov-status" id="ov_rpleural_status" hidden></div>
+        <label class="row">R Mediastinal <input type="range" id="ov_rmediastinal" min="0" max="200" step="5" value="0"><span class="val" id="ov_rmediastinal_v">0</span></label>
+        <div class="ov-status" id="ov_rmediastinal_status" hidden></div>
+        <label class="row">Blake <input type="range" id="ov_blake" min="0" max="200" step="5" value="0"><span class="val" id="ov_blake_v">0</span></label>
+        <div class="ov-status" id="ov_blake_status" hidden></div>
+        <label class="row">L Pleural <input type="range" id="ov_lpleural" min="0" max="200" step="5" value="0"><span class="val" id="ov_lpleural_v">0</span></label>
+        <div class="ov-status" id="ov_lpleural_status" hidden></div>
+        <label class="row">L Mediastinal <input type="range" id="ov_lmediastinal" min="0" max="200" step="5" value="0"><span class="val" id="ov_lmediastinal_v">0</span></label>
+        <div class="ov-status" id="ov_lmediastinal_status" hidden></div>
+
+        <div class="phase-note">Heart/lung sounds and the full interactive Patient Assessments Monitor (see assessments/index.html) are the learner-facing surface for these findings - this rail section is the facilitator's own input/override side of the same data, plus a few fields (ICP/CPP, urine output) not yet on that page.</div>
       </div>
     </details>
 
@@ -277,59 +390,6 @@
       </div>
     </details>
 
-    <details class="rail-group" id="grp_assessments" open>
-      <summary><span>Patient Assessments &amp; Outputs</span><span class="chev">▸</span></summary>
-      <div class="body">
-        <div class="gl">Cardiac / Hemodynamics</div>
-        <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
-        <div class="ov-status" id="ov_hr_status" hidden></div>
-        <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
-        <div class="ov-status" id="ov_sbp_status" hidden></div>
-        <label class="row">BP dia <input type="range" id="ov_dbp" min="20" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
-        <div class="ov-status" id="ov_dbp_status" hidden></div>
-        <label class="row">MAP <input type="range" id="ov_map" min="30" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
-        <div class="ov-status" id="ov_map_status" hidden></div>
-        <label class="row">PA sys <input type="range" id="ov_pasys" min="10" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
-        <div class="ov-status" id="ov_pasys_status" hidden></div>
-        <label class="row">PA dia <input type="range" id="ov_padia" min="2" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
-        <div class="ov-status" id="ov_padia_status" hidden></div>
-        <label class="row">CVP <input type="range" id="ov_cvp" min="0" max="30" value="8"><span class="val" id="ov_cvp_v">8</span></label>
-        <div class="ov-status" id="ov_cvp_status" hidden></div>
-        <label class="row">CO <input type="range" id="ov_co" min="1.5" max="12" step="0.1" value="5.0"><span class="val" id="ov_co_v">5.0</span></label>
-        <div class="ov-status" id="ov_co_status" hidden></div>
-
-        <div class="gl">Perfusion / Respiratory</div>
-        <label class="row">SVV <input type="range" id="ov_svv" min="2" max="35" value="10"><span class="val" id="ov_svv_v">10</span></label>
-        <div class="ov-status" id="ov_svv_status" hidden></div>
-        <label class="row">PPV <input type="range" id="ov_ppv" min="2" max="35" value="10"><span class="val" id="ov_ppv_v">10</span></label>
-        <div class="ov-status" id="ov_ppv_status" hidden></div>
-        <label class="row">ScvO₂ <input type="range" id="ov_scvo2" min="30" max="90" value="65"><span class="val" id="ov_scvo2_v">65</span></label>
-        <div class="ov-status" id="ov_scvo2_status" hidden></div>
-        <label class="row">HPI <input type="range" id="ov_hpi" min="0" max="100" value="0"><span class="val" id="ov_hpi_v">0</span></label>
-        <div class="ov-status" id="ov_hpi_status" hidden></div>
-        <label class="row">SpO₂ <input type="range" id="ov_spo2" min="50" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
-        <div class="ov-status" id="ov_spo2_status" hidden></div>
-        <label class="row">RR <input type="range" id="ov_rr" min="0" max="50" value="14"><span class="val" id="ov_rr_v">14</span></label>
-        <div class="ov-status" id="ov_rr_status" hidden></div>
-        <label class="row">Temp <input type="range" id="ov_temp" min="32" max="42" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
-        <div class="ov-status" id="ov_temp_status" hidden></div>
-
-        <div class="gl">Chest Tube Output (mL)</div>
-        <label class="row">R Pleural <input type="range" id="ov_rpleural" min="0" max="200" step="5" value="0"><span class="val" id="ov_rpleural_v">0</span></label>
-        <div class="ov-status" id="ov_rpleural_status" hidden></div>
-        <label class="row">R Mediastinal <input type="range" id="ov_rmediastinal" min="0" max="200" step="5" value="0"><span class="val" id="ov_rmediastinal_v">0</span></label>
-        <div class="ov-status" id="ov_rmediastinal_status" hidden></div>
-        <label class="row">Blake <input type="range" id="ov_blake" min="0" max="200" step="5" value="0"><span class="val" id="ov_blake_v">0</span></label>
-        <div class="ov-status" id="ov_blake_status" hidden></div>
-        <label class="row">L Pleural <input type="range" id="ov_lpleural" min="0" max="200" step="5" value="0"><span class="val" id="ov_lpleural_v">0</span></label>
-        <div class="ov-status" id="ov_lpleural_status" hidden></div>
-        <label class="row">L Mediastinal <input type="range" id="ov_lmediastinal" min="0" max="200" step="5" value="0"><span class="val" id="ov_lmediastinal_v">0</span></label>
-        <div class="ov-status" id="ov_lmediastinal_status" hidden></div>
-
-        <div class="phase-note">Chest-tube output was already modeled in the shared engine but never had a control anywhere - added here. Foley/CRRT/NGT output, heart/lung sounds, and the full interactive Patient Assessments Monitor arrive later; use these sliders plus verbal findings until then.</div>
-      </div>
-    </details>
-
     <details class="rail-group deemph" id="grp_devices">
       <summary><span>Device Connections</span><span class="chev">▸</span></summary>
       <div class="body">
@@ -411,6 +471,17 @@
 
     <div class="readout" id="readout"></div>
 
+    <!-- The single consolidated place every active override is managed from
+         (see renderActiveOverridesPanel) - replaces the old per-slider inline
+         release-controls box, per direct user feedback that scattering
+         release controls across the whole rail made active/not-active hard
+         to track. Lives here, not in the rail, so it's visible without
+         opening any rail group. -->
+    <div class="section-gap">
+      <div class="gl">Active Overrides</div>
+      <div class="overrides-panel" id="activeOverridesPanel"><div class="overrides-empty">No active overrides.</div></div>
+    </div>
+
     <div class="section-gap">
       <div class="gl">Clinical Events</div>
       <div class="btnrow" style="max-width:420px">
@@ -419,11 +490,21 @@
         <span class="pill neutral" id="flag_ecmo">ECMO</span>
       </div>
     </div>
+
+    <!-- Facilitator-only running log of THIS session's own actions - a
+         memory aid for reference mid-session, never shown to learners and
+         not a debrief/scoring feature (confirmed with the user; matches the
+         project's standing "no debrief UI" decision, which was always about
+         learner-facing scoring, not a facilitator's own scratch log). -->
+    <div class="section-gap">
+      <div class="gl">Recent Changes (this session, facilitator reference only)</div>
+      <div class="change-log" id="changeLogPanel"><div class="change-log-empty">Nothing changed yet this session.</div></div>
+    </div>
   </main>
 </div>
 
 <script type="module">
-import { getEffectiveRhythm, getEffectiveHR, applyInstant } from '../engine/physiology.js';
+import { getEffectiveRhythm, getEffectiveHR, applyInstant, computeCPP } from '../engine/physiology.js';
 import {
   administerPush, canAdministerPush, getPushDoseCount, getPushTotalDoseMg,
   setInfusionRate, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
@@ -463,7 +544,7 @@ import { supabase } from '../supabase/client.js';
 import {
   cloudClient, createSession, findSessionByCode, joinSession, fetchRoster, touchPresence,
   hydrateSnapshot, writeSnapshot, preparePending, publishPending, setPaused as setCloudPaused,
-  sessionChannelName, buildSessionLink, parseSessionParams,
+  sessionChannelName, buildSessionLink, parseSessionParams, logEvent,
 } from '../sync/cloudSession.js';
 import { renderToCanvas as renderQr } from '../sync/qr.js';
 const byId=id=>document.getElementById(id);
@@ -714,6 +795,12 @@ function renderReadout(){
     el.className="pill "+(s.flags[k]?"critical":"neutral");
   });
   byId("ov_rhythm").value=s.rhythm in {"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1,"Ventricular Tachycardia":1,"Ventricular Fibrillation":1}?s.rhythm:byId("ov_rhythm").value;
+  // Read-only rhythm finding in Patient Assessments (the actual control
+  // stays ov_rhythm, in BLS/ACLS) - shows the EFFECTIVE rhythm (post-pacer-
+  // capture precedence), same value the readout grid's own Rhythm tile shows.
+  byId("assess_rhythm_v").textContent=getEffectiveRhythm(s);
+  byId("assess_cpp_v").textContent=Math.round(computeCPP(getMedicatedMAP(s,minute),s.icp));
+  if(byId("ov_urine_device").value!==s.urineOutput.deviceType)byId("ov_urine_device").value=s.urineOutput.deviceType;
   byId("simClockDisplay").textContent="t+"+s.minute.toFixed(1)+" min";
   renderPushDrugs();
 }
@@ -743,6 +830,7 @@ function renderPushDrugs(){
       if(!guard.allowed){alert(guard.reason);return;}
       runner={...runner,state:administerPush(runner.state,key,runner.state.minute)};
       renderReadout();
+      logChange(`${drug.label} administered`);
     });
   });
 }
@@ -755,11 +843,12 @@ function renderPushDrugs(){
 // meaning (see scenarioRunner.js's docstring on the two functions).
 const OVERRIDE_MAP={
   ov_hr:"hr",ov_sbp:"bp.sbp",ov_dbp:"bp.dbp",ov_map:"bp.map",ov_pasys:"pa.systolic",ov_padia:"pa.diastolic",ov_cvp:"cvp",ov_co:"co",
-  ov_svv:"svv",ov_ppv:"ppv",ov_scvo2:"scvo2",ov_hpi:"hpi",ov_spo2:"spo2",ov_rr:"rr",ov_temp:"temp",
+  ov_svv:"svv",ov_ppv:"ppv",ov_scvo2:"scvo2",ov_hpi:"hpi",ov_spo2:"spo2",ov_rr:"rr",ov_temp:"temp",ov_icp:"icp",
   ov_epi:"drips.epi",ov_levo:"drips.levo",ov_vasopressin:"drips.vasopressin",ov_milrinone:"drips.milrinone",
   ov_propofol:"drips.propofol",ov_fentanyl:"drips.fentanyl",ov_insulin:"drips.insulin",
   ov_rpleural:"chestTubes.rPleural",ov_rmediastinal:"chestTubes.rMediastinal",ov_blake:"chestTubes.blake",
   ov_lpleural:"chestTubes.lPleural",ov_lmediastinal:"chestTubes.lMediastinal",
+  ov_urine:"urineOutput.volumeMl",
 };
 function setPath(obj,path,value){const[h,...r]=path.split(".");if(!r.length){obj[h]=value;return;}obj[h]=obj[h]||{};setPath(obj[h],r.join("."),value);}
 function getPath(obj,path){return path.split(".").reduce((o,k)=>o==null?undefined:o[k],obj);}
@@ -784,11 +873,73 @@ function stampInfusionOnsetIfRateChanged(path,priorValue,newValue){
   if(priorValue===newValue)return;
   runner={...runner,state:applyInstant(runner.state,{medications:{infusionSetAtMinute:{[drugKey]:runner.state.minute}}})};
 }
+/**
+ * Facilitator-only change log - a running, own-reference memory aid of what
+ * THIS facilitator has done this session (overrides, drugs, events...), not
+ * a learner debrief/scoring feature - confirmed with the user this stays
+ * scoped that way, matching the project's existing standing "no debrief UI"
+ * decision (that decision was always about learner-facing scoring, not a
+ * facilitator's own scratch log of their own actions). In-memory only, lost
+ * on refresh, same as every other piece of console state before Phase 9's
+ * Cloud Session existed - if a Cloud Session IS active, entries also mirror
+ * into the durable session_events table via logEvent() (best-effort, never
+ * blocks the local log if that write fails), so a facilitator who refreshes
+ * mid-cloud-session doesn't lose their own history even though the local
+ * array does.
+ */
+const CHANGE_LOG_MAX=80;
+let changeLog=[];
+function logChange(label){
+  changeLog.unshift({ts:Date.now(),label});
+  if(changeLog.length>CHANGE_LOG_MAX)changeLog.length=CHANGE_LOG_MAX;
+  renderChangeLog();
+  if(typeof cloudSession!=="undefined"&&cloudSession){logEvent(cloudSession.id,"facilitator_action",{label}).catch(()=>{});}
+}
+function fmtLogTime(ts){const d=new Date(ts);return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")+":"+String(d.getSeconds()).padStart(2,"0");}
+function renderChangeLog(){
+  const panel=byId("changeLogPanel");
+  if(!panel)return;
+  panel.innerHTML=changeLog.length
+    ? changeLog.map(e=>`<div class="cl-row"><span class="cl-time">${fmtLogTime(e.ts)}</span><span class="cl-label">${e.label}</span></div>`).join("")
+    : `<div class="change-log-empty">Nothing changed yet this session.</div>`;
+}
+
+/**
+ * Manual numeric entry, generic over OVERRIDE_MAP - injected via JS rather
+ * than hand-editing 25+ near-identical HTML rows (this whole file's slider
+ * set is already keyed by this one map; a second, parallel HTML edit per
+ * field would just be a second place for the two to drift apart). Typed
+ * values are clamped to the SAME min/max the slider already enforces - a
+ * facilitator can move a value fast without dragging, not enter a
+ * clinically-nonsensical number the slider itself would never allow.
+ */
 for(const id in OVERRIDE_MAP){
   const el=byId(id),vv=byId(id+"_v");
-  el.addEventListener("input",()=>{
+  const manual=document.createElement("input");
+  manual.type="number"; manual.className="manual-entry"; manual.id=id+"_manual";
+  manual.min=el.min; manual.max=el.max; manual.step=el.step||"1";
+  vv.insertAdjacentElement("afterend",manual);
+}
+function commitOverride(id,rawVal,{log}={}){
+  const el=byId(id),vv=byId(id+"_v"),manual=byId(id+"_manual");
+  const min=parseFloat(el.min),max=parseFloat(el.max);
+  const val=Math.min(max,Math.max(min,rawVal));
+  el.value=val; vv.textContent=fmtVal(el,val); manual.value=fmtVal(el,val);
+  if(!runner)return;
+  const path=OVERRIDE_MAP[id];
+  const priorValue=getPath(runner.state,path);
+  runner=srSetOverride(runner,path,val,currentReleaseChoice(),performance.now());
+  stampInfusionOnsetIfRateChanged(path,priorValue,val);
+  renderReadout();
+  renderAllOverrideStatuses(performance.now());
+  if(log&&priorValue!==val)logChange(`${OVERRIDE_LABELS[id]||id}: ${fmtVal(el,priorValue)} → ${fmtVal(el,val)}`);
+}
+for(const id in OVERRIDE_MAP){
+  const el=byId(id),vv=byId(id+"_v"),manual=byId(id+"_manual");
+  el.addEventListener("input",()=>{ // live drag - no log spam, logged once on "change" (release) instead
     const val=parseFloat(el.value);
     vv.textContent=fmtVal(el,val);
+    manual.value=fmtVal(el,val);
     if(!runner)return;
     const path=OVERRIDE_MAP[id];
     const priorValue=getPath(runner.state,path);
@@ -797,63 +948,136 @@ for(const id in OVERRIDE_MAP){
     renderReadout();
     renderOverrideStatus(id,OVERRIDE_MAP[id]);
   });
+  el.addEventListener("change",()=>{ // drag finished / arrow-key nudge finished - the log-worthy moment
+    logChange(`${OVERRIDE_LABELS[id]||id} set to ${vv.textContent}`);
+    renderActiveOverridesPanel(performance.now());
+  });
+  manual.addEventListener("change",()=>{
+    const raw=parseFloat(manual.value);
+    if(Number.isNaN(raw)){manual.value=vv.textContent;return;}
+    commitOverride(id,raw,{log:true});
+  });
 }
 function syncControlsFromRunner(){
   if(!runner)return;
   const s=runner.state;
   for(const id in OVERRIDE_MAP){
-    const el=byId(id),vv=byId(id+"_v"),v=getPath(s,OVERRIDE_MAP[id]);
+    const el=byId(id),vv=byId(id+"_v"),manual=byId(id+"_manual"),v=getPath(s,OVERRIDE_MAP[id]);
     if(v==null)continue;
     el.value=v;
     vv.textContent=fmtVal(el,v);
+    if(manual)manual.value=fmtVal(el,v);
   }
   renderAllOverrideStatuses(performance.now());
 }
 
-/** Renders the small "OVERRIDDEN" strip beneath one slider, or hides it if that path isn't currently overridden. */
+/**
+ * Renders the small passive dot+text badge beneath one slider - a glance-only
+ * "this is overridden" signal, or hides it if that path isn't currently
+ * overridden. Deliberately carries NO release controls of its own anymore
+ * (see the CSS comment above) - every Release Now/Release Over 2 min button
+ * lives in the single consolidated renderActiveOverridesPanel() below, per
+ * direct user feedback that scattering release controls across 25+ inline
+ * boxes throughout a long rail made it hard to tell what was active. This
+ * function stays field-local ONLY so a facilitator scanning one section can
+ * still tell at a glance which sliders in front of them are overridden,
+ * without having to cross-reference a separate panel for that much.
+ */
 function renderOverrideStatus(sliderId,path){
   const el=byId(sliderId+"_status");
   if(!el||!runner)return;
   const info=srGetOverrideInfo(runner,path,performance.now());
-  if(!info){el.hidden=true;el.innerHTML="";return;}
-  el.hidden=false;
-  let statusTxt;
-  if(info.status==="held"){
-    statusTxt=info.remainingMs!=null?`Held — auto-releases in ${fmtMMSS(info.remainingMs)}`:"Held indefinitely";
-  }else{
-    statusTxt=`Releasing… ${Math.round(info.fraction*100)}%`;
-  }
-  el.innerHTML=`<span class="txt">${statusTxt}</span>`+
-    `<button class="act mini" data-release-now="${path}" data-slider="${sliderId}">Release Now</button>`+
-    (info.status==="held"?`<button class="act mini" data-release-gradual="${path}" data-slider="${sliderId}">Release Over 2 min</button>`:"");
-  el.querySelectorAll("[data-release-now]").forEach(b=>b.addEventListener("click",()=>{
-    runner=srReleaseNow(runner,b.getAttribute("data-release-now"));
-    syncControlsFromRunner();renderReadout();
-  }));
-  el.querySelectorAll("[data-release-gradual]").forEach(b=>b.addEventListener("click",()=>{
-    runner=srReleaseGradually(runner,b.getAttribute("data-release-gradual"),2,performance.now());
-    renderOverrideStatus(b.getAttribute("data-slider"),b.getAttribute("data-release-gradual"));
-  }));
+  if(!info){el.classList.remove("on");el.innerHTML="";return;}
+  el.classList.add("on");
+  const statusTxt=info.status==="held"
+    ? (info.remainingMs!=null?`auto-releases ${fmtMMSS(info.remainingMs)}`:"held")
+    : `releasing ${Math.round(info.fraction*100)}%`;
+  el.innerHTML=`<span class="dot"></span>${statusTxt}`;
 }
 function renderAllOverrideStatuses(nowMs){
   for(const id in OVERRIDE_MAP)renderOverrideStatus(id,OVERRIDE_MAP[id]);
+  renderActiveOverridesPanel(nowMs);
+}
+
+// Human-readable labels for the consolidated panel + change log - reuses the
+// exact same OVERRIDE_MAP keys everything else here does, so a label can
+// never silently drift out of sync with which sliders actually exist.
+const OVERRIDE_LABELS={
+  ov_hr:"HR",ov_sbp:"BP sys",ov_dbp:"BP dia",ov_map:"MAP",ov_pasys:"PA sys",ov_padia:"PA dia",ov_cvp:"CVP",ov_co:"CO",
+  ov_svv:"SVV",ov_ppv:"PPV",ov_scvo2:"ScvO₂",ov_hpi:"HPI",ov_spo2:"SpO₂",ov_rr:"RR",ov_temp:"Temp",ov_icp:"ICP",
+  ov_epi:"Epi",ov_levo:"Levo",ov_vasopressin:"Vasopressin",ov_milrinone:"Milrinone",
+  ov_propofol:"Propofol",ov_fentanyl:"Fentanyl",ov_insulin:"Insulin",
+  ov_rpleural:"R Pleural",ov_rmediastinal:"R Mediastinal",ov_blake:"Blake",ov_lpleural:"L Pleural",ov_lmediastinal:"L Mediastinal",
+  ov_urine:"Urine Output",
+};
+
+/**
+ * THE single place every active override is managed from - one row per
+ * currently-overridden field, wherever it lives in the rail, with its
+ * current value, hold/release status, and both release actions. Redesigned
+ * per direct user feedback: previously a facilitator had to scroll through
+ * every rail section hunting for which sliders happened to be overridden;
+ * now there's exactly one place that answers "what's currently overridden,
+ * and what happens to it."
+ */
+function renderActiveOverridesPanel(nowMs){
+  const panel=byId("activeOverridesPanel");
+  if(!panel||!runner)return;
+  const rows=[];
+  for(const id in OVERRIDE_MAP){
+    const path=OVERRIDE_MAP[id];
+    const info=srGetOverrideInfo(runner,path,nowMs);
+    if(!info)continue;
+    const el=byId(id);
+    const val=el?fmtVal(el,parseFloat(el.value)):"";
+    const statusTxt=info.status==="held"
+      ? (info.remainingMs!=null?`Held — auto-releases in ${fmtMMSS(info.remainingMs)}`:"Held indefinitely")
+      : `Releasing… ${Math.round(info.fraction*100)}%`;
+    rows.push(`<div class="ov-row">`+
+      `<span class="ov-name">${OVERRIDE_LABELS[id]||id}</span>`+
+      `<span class="ov-val">${val}</span>`+
+      `<span class="ov-txt">${statusTxt}</span>`+
+      `<span class="ov-actions">`+
+      `<button class="act mini" data-release-now="${path}">Release Now</button>`+
+      (info.status==="held"?`<button class="act mini" data-release-gradual="${path}">Release Over 2 min</button>`:"")+
+      `</span></div>`);
+  }
+  panel.innerHTML=rows.length?rows.join(""):`<div class="overrides-empty">No active overrides — every value is currently running the loaded scenario as authored.</div>`;
+  panel.querySelectorAll("[data-release-now]").forEach(b=>b.addEventListener("click",()=>{
+    const path=b.getAttribute("data-release-now");
+    runner=srReleaseNow(runner,path);
+    logChange(`Released ${OVERRIDE_LABELS[Object.keys(OVERRIDE_MAP).find(k=>OVERRIDE_MAP[k]===path)]||path} — held value`);
+    syncControlsFromRunner();renderReadout();
+  }));
+  panel.querySelectorAll("[data-release-gradual]").forEach(b=>b.addEventListener("click",()=>{
+    const path=b.getAttribute("data-release-gradual");
+    runner=srReleaseGradually(runner,path,2,performance.now());
+    logChange(`Started gradual release (2 min) — ${OVERRIDE_LABELS[Object.keys(OVERRIDE_MAP).find(k=>OVERRIDE_MAP[k]===path)]||path}`);
+    renderAllOverrideStatuses(performance.now());
+  }));
 }
 
 byId("ov_rhythm").addEventListener("change",()=>{
   if(!runner)return;
-  runner=srOverride(runner,{rhythm:byId("ov_rhythm").value});
+  const rhythm=byId("ov_rhythm").value;
+  runner=srOverride(runner,{rhythm});
   renderReadout();
+  logChange(`Rhythm set to ${rhythm}`);
 });
 byId("ov_captured").addEventListener("click",()=>{
   if(!runner)return;
-  runner=srOverride(runner,{pacer:{captured:!runner.state.pacer.captured}});
+  const next=!runner.state.pacer.captured;
+  runner=srOverride(runner,{pacer:{captured:next}});
   renderReadout();
+  logChange(`Pacer capture ${next?"ON":"OFF"}`);
 });
-[["ev_arrest","arrestActive"],["ev_sternotomy","sternotomyPerformed"],["ev_ecmo","ecmoCannulated"]].forEach(([id,flag])=>{
+[["ev_arrest","arrestActive","Arrest"],["ev_sternotomy","sternotomyPerformed","Sternotomy"],["ev_ecmo","ecmoCannulated","ECMO cannulated"]].forEach(([id,flag,label])=>{
   byId(id).addEventListener("click",()=>{
     if(!runner)return;
-    runner=srOverride(runner,{flags:{[flag]:!runner.state.flags[flag]}});
+    const next=!runner.state.flags[flag];
+    runner=srOverride(runner,{flags:{[flag]:next}});
     renderReadout();
+    logChange(`${label} ${next?"ON":"OFF"}`);
   });
 });
 [["btn_advance_1",1],["btn_advance_5",5],["btn_advance_15",15]].forEach(([id,minutes])=>{
@@ -861,7 +1085,20 @@ byId("ov_captured").addEventListener("click",()=>{
     if(!runner)return;
     runner=srAdvanceSimClock(runner,minutes);
     renderReadout();
+    logChange(`Simulated time advanced +${minutes} min (t+${runner.state.minute.toFixed(1)} min)`);
   });
+});
+
+// Urine output device type - discrete, facilitator-selected, event-only
+// (same reason pacer.mode is excluded from OVERRIDE_MAP/NUMERIC_PATHS) -
+// confirmed with the user the device type is documentation-only and never
+// changes how the volumeMl field itself behaves.
+byId("ov_urine_device").addEventListener("change",()=>{
+  if(!runner)return;
+  const deviceType=byId("ov_urine_device").value;
+  runner=srOverride(runner,{urineOutput:{deviceType}});
+  renderReadout();
+  logChange(`Urine collection device set to ${byId("ov_urine_device").selectedOptions[0].textContent}`);
 });
 
 /* ---------------- CPR ---------------- */
@@ -875,6 +1112,7 @@ function setCPR(active,quality){
   if(!runner)return;
   runner=srOverride(runner,{circulation:{cpr:{active,quality}}});
   renderReadout();
+  logChange(active?`CPR started — ${quality}`:"CPR stopped");
 }
 byId("cpr_good").addEventListener("click",()=>setCPR(true,"good"));
 byId("cpr_poor").addEventListener("click",()=>setCPR(true,"poor"));
@@ -888,7 +1126,7 @@ byId("cpr_stop").addEventListener("click",()=>setCPR(false,null));
 // which button was pressed). Deliberately reuses startFacilitatorRamp()
 // (already exists) for the post-event instability window rather than a new
 // tracked ROSC state - see REVIEW #5, "thin helper, not a state machine".
-function achieveROSC(){
+function achieveROSC(actionLabel){
   if(!runner)return;
   const rhythm=byId("shock_target_rhythm").value;
   const hr=parseFloat(byId("shock_target_hr").value);
@@ -897,9 +1135,10 @@ function achieveROSC(){
   if(unstableMinutes>0)runner=srStartFacilitatorRamp(runner,{target:{hr},durationMinutes:unstableMinutes,label:"post-event-stabilization"},performance.now());
   else runner=srOverride(runner,{hr});
   syncControlsFromRunner();renderReadout();
+  logChange(`${actionLabel} → ${rhythm} (target HR ${hr})`);
 }
-byId("btn_shock").addEventListener("click",achieveROSC);
-byId("btn_cardiovert").addEventListener("click",achieveROSC);
+byId("btn_shock").addEventListener("click",()=>achieveROSC("Deliver Shock"));
+byId("btn_cardiovert").addEventListener("click",()=>achieveROSC("Synchronized Cardioversion"));
 
 /* ---------------- Custom Decline (facilitator-timed, SME-configured) ---------------- */
 const CD_TARGET_MAP={cd_hr:"hr",cd_sbp:"bp.sbp",cd_dbp:"bp.dbp",cd_map:"bp.map",cd_cvp:"cvp",cd_spo2:"spo2"};
@@ -932,6 +1171,7 @@ byId("cd_start").addEventListener("click",()=>{
   },performance.now());
   renderReadout();
   renderDecompTimer(performance.now());
+  logChange(`Custom Decline started${label?" — "+label:""} (over ${durationMinutes} min${outcomeKey!=="none"?", "+graceMinutes+" min grace":""})`);
 });
 
 /* ---------------- Live-tick an in-flight ramp + auto-advance + override releases ---------------- */
@@ -1020,8 +1260,8 @@ const deviceSync=createDeviceSync({
   relayCode:csUrlParams.get("code")||"",
 });
 if(csUrlParams.get("relay"))byId("relayUrl").value=csUrlParams.get("relay");
-byId("mode_training").addEventListener("click",()=>{sessionMode="training";applyModeToUI();});
-byId("mode_validation").addEventListener("click",()=>{sessionMode="validation";applyModeToUI();});
+byId("mode_training").addEventListener("click",()=>{sessionMode="training";applyModeToUI();logChange("Session mode set to Training");});
+byId("mode_validation").addEventListener("click",()=>{sessionMode="validation";applyModeToUI();logChange("Session mode set to Validation");});
 
 function monitorLink(devicePath){
   const base=location.href.split("?")[0].split("#")[0].replace(/facilitator\/console\.html$/,devicePath);

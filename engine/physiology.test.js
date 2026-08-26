@@ -1,12 +1,29 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, applyInstant, rampState, getEffectiveRhythm, getEffectiveHR } from './physiology.js';
+import { createState, applyInstant, rampState, getEffectiveRhythm, getEffectiveHR, computeCPP, URINE_DEVICE_TYPES } from './physiology.js';
 
 test('createState fills in full defaults with no overrides', () => {
   const s = createState();
   assert.equal(s.hr, 80);
   assert.equal(s.pacer.mode, 'off');
   assert.equal(s.flags.arrestActive, false);
+});
+
+test('createState defaults icp and urineOutput (Console UX overhaul additions)', () => {
+  const s = createState();
+  assert.equal(s.icp, 10);
+  assert.equal(s.urineOutput.deviceType, 'foley');
+  assert.equal(s.urineOutput.volumeMl, 0);
+});
+
+test('computeCPP is plain MAP - ICP arithmetic', () => {
+  assert.equal(computeCPP(87, 10), 77);
+  assert.equal(computeCPP(60, 10), 50);
+  assert.equal(computeCPP(50, 60), -10); // negative CPP is a real, clinically meaningful (critical) value - not clamped
+});
+
+test('URINE_DEVICE_TYPES lists exactly the three confirmed device options', () => {
+  assert.deepEqual(URINE_DEVICE_TYPES, ['external', 'foley', 'urinal_bedpan']);
 });
 
 test('createState deep-merges partial overrides without dropping sibling fields', () => {

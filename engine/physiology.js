@@ -13,9 +13,10 @@ export const NUMERIC_PATHS = [
   'minute', 'hr',
   'bp.sbp', 'bp.dbp', 'bp.map',
   'pa.systolic', 'pa.diastolic',
-  'cvp', 'co', 'ci', 'svr', 'svri', 'svv', 'ppv', 'scvo2', 'hpi', 'spo2', 'rr', 'temp', 'etco2',
+  'cvp', 'co', 'ci', 'svr', 'svri', 'svv', 'ppv', 'scvo2', 'hpi', 'spo2', 'rr', 'temp', 'etco2', 'icp',
   'drips.epi', 'drips.levo', 'drips.milrinone', 'drips.propofol', 'drips.fentanyl', 'drips.vasopressin', 'drips.insulin',
   'chestTubes.rPleural', 'chestTubes.rMediastinal', 'chestTubes.blake', 'chestTubes.lPleural', 'chestTubes.lMediastinal',
+  'urineOutput.volumeMl',
   'pacer.rate', 'pacer.outputMa', 'pacer.sensitivityMv',
 ];
 
@@ -47,9 +48,25 @@ const BASE_STATE = Object.freeze({
   // getEffectiveETCO2() for the perfusion-aware overlay that actually
   // decays this when perfusion is lost.
   etco2: 38,
+  // Console UX overhaul: previously a device-local-only field on IntelliVue's
+  // own native "practice scenario" mode (its own real ICP waveform/tile/
+  // compliance model, never touched by the shared engine) - now a real
+  // authored vital, same tier as cvp/temp. Deliberately NOT modeling ICP
+  // compliance (P1/P2/P3 waveform morphology) here - that stays IntelliVue's
+  // own local-practice-mode-only feature; the shared engine only needs the
+  // mean ICP number for CPP = MAP - ICP (see computeCPP() below).
+  icp: 10,
   drips: { epi: 0, levo: 0, milrinone: 0, propofol: 0, fentanyl: 0, vasopressin: 0, insulin: 0 },
   ivpb: null, // e.g. 'vancomycin' - an intermittent piggyback, not a continuous rate
   chestTubes: { rPleural: 0, rMediastinal: 0, blake: 0, lPleural: 0, lMediastinal: 0 },
+  // Console UX overhaul: new. `deviceType` is discrete (facilitator-selected,
+  // event-only, deliberately excluded from NUMERIC_PATHS - same reason
+  // pacer.mode is excluded) - one of URINE_DEVICE_TYPES below. `volumeMl` is
+  // a plain authored value the facilitator sets directly, matching
+  // chestTubes' own simplicity (a documentation/charting number, not a
+  // computed rate-over-time model) - confirmed with the user that device
+  // type doesn't need to change how the number itself behaves.
+  urineOutput: { deviceType: 'foley', volumeMl: 0 },
   pacer: { mode: 'off', rate: 0, outputMa: 0, sensitivityMv: 0, captured: false },
   flags: { arrestActive: false, sternotomyPerformed: false, ecmoCannulated: false },
   // Phase 5 (engine/clinical/pharmacology.js) - deliberately NOT in NUMERIC_PATHS
@@ -194,4 +211,28 @@ export function getEffectiveHR(state) {
     return state.pacer.rate;
   }
   return state.hr;
+}
+
+// Console UX overhaul: the three urine-collection-device options a
+// facilitator can select for `state.urineOutput.deviceType`. A plain
+// documentation/charting selector, not a mechanically-different input model
+// (confirmed with the user) - every device type uses the same `volumeMl`
+// field the same way.
+export const URINE_DEVICE_TYPES = ['external', 'foley', 'urinal_bedpan'];
+
+/**
+ * Cerebral perfusion pressure = MAP - ICP. Deliberately a tiny, arity-2 pure
+ * function rather than a `state`-reading `getEffective*()` overlay like every
+ * other derived value in this file: CPP has no state of its own to read -
+ * it's arithmetic on two values a caller has ALREADY resolved through
+ * whatever composition layer is appropriate for their context (e.g. the
+ * console's fully medicated/perfusion-aware MAP, or a device's own locally-
+ * computed MAP) - callers pass those resolved numbers in rather than this
+ * function re-deriving MAP itself and risking a second, divergent
+ * composition path. Still exported and named, not inlined at each call site,
+ * per this file's own "never inline-recompute a derived clinical value"
+ * convention.
+ */
+export function computeCPP(map, icp) {
+  return map - icp;
 }
