@@ -47,6 +47,7 @@
 
   .row{display:flex; align-items:center; justify-content:space-between; gap:6px; margin:7px 0; font-size:var(--text-xs);}
   .row label{color:var(--ink-soft); flex:0 0 82px;}
+  .row.wide-label label{flex:0 0 140px;} /* for rows whose label is longer than the standard 82px column and has no slider/manual-entry competing for space */
   .row input[type=range]{flex:1 1 auto; min-width:44px; accent-color:var(--accent);}
   .row .val{width:36px; flex:0 0 auto; text-align:right; font-family:var(--font-mono); font-weight:600; font-size:var(--text-xs);}
 
@@ -267,11 +268,11 @@
         <div class="gl">Neuro</div>
         <label class="row">ICP <input type="range" id="ov_icp" min="0" max="60" value="10"><span class="val" id="ov_icp_v">10</span></label>
         <div class="ov-status" id="ov_icp_status" hidden></div>
-        <div class="row"><label>CPP (calculated)</label><span class="val" id="assess_cpp_v" style="width:auto;font-size:var(--text-xs)">—</span></div>
+        <div class="row wide-label"><label>CPP (calculated)</label><span class="val" id="assess_cpp_v" style="width:auto;font-size:var(--text-xs)">—</span></div>
         <div class="hint" style="margin-top:0">CPP = MAP − ICP, computed live from the readout's current MAP - not itself settable. Overriding ICP or MAP updates it immediately.</div>
 
         <div class="gl">Renal / GU</div>
-        <div class="row"><label>Collection device</label></div>
+        <div class="row wide-label"><label>Collection device</label></div>
         <select id="ov_urine_device">
           <option value="foley">Foley (indwelling urinary catheter)</option>
           <option value="external">External urinary diversion device</option>
