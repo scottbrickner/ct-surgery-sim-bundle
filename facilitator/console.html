@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Facilitator Console</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800;900&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Source+Sans+Pro:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="../design-system/tokens.css">
 <link rel="stylesheet" href="../design-system/components.css">
 <style>
@@ -13,8 +13,23 @@
 
   /* ---- shell: rail + hero main ---- */
   .shell{display:grid; grid-template-columns:340px minmax(0,1fr); min-height:100vh;}
-  @media (max-width:980px){ .shell{grid-template-columns:1fr;} .rail{position:static; height:auto;} }
   .rail{position:sticky; top:0; height:100vh; overflow-y:auto; border-right:1px solid var(--rule); padding:var(--space-5) var(--space-4) var(--space-8);}
+  /* Real, pre-existing bug found via direct user report of unresponsive
+     Release Now/Release Over 2 min buttons: this media query used to be
+     ABOVE the unconditional .rail rule in source order. CSS cascade doesn't
+     give a media query any specificity boost - with equal specificity, the
+     LATER rule in source order wins regardless of whether either one is
+     inside a media query, so the unconditional sticky/100vh/overflow-y:auto
+     rule below was silently winning at EVERY viewport width, including
+     narrow ones where the grid stacks to one column. That left a full-
+     viewport-height, self-scrolling, position:sticky rail permanently
+     floating over whatever the user scrolled main's content underneath it
+     to - exactly why clicks meant for the Active Overrides panel's buttons
+     (added this same session, in main, below the fold at narrow widths)
+     were actually landing on the rail's own sticky-pinned content instead.
+     Moving this block below its target rule is the actual fix - reordering,
+     not new CSS. */
+  @media (max-width:980px){ .shell{grid-template-columns:1fr;} .rail{position:static; height:auto;} }
   main{min-width:0; padding:var(--space-5) var(--space-6) var(--space-8);}
 
   .rail-head{padding:0 var(--space-2) var(--space-5);}
@@ -63,6 +78,11 @@
   input[type=text], input[type=number]{background:var(--paper-sunken); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:7px 8px; font-size:var(--text-xs); width:100%;}
   select{background:var(--paper-sunken); color:var(--ink); border:1px solid var(--rule-strong); border-radius:var(--radius-sm); padding:6px 7px; font-size:var(--text-xs); width:100%;}
   .hint{font-size:10.5px; color:var(--ink-faint); margin-top:6px; line-height:1.5;}
+  .checkrow{display:flex; align-items:center; gap:6px; font-size:var(--text-xs); color:var(--ink-soft); margin:8px 0;}
+  .mode-pair{display:flex; gap:4px; margin:6px 0;}
+  .mode-pair button{flex:1;}
+  .row input[type=range]:disabled{opacity:0.35;}
+  input[type=number].manual-entry:disabled{opacity:0.35;}
   code.small{font-size:10.5px; color:var(--ink-faint); word-break:break-all;}
   .linkrow{display:flex; gap:6px; margin:5px 0;}
   .linkrow button{flex:0 0 auto;}
@@ -76,6 +96,9 @@
   .decomp-fill{height:100%; background:linear-gradient(90deg,var(--accent),var(--critical)); transition:width .25s linear;}
 
   /* ---- hero: live readout dominates main content ---- */
+  .launcher-bar{display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:var(--space-4); margin-bottom:var(--space-4); border-bottom:1px solid var(--rule);}
+  .launcher-label{font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.04em; margin-right:2px;}
+  .launcher-sep{width:1px; height:18px; background:var(--rule); margin:0 4px;}
   .hero-head{display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-4); flex-wrap:wrap; margin-bottom:var(--space-5);}
   .hero-head h2{font-size:var(--text-2xl);}
   .hero-head .patient-sub{font-family:var(--font-mono); font-size:var(--text-xs); color:var(--ink-faint); margin-top:4px;}
@@ -86,9 +109,16 @@
   .release-pref select{width:auto; max-width:220px;}
 
   .readout{display:grid; grid-template-columns:repeat(auto-fill,minmax(128px,1fr)); gap:10px;}
-  .rd{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:14px 14px 12px; text-align:left;}
+  .rd{background:var(--paper-raised); border:1px solid var(--rule); border-radius:var(--radius-md); padding:14px 14px 13px; text-align:left; min-height:74px;}
   .rd .rl{font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.04em;}
-  .rd .rv{font-family:var(--font-mono); font-size:30px; font-weight:700; margin-top:4px; line-height:1;}
+  /* line-height 1.15 (not 1) and the extra bottom padding above - a real
+     overflow bug caught via direct user report: a multi-line value (Rhythm,
+     e.g. "Sinus Rhythm" wrapping to two lines at narrower grid-column
+     widths, or a long rhythm name like "Ventricular Fibrillation") had its
+     second line's descenders (g/y/p) crowding or visually breaking past the
+     tile's rounded bottom edge with line-height:1 and only 12px of bottom
+     padding. */
+  .rd .rv{font-family:var(--font-mono); font-size:30px; font-weight:700; margin-top:4px; line-height:1.15; overflow-wrap:break-word;}
   .rd.flag-on{border-color:var(--critical); background:var(--critical-wash);}
   .rd.flag-on .rv{color:var(--critical);}
   .rd.hero-primary .rv{font-size:38px;}
@@ -234,12 +264,19 @@
         <div class="gl">Cardiac / Hemodynamics</div>
         <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
         <div class="ov-status" id="ov_hr_status" hidden></div>
+        <div class="checkrow"><label><input type="checkbox" id="bp_linked"> Link sys/dia (maintain a normal ~40 mmHg pulse pressure)</label></div>
         <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
         <div class="ov-status" id="ov_sbp_status" hidden></div>
         <label class="row">BP dia <input type="range" id="ov_dbp" min="20" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
         <div class="ov-status" id="ov_dbp_status" hidden></div>
+        <div class="row"><label>MAP source</label></div>
+        <div class="mode-pair">
+          <button class="act on" id="map_mode_manual" type="button">Manual</button>
+          <button class="act" id="map_mode_calc" type="button">Calculated</button>
+        </div>
         <label class="row">MAP <input type="range" id="ov_map" min="30" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
         <div class="ov-status" id="ov_map_status" hidden></div>
+        <div class="hint" id="mapModeHint" style="margin-top:0">Manual - MAP is its own independently-settable value, matching how this project's scenario data is authored (a real arterial-line MAP reflects waveform/damping, not a clean calculation from sys/dia).</div>
         <label class="row">PA sys <input type="range" id="ov_pasys" min="10" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
         <div class="ov-status" id="ov_pasys_status" hidden></div>
         <label class="row">PA dia <input type="range" id="ov_padia" min="2" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
@@ -446,6 +483,20 @@
   </aside>
 
   <main>
+    <!-- Direct user request: quick access to learner monitor windows and
+         the scenario controls without digging into a collapsed rail group
+         first. Persistent, always visible at the top of main - not itself
+         behind a menu/toggle. -->
+    <div class="launcher-bar">
+      <span class="launcher-label">Open for a learner:</span>
+      <button class="act mini" id="open_intellivue" type="button">IntelliVue</button>
+      <button class="act mini" id="open_hemosphere" type="button">HemoSphere</button>
+      <button class="act mini" id="open_pacemaker" type="button">Pacemaker</button>
+      <button class="act mini" id="open_assessments" type="button">Assessments</button>
+      <span class="launcher-sep"></span>
+      <button class="act mini" id="jump_scenario" type="button">Scenario &amp; Stage ▸</button>
+    </div>
+
     <div class="hero-head">
       <div>
         <div class="eyebrow">Live Patient State</div>
@@ -770,7 +821,13 @@ function renderReadout(){
     const cls=k==="hr"?"rd hero-primary":"rd";
     return `<div class="${cls}"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
   });
-  rows.push(`<div class="rd hero-primary"><div class="rl">BP</div><div class="rv">${Math.round(getEffectiveSBP(s))}/${Math.round(getEffectiveDBP(s))}</div></div>`);
+  // Real overflow bug caught via direct user report: BP shared HR's
+  // "hero-primary" 38px treatment, but a "SBP/DBP" string (up to 7
+  // characters, e.g. "180/120") is far wider than HR's 2-3 digits at that
+  // size - it overflowed its tile into MAP's at the grid's narrower column
+  // widths. Kept visually prominent (bold, still larger than the plainer
+  // fields) without reusing the class built for short 2-3-digit values.
+  rows.push(`<div class="rd"><div class="rl">BP</div><div class="rv" style="font-size:26px">${Math.round(getEffectiveSBP(s))}/${Math.round(getEffectiveDBP(s))}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv">${Math.round(getMedicatedMAP(s,minute))}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv" style="font-size:22px">${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:18px">${getEffectiveRhythm(s)}</div></div>`);
@@ -952,11 +1009,13 @@ for(const id in OVERRIDE_MAP){
   el.addEventListener("change",()=>{ // drag finished / arrow-key nudge finished - the log-worthy moment
     logChange(`${OVERRIDE_LABELS[id]||id} set to ${vv.textContent}`);
     renderActiveOverridesPanel(performance.now());
+    applyBPDerivedEffects(id); // no-op for every id except ov_sbp/ov_dbp - see its own docblock
   });
   manual.addEventListener("change",()=>{
     const raw=parseFloat(manual.value);
     if(Number.isNaN(raw)){manual.value=vv.textContent;return;}
     commitOverride(id,raw,{log:true});
+    applyBPDerivedEffects(id);
   });
 }
 function syncControlsFromRunner(){
@@ -971,6 +1030,75 @@ function syncControlsFromRunner(){
   }
   renderAllOverrideStatuses(performance.now());
 }
+
+/**
+ * BP sys/dia linking + MAP calculated/manual mode - both new, direct user
+ * requests. Deliberately implemented entirely in this page, not the shared
+ * engine: neither is a new physiological RULE, they're two different
+ * FACILITATOR WORKFLOW conveniences layered on top of the exact same
+ * override mechanism every other slider already uses.
+ *
+ * - bpLinked: moving BP sys or BP dia also moves the OTHER one to hold a
+ *   fixed ~40 mmHg pulse pressure (a normal/typical value - not itself an
+ *   independently cited number, same "reasonable training default" class as
+ *   this project's other reasoned-not-cited constants). Off by default -
+ *   fully independent adjustment, unchanged prior behavior, is still the
+ *   default every existing scenario's data assumes.
+ * - mapMode: 'manual' (default, unchanged prior behavior - MAP is its own
+ *   independently-settable value, matching engine/physiology.js's own
+ *   documented "bp.map is always an independently authored field, NEVER
+ *   derived from sbp/dbp" decision) or 'calculated' (MAP is DERIVED live
+ *   from sys/dia via the standard (SBP+2*DBP)/3 formula whenever either
+ *   changes - the ov_map slider becomes display-only in this mode, since
+ *   dragging it would just get overwritten on the next sys/dia change).
+ *   Deliberately uses srOverride() (the same instant/discrete helper
+ *   rhythm/pacer-capture/event-flags use), NOT the release-tracked
+ *   srSetOverride() - a derived value isn't a facilitator override with
+ *   hold/release semantics of its own, it just tracks sys/dia.
+ */
+const BP_NORMAL_PULSE_PRESSURE=40;
+let bpLinked=false;
+let mapMode="manual"; // 'manual' | 'calculated'
+let _applyingBPDerived=false; // reentrancy guard - see applyBPDerivedEffects()
+
+function applyBPDerivedEffects(changedId){
+  if(_applyingBPDerived||!runner)return;
+  _applyingBPDerived=true;
+  try{
+    if(bpLinked&&(changedId==="ov_sbp"||changedId==="ov_dbp")){
+      const sbp=getPath(runner.state,"bp.sbp"),dbp=getPath(runner.state,"bp.dbp");
+      if(changedId==="ov_sbp")commitOverride("ov_dbp",sbp-BP_NORMAL_PULSE_PRESSURE,{log:false});
+      else commitOverride("ov_sbp",dbp+BP_NORMAL_PULSE_PRESSURE,{log:false});
+    }
+    if(mapMode==="calculated"&&(changedId==="ov_sbp"||changedId==="ov_dbp")){
+      const sbp=getPath(runner.state,"bp.sbp"),dbp=getPath(runner.state,"bp.dbp");
+      const calcMap=Math.round((sbp+2*dbp)/3);
+      runner=srOverride(runner,{bp:{map:calcMap}});
+      const mapEl=byId("ov_map"),mapVv=byId("ov_map_v"),mapManual=byId("ov_map_manual");
+      mapEl.value=calcMap; mapVv.textContent=fmtVal(mapEl,calcMap); if(mapManual)mapManual.value=fmtVal(mapEl,calcMap);
+      renderReadout();
+    }
+  }finally{ _applyingBPDerived=false; }
+}
+byId("bp_linked").addEventListener("change",()=>{
+  bpLinked=byId("bp_linked").checked;
+  logChange(`BP sys/dia linking ${bpLinked?"ON":"OFF"}`);
+  if(bpLinked)applyBPDerivedEffects("ov_sbp"); // snap dia to match sys immediately on enabling, so the two aren't left at an inconsistent gap
+});
+function setMapMode(mode){
+  mapMode=mode;
+  byId("map_mode_manual").classList.toggle("on",mode==="manual");
+  byId("map_mode_calc").classList.toggle("on",mode==="calculated");
+  byId("ov_map").disabled=(mode==="calculated");
+  const mapManual=byId("ov_map_manual"); if(mapManual)mapManual.disabled=(mode==="calculated");
+  byId("mapModeHint").textContent=mode==="manual"
+    ?"Manual - MAP is its own independently-settable value, matching how this project's scenario data is authored (a real arterial-line MAP reflects waveform/damping, not a clean calculation from sys/dia)."
+    :"Calculated - MAP = (SBP + 2×DBP) ÷ 3, recomputed live whenever sys/dia changes. The slider above is display-only in this mode.";
+  logChange(`MAP source set to ${mode==="manual"?"Manual":"Calculated"}`);
+  if(mode==="calculated")applyBPDerivedEffects("ov_sbp"); // compute an initial value immediately on switching in, don't wait for the next sys/dia change
+}
+byId("map_mode_manual").addEventListener("click",()=>setMapMode("manual"));
+byId("map_mode_calc").addEventListener("click",()=>setMapMode("calculated"));
 
 /**
  * Renders the small passive dot+text badge beneath one slider - a glance-only
@@ -1184,7 +1312,27 @@ function consoleTick(ts){
     // CPR toggle, arrest flag, or ECMO cannulation click all happen outside
     // this function and can flip isPerfusing() at any time. See
     // engine/clinical/pulsatility.js's tickCirculation() docblock.
-    runner={...runner,state:tickCirculation(runner.state,runner.state.minute)};
+    //
+    // Real bug found via direct user report, not caught by this project's own
+    // .click()-based testing convention: this used to unconditionally spread
+    // `runner` into a NEW object every single animation frame
+    // (`runner={...runner,state:tickCirculation(...)}`) even when
+    // tickCirculation() itself returned the IDENTICAL state reference (its own
+    // steady-state `return state;` case) - so `runner!==before` below was true
+    // on literally every frame, ~60/sec, regardless of whether anything
+    // actually changed. That made syncControlsFromRunner() rebuild the Active
+    // Overrides panel's innerHTML ~60 times/sec whenever any override was
+    // active - exactly the state a facilitator is in when trying to click
+    // Release Now. A synthetic `.click()` call fires synchronously on a named
+    // element and is immune to this, which is why testing never caught it;
+    // a real mouse click spans a mousedown->mouseup gap, and some browsers
+    // suppress the click entirely if the exact DOM node pressed gets replaced
+    // (via innerHTML reset) before mouseup - which is what was silently
+    // happening underneath the buttons in this exact panel. Fixed by only
+    // creating a new `runner` reference when tickCirculation() actually
+    // changed something, so the panel only re-renders on a real change.
+    const tickedState=tickCirculation(runner.state,runner.state.minute);
+    if(tickedState!==runner.state)runner={...runner,state:tickedState};
     // tick()/checkOverrideReleases() are the same function either way (see
     // the import comment up top) - only checkAutoAdvance's destination logic
     // differs (next() vs advanceToStage()), so only that call branches.
@@ -1275,6 +1423,25 @@ function refreshLinks(){
   byId("linkPacemaker").value=monitorLink("devices/pacemaker/5392-pacemaker-simulator.html");
 }
 refreshLinks();
+
+/* ---------------- Learner monitor launcher (direct user request) ---------------- */
+// Reuses monitorLink() (relay-aware, already built for the copy-link inputs
+// below) rather than a second link-building implementation - a window name
+// per device (not a fresh blank name each click) means clicking twice
+// refocuses the SAME window instead of piling up duplicates.
+[
+  ["open_intellivue","devices/intellivue/IntelliVue_Sim_Monitor.html","ctsurgery_intellivue"],
+  ["open_hemosphere","devices/hemosphere-alta/HemoSphere_Alta_Sim.html","ctsurgery_hemosphere"],
+  ["open_pacemaker","devices/pacemaker/5392-pacemaker-simulator.html","ctsurgery_pacemaker"],
+  ["open_assessments","assessments/index.html","ctsurgery_assessments"],
+].forEach(([id,path,winName])=>{
+  byId(id).addEventListener("click",()=>{ window.open(monitorLink(path),winName); });
+});
+byId("jump_scenario").addEventListener("click",()=>{
+  const grp=byId("grp_scenario");
+  grp.open=true;
+  grp.scrollIntoView({behavior:"smooth",block:"start"});
+});
 byId("copyIntelliVue").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkIntelliVue").value);}catch(e){}});
 byId("copyHemoSphere").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkHemoSphere").value);}catch(e){}});
 byId("copyPacemaker").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkPacemaker").value);}catch(e){}});

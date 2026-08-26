@@ -47,11 +47,23 @@
   --focus-ring:#3AA0DE;
 
   /* ---- type families ----
-     Archivo: display headings, used sparingly, tight tracking.
-     IBM Plex Sans: body copy and UI labels — built for interface legibility.
-     IBM Plex Mono: tabular numerals, code, file paths, session codes. */
-  --font-display:'Archivo',"Helvetica Neue",Arial,sans-serif;
-  --font-body:'IBM Plex Sans',-apple-system,"Segoe UI",Arial,sans-serif;
+     Switched per direct user preference (matches their standing design-
+     system typography convention: Source Sans Pro primary, Montserrat
+     accent, sparingly) - scoped to facilitator-facing surfaces that already
+     share this design system (Console, Scenario Builder, homepage, Patient
+     Assessments Monitor). Deliberately NOT applied to the three realistic
+     device shells (IntelliVue/HemoSphere/pacemaker) - confirmed with the
+     user - they intentionally don't import this file at all, to keep
+     looking like real hospital hardware rather than a branded app.
+     Montserrat: display headings/accents, used sparingly, tight tracking -
+     was Archivo's role.
+     Source Sans Pro: body copy and UI labels — was IBM Plex Sans's role.
+     IBM Plex Mono: UNCHANGED - tabular numerals, code, file paths, session
+     codes. Not part of the user's request, and swapping it would hurt the
+     tabular-numeral alignment this whole product relies on for vitals/
+     countdown displays - kept deliberately, not an oversight. */
+  --font-display:'Montserrat',"Helvetica Neue",Arial,sans-serif;
+  --font-body:'Source Sans Pro',-apple-system,"Segoe UI",Arial,sans-serif;
   --font-mono:'IBM Plex Mono',"SFMono-Regular",Consolas,monospace;
 
   /* ---- type scale (px, a fixed ratio - stay on it rather than ad hoc sizes) ---- */
