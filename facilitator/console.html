@@ -99,6 +99,7 @@
   .launcher-bar{display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:var(--space-4); margin-bottom:var(--space-4); border-bottom:1px solid var(--rule);}
   .launcher-label{font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.04em; margin-right:2px;}
   .launcher-sep{width:1px; height:18px; background:var(--rule); margin:0 4px;}
+  .warn-text{color:var(--warn);}
   .hero-head{display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-4); flex-wrap:wrap; margin-bottom:var(--space-5);}
   .hero-head h2{font-size:var(--text-2xl);}
   .hero-head .patient-sub{font-family:var(--font-mono); font-size:var(--text-xs); color:var(--ink-faint); margin-top:4px;}
@@ -221,9 +222,22 @@
         <div style="margin-top:8px"><span id="partTitle">Loading…</span> <span id="stepId"></span></div>
         <div id="coach" style="margin-top:6px"></div>
         <div id="decompTimer" style="margin-top:6px"></div>
+      </div>
+    </details>
 
-        <div class="gl" style="margin-top:16px">Custom Decline (Facilitator-Timed)</div>
-        <div class="hint" style="margin-top:0">Ramp CURRENT vitals toward a target you set. If unaddressed after a grace period, the chosen outcome fires — usable at any point in any part.</div>
+    <!-- Separated out from Scenario & Stage per direct user feedback: the
+         scripted scenario timeline and a facilitator-triggered clinical
+         deterioration are two different concerns that happened to share one
+         rail group - Custom Decline works at ANY point in ANY scenario
+         (v1 or v2), independent of scenario navigation, so it reads more
+         clearly as its own thing rather than nested under "Scenario." No
+         logic changes - same ids, same handlers, same mechanism, just
+         relocated. -->
+    <details class="rail-group" id="grp_deterioration">
+      <summary><span>Deterioration / Clinical Change</span><span class="chev">▸</span></summary>
+      <div class="body">
+        <div class="gl">Custom Decline (Facilitator-Timed)</div>
+        <div class="hint" style="margin-top:0">Ramp CURRENT vitals toward a target you set. If unaddressed after a grace period, the chosen outcome fires — usable at any point in any scenario, independent of stage navigation.</div>
         <label class="row">HR <input type="range" id="cd_hr" min="20" max="220" value="120"><span class="val" id="cd_hr_v">120</span></label>
         <label class="row">BP sys <input type="range" id="cd_sbp" min="40" max="260" value="80"><span class="val" id="cd_sbp_v">80</span></label>
         <label class="row">BP dia <input type="range" id="cd_dbp" min="20" max="160" value="50"><span class="val" id="cd_dbp_v">50</span></label>
@@ -259,7 +273,23 @@
              used alongside shock/cardioversion/CPR - per direct user
              feedback that rhythm belongs in BOTH places, each with a
              different role. -->
-        <div class="row"><label>Rhythm</label><span class="val" id="assess_rhythm_v" style="width:auto;font-size:var(--text-xs)">—</span></div>
+        <!-- A real, second interactive control on the SAME state.rhythm field,
+             not just a read-only mirror - direct user follow-up request.
+             Kept in sync both ways with BLS/ACLS's ov_rhythm (same options,
+             same change handling) - either one can change the rhythm, both
+             always reflect the current value, matching this project's
+             "any device/control can drive" precedent rather than picking
+             one as the sole source of truth. -->
+        <div class="row"><label>Rhythm</label></div>
+        <select id="assess_rhythm">
+          <option value="Sinus Rhythm">Sinus Rhythm</option>
+          <option value="Sinus Tachycardia">Sinus Tachycardia</option>
+          <option value="Sinus Bradycardia">Sinus Bradycardia</option>
+          <option value="Atrial Fibrillation">Atrial Fibrillation</option>
+          <option value="PEA">PEA</option>
+          <option value="Ventricular Tachycardia">Ventricular Tachycardia</option>
+          <option value="Ventricular Fibrillation">Ventricular Fibrillation</option>
+        </select>
 
         <div class="gl">Cardiac / Hemodynamics</div>
         <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
@@ -495,6 +525,7 @@
       <button class="act mini" id="open_assessments" type="button">Assessments</button>
       <span class="launcher-sep"></span>
       <button class="act mini" id="jump_scenario" type="button">Scenario &amp; Stage ▸</button>
+      <span class="hint" id="launcherStatus" style="margin:0 0 0 4px"></span>
     </div>
 
     <div class="hero-head">
@@ -852,11 +883,16 @@ function renderReadout(){
     const el=byId(id);
     el.className="pill "+(s.flags[k]?"critical":"neutral");
   });
-  byId("ov_rhythm").value=s.rhythm in {"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1,"Ventricular Tachycardia":1,"Ventricular Fibrillation":1}?s.rhythm:byId("ov_rhythm").value;
-  // Read-only rhythm finding in Patient Assessments (the actual control
-  // stays ov_rhythm, in BLS/ACLS) - shows the EFFECTIVE rhythm (post-pacer-
-  // capture precedence), same value the readout grid's own Rhythm tile shows.
-  byId("assess_rhythm_v").textContent=getEffectiveRhythm(s);
+  // ov_rhythm (BLS/ACLS) and assess_rhythm (Patient Assessments) are two
+  // controls on the SAME state.rhythm field (direct user request - both
+  // interactive, kept in sync both ways, neither is the sole source of
+  // truth). Both show the INTRINSIC rhythm (what the dropdown can actually
+  // set) - the readout grid's own Rhythm tile separately shows the
+  // EFFECTIVE rhythm (post-pacer-capture precedence) via getEffectiveRhythm().
+  const RHYTHM_OPTIONS={"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1,"Ventricular Tachycardia":1,"Ventricular Fibrillation":1};
+  const rhythmVal=s.rhythm in RHYTHM_OPTIONS?s.rhythm:byId("ov_rhythm").value;
+  byId("ov_rhythm").value=rhythmVal;
+  byId("assess_rhythm").value=rhythmVal;
   byId("assess_cpp_v").textContent=Math.round(computeCPP(getMedicatedMAP(s,minute),s.icp));
   if(byId("ov_urine_device").value!==s.urineOutput.deviceType)byId("ov_urine_device").value=s.urineOutput.deviceType;
   byId("simClockDisplay").textContent="t+"+s.minute.toFixed(1)+" min";
@@ -1186,13 +1222,14 @@ function renderActiveOverridesPanel(nowMs){
   }));
 }
 
-byId("ov_rhythm").addEventListener("change",()=>{
+function setRhythm(rhythm){
   if(!runner)return;
-  const rhythm=byId("ov_rhythm").value;
   runner=srOverride(runner,{rhythm});
   renderReadout();
   logChange(`Rhythm set to ${rhythm}`);
-});
+}
+byId("ov_rhythm").addEventListener("change",()=>setRhythm(byId("ov_rhythm").value));
+byId("assess_rhythm").addEventListener("change",()=>setRhythm(byId("assess_rhythm").value));
 byId("ov_captured").addEventListener("click",()=>{
   if(!runner)return;
   const next=!runner.state.pacer.captured;
@@ -1304,6 +1341,7 @@ byId("cd_start").addEventListener("click",()=>{
 });
 
 /* ---------------- Live-tick an in-flight ramp + auto-advance + override releases ---------------- */
+let lastDecompRenderMs=0;
 function consoleTick(ts){
   if(runner){
     const before=runner;
@@ -1346,6 +1384,21 @@ function consoleTick(ts){
     // completing) - not just the readout text - so it has to run on ANY
     // change here, not only a full navigation change.
     else if(runner!==before){syncControlsFromRunner();renderReadout();renderDecompTimer(ts);}
+    // Real bug found via direct user report ("I tried a scheduled
+    // decompensation that didn't seem to run"): the underlying mechanism
+    // was always correct (checkAutoAdvance() above fires exactly on
+    // schedule, confirmed by fast-forwarding past its deadline directly) -
+    // but renderDecompTimer() above only got called from the two branches
+    // when SOMETHING ELSE changed. During a Custom Decline's grace-period
+    // WAIT specifically (ramp already finished, just counting down to the
+    // deadline), NOTHING else changes tick to tick - so the countdown UI
+    // froze at whatever it last showed, making a correctly-running timer
+    // look dead for however long the grace period lasted. Throttled to
+    // ~once/second (not every animation frame) so this doesn't reintroduce
+    // the exact innerHTML-thrashing bug already fixed above for the
+    // Active Overrides panel - a 1Hz update is already finer than the
+    // MM:SS display itself resolves anyway.
+    if(runner.pendingAutoAdvance&&ts-lastDecompRenderMs>=1000){lastDecompRenderMs=ts;renderDecompTimer(ts);}
   }
   requestAnimationFrame(consoleTick);
 }
@@ -1429,13 +1482,40 @@ refreshLinks();
 // below) rather than a second link-building implementation - a window name
 // per device (not a fresh blank name each click) means clicking twice
 // refocuses the SAME window instead of piling up duplicates.
+//
+// Real gap found via direct user report ("these don't connect to learner
+// screens"): window.open() returns null when a popup blocker (browser
+// setting, an extension, some institutional IT policies) blocks it - the
+// original handler had NO fallback for that, so a blocked click did
+// LITERALLY NOTHING with zero feedback. From the facilitator's side that's
+// indistinguishable from "the button doesn't work" - clicking it, seeing
+// nothing happen, is exactly what "doesn't connect" describes. Now: on
+// success, the window is explicitly focused (a background-opened window is
+// just as invisible to the facilitator as a blocked one); on failure, the
+// link is copied to the clipboard and a clear status message explains why
+// and what to do (paste it into a new tab manually) instead of failing
+// silently.
+function openLearnerWindow(path,winName,label){
+  const url=monitorLink(path);
+  const w=window.open(url,winName);
+  const status=byId("launcherStatus");
+  if(w){
+    w.focus();
+    status.textContent=`Opened ${label} for a learner.`;
+    status.className="hint";
+  }else{
+    try{navigator.clipboard.writeText(url);}catch(e){}
+    status.textContent=`Your browser blocked the ${label} pop-up window. Its link was copied to your clipboard instead — paste it into a new tab, or check your browser's pop-up settings for this site.`;
+    status.className="hint warn-text";
+  }
+}
 [
-  ["open_intellivue","devices/intellivue/IntelliVue_Sim_Monitor.html","ctsurgery_intellivue"],
-  ["open_hemosphere","devices/hemosphere-alta/HemoSphere_Alta_Sim.html","ctsurgery_hemosphere"],
-  ["open_pacemaker","devices/pacemaker/5392-pacemaker-simulator.html","ctsurgery_pacemaker"],
-  ["open_assessments","assessments/index.html","ctsurgery_assessments"],
-].forEach(([id,path,winName])=>{
-  byId(id).addEventListener("click",()=>{ window.open(monitorLink(path),winName); });
+  ["open_intellivue","devices/intellivue/IntelliVue_Sim_Monitor.html","ctsurgery_intellivue","IntelliVue"],
+  ["open_hemosphere","devices/hemosphere-alta/HemoSphere_Alta_Sim.html","ctsurgery_hemosphere","HemoSphere"],
+  ["open_pacemaker","devices/pacemaker/5392-pacemaker-simulator.html","ctsurgery_pacemaker","the Pacemaker"],
+  ["open_assessments","assessments/index.html","ctsurgery_assessments","Assessments"],
+].forEach(([id,path,winName,label])=>{
+  byId(id).addEventListener("click",()=>{ openLearnerWindow(path,winName,label); });
 });
 byId("jump_scenario").addEventListener("click",()=>{
   const grp=byId("grp_scenario");

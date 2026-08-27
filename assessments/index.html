@@ -268,7 +268,7 @@ function renderPendingQueue() {
   const queue = getPendingRequests(state, Date.now());
   const el = byId('pendingQueue');
   el.innerHTML = queue.length ? queue.map((q) => `
-    <div class="queue-item ${q.delayed ? 'delayed' : ''}">
+    <div class="queue-item ${q.delayed ? 'delayed' : ''}" data-tile-id="${escapeAttr(q.tileId)}">
       <div class="qi-top">
         <span>${escapeHtml(q.tile ? q.tile.label : q.tileId)}</span>
         <span class="qi-wait">${Math.round(q.waitingMs / 1000)}s${q.delayed ? ' — delayed' : ''}</span>
@@ -280,6 +280,32 @@ function renderPendingQueue() {
     </div>`).join('') : '<div class="hint">No pending requests.</div>';
   el.querySelectorAll('[data-approve]').forEach((btn) => btn.addEventListener('click', () => { state = resolveRequest(state, btn.getAttribute('data-approve'), 'approve', Date.now()); render(); }));
   el.querySelectorAll('[data-deny]').forEach((btn) => btn.addEventListener('click', () => { state = resolveRequest(state, btn.getAttribute('data-deny'), 'deny', Date.now()); render(); }));
+}
+
+// Per-second "waiting Xs" refresh, split out from renderPendingQueue() itself:
+// that function's full el.innerHTML rebuild destroys and recreates every
+// Approve/Deny button on each call, so calling it unconditionally on a 1s
+// timer (only to keep a text label live) meant a real mouse click landing
+// mid-rebuild could have its exact pressed DOM node swapped out from under it
+// and get silently dropped - same species of bug as console.html's Active
+// Overrides panel (see consoleTick's fix there). This patches the live text
+// in place instead, and only defers to a full rebuild when the actual set of
+// pending tile ids has changed (an item was added/resolved), which is the
+// only time the row structure itself needs to change.
+function updatePendingWaitTimes() {
+  const queue = getPendingRequests(state, Date.now());
+  const el = byId('pendingQueue');
+  const rows = el.querySelectorAll('.queue-item[data-tile-id]');
+  const rowIds = Array.from(rows).map((r) => r.getAttribute('data-tile-id'));
+  const queueIds = queue.map((q) => q.tileId);
+  const sameSet = rowIds.length === queueIds.length && rowIds.every((id, i) => id === queueIds[i]);
+  if (!sameSet) { renderPendingQueue(); return; }
+  rows.forEach((row, i) => {
+    const q = queue[i];
+    row.classList.toggle('delayed', !!q.delayed);
+    const waitEl = row.querySelector('.qi-wait');
+    if (waitEl) waitEl.textContent = `${Math.round(q.waitingMs / 1000)}s${q.delayed ? ' — delayed' : ''}`;
+  });
 }
 
 function renderSummary() {
@@ -404,7 +430,7 @@ setInterval(() => { deviceSync.pushNow(); }, 140);
 setInterval(() => {
   byId('syncStatus').className = 'pill ' + (deviceSync.isLinked() ? 'good' : 'neutral');
   byId('syncStatus').innerHTML = '<span class="dot"></span>' + (deviceSync.isLinked() ? 'Synced' : 'Same-machine sync');
-  renderPendingQueue(); // re-render to keep "delayed" waiting-time labels live even with no state change
+  updatePendingWaitTimes(); // patch wait-time labels live without rebuilding Approve/Deny buttons (see comment above)
 }, 1000);
 
 /* ---------------- Cloud Session join (Phase 9) ---------------- */
