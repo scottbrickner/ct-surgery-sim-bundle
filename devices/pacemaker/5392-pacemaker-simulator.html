@@ -2528,7 +2528,7 @@ function onRemoteSnapshot(snapshot){
 const pacerDeviceSync=createDeviceSync({
   getSnapshot:()=>{
     if(!lastSnapshot||!window.__pacerBridge)return null;
-    return {...lastSnapshot,state:{...lastSnapshot.state,pacer:window.__pacerBridge.getState()}};
+    return {...lastSnapshot,state:{...lastSnapshot.state,pacer:window.__pacerBridge.getState()},deviceLabel:"pacemaker"};
   },
   onRemoteSnapshot,
   relayUrl:bridgeUrlParams.get("relay")||"",

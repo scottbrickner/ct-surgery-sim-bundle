@@ -816,7 +816,7 @@ function onRemoteSnapshot(snapshot){
   }
 }
 const deviceSync=createDeviceSync({
-  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode}:null,
+  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode,deviceLabel:"hemosphere"}:null,
   onRemoteSnapshot,
   relayUrl:fsUrlParams.get("relay")||"",
   relayCode:fsUrlParams.get("code")||"",

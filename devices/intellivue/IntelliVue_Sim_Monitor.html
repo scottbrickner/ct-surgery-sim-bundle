@@ -267,7 +267,8 @@
         <option value="sinus_tach">Sinus Tachycardia</option><option value="afib">Atrial Fibrillation</option>
         <option value="aflutter">Atrial Flutter</option><option value="svt">SVT</option>
         <option value="junctional">Junctional</option><option value="avb1">1° AV Block</option>
-        <option value="avb3">3° AV Block (complete)</option><option value="paced_v">Paced (V)</option>
+        <option value="avb2i">2° AV Block (Type I - Wenckebach)</option><option value="avb2ii">2° AV Block (Type II - Mobitz)</option>
+        <option value="avb3">3° AV Block (complete)</option><option value="aivr">Idioventricular (AIVR)</option><option value="paced_v">Paced (V)</option>
         <option value="vtach">Ventricular Tachycardia</option><option value="torsades">Torsades</option>
         <option value="vfib">Ventricular Fibrillation</option><option value="asystole">Asystole</option>
       </select>
@@ -589,12 +590,41 @@ function drawLabels(){lctx.clearRect(0,0,W,H);lctx.textBaseline="top";
 
 /* ---------------- Cardiac scheduler ---------------- */
 let tBeat=0,rrSec=60/78,beatType="normal",hasP=true,tAtrial=0,atrialRR=60/90,respPhase=0,tAbs=0;
+// Wenckebach/Mobitz II group-beating position counters - module-scope like
+// every other cardiac-scheduler variable above (tBeat/tAtrial/etc.), reset
+// implicitly whenever the rhythm changes away and back since pickRhythmTiming
+// re-derives everything else from state.rhythm fresh each call anyway.
+let wenckebachPos=0,wenckebachPrMs=0,mobitzPos=0;
 function pickRhythmTiming(){let hr=state.hr,rr=60/Math.max(20,hr);hasP=true;beatType="normal";
   switch(state.rhythm){case"afib":rr*=(0.55+Math.random()*0.9);hasP=false;break;case"aflutter":hasP=false;break;
-    case"svt":hasP=false;break;case"junctional":hasP=false;break;case"paced_v":beatType="paced";break;case"avb3":hasP=false;break;}
+    case"svt":hasP=false;break;case"junctional":hasP=false;break;case"paced_v":beatType="paced";break;case"avb3":hasP=false;break;
+    // Idioventricular (AIVR): reuses the SAME wide-QRS/no-P "escape" complex
+    // avb3's ventricular-escape beats already draw (see ecgComplex's
+    // type==="escape" branch) - AIVR genuinely IS a regular ventricular
+    // escape rhythm, just without AV dissociation, so no new complex math
+    // is needed, only regular (not dissociated) timing.
+    case"aivr":hasP=false;beatType="escape";break;
+    // 2nd-degree AV blocks: real Wenckebach/Mobitz II both need the P wave
+    // to keep marching at a REGULAR atrial rate independent of whether the
+    // ventricle conducts - the fully general version of that is avb3's own
+    // separate tAtrial/atrialRR clock. Implemented here as a simplification
+    // of that same idea rather than a second dissociated-clock branch: a
+    // "dropped" cycle is rendered as a single P-wave-only beat held for one
+    // atrial-rate interval, then normal conducted beats resume - real
+    // simplification (the atrial clock doesn't keep marching THROUGH a
+    // conducted beat's own QRS/T the way a true independent clock would),
+    // not silently claimed as a full dual-clock model.
+    case"avb2i":{ // Wenckebach: group of 4 - PR lengthens 0/60/120ms, 4th beat drops
+      wenckebachPos=(wenckebachPos+1)%4;
+      if(wenckebachPos===0){beatType="dropped";rr=60/90;}else wenckebachPrMs=wenckebachPos*60;
+      break;}
+    case"avb2ii":{ // Mobitz II: fixed 3:1 conduction, PR constant (no lengthening)
+      mobitzPos=(mobitzPos+1)%3;
+      if(mobitzPos===0){beatType="dropped";rr=60/90;}
+      break;}}
   state.beatCount++;state.beatAmp=(state.rhythm==="afib")?(0.7+Math.random()*0.5):1;
   if(state.paCath==="RV"&&state.rvIrrit&&Math.random()<0.14)state.pvcQueued=true;
-  if(state.pvcQueued){beatType="pvc";state.pvcQueued=false;}rrSec=rr;}
+  if(state.pvcQueued&&beatType!=="dropped"){beatType="pvc";state.pvcQueued=false;}rrSec=rr;}
 function advanceCardiac(dt){if(state.rr>0){respPhase+=(state.rr/60)*dt;if(respPhase>=1)respPhase-=1;}
   if(["vfib","asystole","vtach","torsades"].includes(state.rhythm)){tBeat=0;return;}
   if(state.rhythm==="avb3"){atrialRR=60/90;tAtrial+=dt;if(tAtrial>=atrialRR)tAtrial-=atrialRR;
@@ -602,9 +632,13 @@ function advanceCardiac(dt){if(state.rr>0){respPhase+=(state.rr/60)*dt;if(respPh
   tBeat+=dt;if(tBeat>=rrSec){tBeat-=rrSec;pickRhythmTiming();}}
 function ecgComplex(tb,type){const ms=tb*1000;let v=0;
   if(hasP&&type!=="pvc"&&type!=="escape")v+=gauss(ms,90,22,0.12);
+  // A "dropped" cycle (2nd-degree block, non-conducted P) is P-wave-only by
+  // definition - return immediately, before any QRS/T composition, rather
+  // than adding a branch to every case below.
+  if(type==="dropped")return v;
   if(state.rhythm==="afib")v+=(Math.random()-0.5)*0.04;
   if(state.rhythm==="aflutter")v+=0.10*Math.abs(((ms%190)/190)-0.5)-0.05;
-  const pr=state.rhythm==="avb1"?80:0;
+  const pr=state.rhythm==="avb1"?80:state.rhythm==="avb2i"?wenckebachPrMs:0;
   if(type==="pvc"||type==="escape"){v+=gauss(ms,235,32,1.0)-gauss(ms,285,30,0.55);v+=gauss(ms,470,80,-0.40);}
   else if(type==="paced"){v+=gauss(ms,182,3,1.25);v+=gauss(ms,235,30,0.9)-gauss(ms,280,28,0.5);v+=gauss(ms,470,80,-0.35);}
   else{v+=-gauss(ms,205+pr,8,0.09);v+=gauss(ms,222+pr,9,1.0);v+=-gauss(ms,240+pr,9,0.22);v+=gauss(ms,400+pr,55,0.26);}
@@ -861,7 +895,7 @@ document.querySelectorAll("[data-bolus]").forEach(b=>b.addEventListener("click",
 byId("e_reset").addEventListener("click",()=>{state.events.hem=false;state.events.press=false;state.events.pressBoost=0;state.events._lastBoost=0;state.events.boluses=[];byId("e_hem").classList.remove("on");byId("e_hem").textContent="Hemorrhage ▶";byId("e_press").classList.remove("on");byId("e_press").textContent="Levophed ▶";});
 /* transition controls */
 function openTrans(){const g=byId("trans_grid");g.innerHTML=TKEYS.map(([k,lbl])=>`<label>${lbl}<input type="number" id="tg_${k}" value="${(k==='temp'||k==='co')?(+state[k]).toFixed(1):Math.round(state[k])}"></label>`).join("");
-  const rs=byId("tg_rhythm");rs.innerHTML='<option value="">— no change —</option>'+["sinus","sinus_brady","sinus_tach","afib","aflutter","svt","junctional","avb1","avb3","paced_v","vtach","torsades","vfib","asystole"].map(r=>`<option value="${r}">${r}</option>`).join("");rs.value="";byId("tg_rhythmat").value=60;
+  const rs=byId("tg_rhythm");rs.innerHTML='<option value="">— no change —</option>'+["sinus","sinus_brady","sinus_tach","afib","aflutter","svt","junctional","avb1","avb2i","avb2ii","avb3","aivr","paced_v","vtach","torsades","vfib","asystole"].map(r=>`<option value="${r}">${r}</option>`).join("");rs.value="";byId("tg_rhythmat").value=60;
   const dp=byId("tr_durpresets");dp.innerHTML=[30,60,120,300,600].map(s=>`<button data-d="${s}">${s<60?s+'s':(s/60)+'m'}</button>`).join("");
   dp.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>byId("tg_dur").value=b.dataset.d));byId("transModal").classList.add("open");}
 byId("tr_set").addEventListener("click",openTrans);
@@ -1107,6 +1141,15 @@ const RHYTHM_MAP={
   // ART for vfib; fast monomorphic complexes + "*** VENT TACH" banner for
   // vtach. See ecgValue()/updateNumerics()/computeAnnunConditions() above.
   "Ventricular Fibrillation":"vfib","Ventricular Tachycardia":"vtach",
+  // Rhythm-library expansion (Round 3, direct user request: real distinct
+  // trace shapes, not just labels). Every one of these ALSO maps to a REAL,
+  // pre-existing native morphology this device already had for its own
+  // local scenario picker (see the "avb2i"/"avb2ii"/"aivr" cases added to
+  // pickRhythmTiming/ecgComplex just above for the 3 that were genuinely
+  // missing) - none of this is a fallback-to-sinus placeholder.
+  "Atrial Flutter":"aflutter","Supraventricular Tachycardia":"svt","Junctional Rhythm":"junctional",
+  "First-Degree AV Block":"avb1","Second-Degree AV Block (Type I)":"avb2i","Second-Degree AV Block (Type II)":"avb2ii",
+  "Third-Degree AV Block":"avb3","Idioventricular Rhythm":"aivr","Torsades de Pointes":"torsades","Asystole":"asystole",
 };
 function mapEngineRhythm(effRhythm){const m=RHYTHM_MAP[effRhythm];if(!m){console.warn("Flagship engine: no device rhythm mapping for",JSON.stringify(effRhythm),"- falling back to sinus");return"sinus";}return m;}
 
@@ -1229,6 +1272,22 @@ window.ctSharedEngine={
   // blocked on a real animation frame ever firing.
   getPerfusionNow:()=>({perfusing:perfusing(),pulsatile:pulsatile(),sharedPerfusing,sharedPulsatile}),
   forceNumericsRepaint:()=>{updateNumerics();},
+  // Same rationale as every other hook above: frame() (the canvas waveform
+  // draw loop) only ever runs via requestAnimationFrame, suspended in this
+  // environment - this drives it directly, count times, each simulating
+  // dtMs of real elapsed time, so waveform-morphology changes (e.g. a new
+  // rhythm) can be verified visually without a real animation frame firing.
+  // Starts from the REAL current performance.now() and increments forward,
+  // rather than compounding onto whatever `lastTs` already was - an earlier
+  // version of this hook kept adding onto `lastTs` across repeated calls,
+  // eventually pushing it far enough ahead of real time that the NEXT real
+  // rAF-driven frame(ts) call computed a negative dt (ts now behind the
+  // artificially-advanced lastTs), which permanently zeroed pxAccum's
+  // growth and froze the waveform canvas - a real bug in this debugging
+  // tool itself, not in the product (the underlying pickRhythmTiming/
+  // advanceCardiac/ecgValue/artPressure/sampleChannel functions were all
+  // independently verified correct via direct calls before finding this).
+  driveLocalFrames:(count,dtMs)=>{ let ts=performance.now(); for(let i=0;i<(count||60);i++){ ts+=Math.min(50,dtMs||16); frame(ts); } },
 };
 
 /* ---------------- Cross-device sync + pop-out (Phase 3) ---------------- */
@@ -1268,7 +1327,7 @@ function onRemoteSnapshot(snapshot){
   }
 }
 const deviceSync=createDeviceSync({
-  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode}:null,
+  getSnapshot:()=>runner?{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode,deviceLabel:"intellivue"}:null,
   onRemoteSnapshot,
   relayUrl:fsUrlParams.get("relay")||"",
   relayCode:fsUrlParams.get("code")||"",

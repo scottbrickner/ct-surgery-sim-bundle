@@ -415,7 +415,7 @@ byId('btn_open_link').addEventListener('click', () => {
 
 /* ---------------- Sync (Phase 8: reuses sync/deviceSync.js, same channel/relay every device already uses) ---------------- */
 const deviceSync = createDeviceSync({
-  getSnapshot: () => ({ tiles: state.tiles, requests: state.requests }),
+  getSnapshot: () => ({ tiles: state.tiles, requests: state.requests, deviceLabel: "assessments" }),
   onRemoteSnapshot: (snapshot) => {
     // Physiology broadcasts from the console/IntelliVue/HemoSphere/pacemaker
     // arrive on this exact channel too - isValidAssessmentMessage() is what

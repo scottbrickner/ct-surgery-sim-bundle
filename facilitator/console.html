@@ -99,6 +99,11 @@
   .launcher-bar{display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-bottom:var(--space-4); margin-bottom:var(--space-4); border-bottom:1px solid var(--rule);}
   .launcher-label{font-family:var(--font-mono); font-size:10.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.04em; margin-right:2px;}
   .launcher-sep{width:1px; height:18px; background:var(--rule); margin:0 4px;}
+  /* Direct user request: launcher buttons turn green when that specific
+     device has phoned home recently (see renderLauncherConnections()) -
+     same good/on visual language as .act.on and #sessionBadge.linked
+     elsewhere in this file, not a new color. */
+  .launcher-bar button.connected{background:var(--good-wash); border-color:var(--good); color:var(--good);}
   .warn-text{color:var(--warn);}
   .hero-head{display:flex; justify-content:space-between; align-items:flex-start; gap:var(--space-4); flex-wrap:wrap; margin-bottom:var(--space-5);}
   .hero-head h2{font-size:var(--text-2xl);}
@@ -1545,7 +1550,7 @@ function consoleTick(ts){
   // and for the identical reason: pacer connection liveness needs to EXPIRE
   // (flip the panel back to editable) even when nothing else changes tick to
   // tick, so it can't only be driven off `runner!==before`.
-  if(ts-lastPacerConnRenderMs>=1000){lastPacerConnRenderMs=ts;renderPacerConnectionState(ts);}
+  if(ts-lastPacerConnRenderMs>=1000){lastPacerConnRenderMs=ts;renderPacerConnectionState(ts);renderLauncherConnections(ts);}
   requestAnimationFrame(consoleTick);
 }
 let lastPacerConnRenderMs=0;
@@ -1557,7 +1562,34 @@ function applyModeToUI(){
   byId("mode_training").classList.toggle("on",sessionMode==="training");
   byId("mode_validation").classList.toggle("on",sessionMode==="validation");
 }
+/**
+ * Launcher connection indicators, direct user request ("could these icons...
+ * turn green for the facilitator console when its synced to current session
+ * or active"). Every device page now stamps a `deviceLabel` onto its own
+ * outgoing snapshot (see each device's getSnapshot()) - checked here
+ * BEFORE any shape-specific branching below, since a label is orthogonal to
+ * which of the 4 structurally-distinct message shapes this bus carries (v1/
+ * v2 physiology, assessments tiles, or the pacemaker's legacy {s,P,conn,N}
+ * control-panel shape) - isValidSnapshot()/etc. would reject some of those
+ * shapes outright, but the label itself doesn't need shape validation, just
+ * a string check. Same liveness-window pattern as pacer-connection
+ * detection just above (~3s, comfortably longer than the ~140ms push
+ * interval) - see renderLauncherConnections().
+ */
+const deviceLastSeenAt={};
+function noteDeviceSeen(snapshot){
+  if(snapshot&&typeof snapshot.deviceLabel==="string")deviceLastSeenAt[snapshot.deviceLabel]=performance.now();
+}
+function renderLauncherConnections(nowMs){
+  const now=nowMs!=null?nowMs:performance.now();
+  [["open_intellivue","intellivue"],["open_hemosphere","hemosphere"],["open_pacemaker","pacemaker"],["open_assessments","assessments"]].forEach(([btnId,label])=>{
+    const btn=byId(btnId); if(!btn)return;
+    const seenAt=deviceLastSeenAt[label];
+    btn.classList.toggle("connected",seenAt!=null&&(now-seenAt)<3000);
+  });
+}
 function onRemoteSnapshot(snapshot){
+  noteDeviceSeen(snapshot);
   // Real bug found + fixed during v2-in-console verification: this used to
   // apply ANY valid v1 ({partIndex,stepIndex,state}) snapshot unconditionally,
   // with no engineMode check - unlike getSnapshot() just below, which already
@@ -1854,6 +1886,8 @@ window.ctSharedEngine={
   renderPacerConnectionStateNow:(ts)=>{renderPacerConnectionState(ts);return{live:isPacerRemoteLive(ts!=null?ts:performance.now())};},
   noteRemotePacerNow:(pacer)=>notePacerRemoteAssertion(pacer),
   renderRhythmNotesNow:()=>{renderRhythmNotes();return byId("ov_rhythm_notes").textContent;},
+  noteDeviceSeenNow:(deviceLabel)=>{noteDeviceSeen({deviceLabel});renderLauncherConnections(performance.now());},
+  getLauncherConnections:()=>({...deviceLastSeenAt}),
   getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
   getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
   startCustomDeclineNow:(opts,ts)=>{if(!runner)return null;runner=srStartFacilitatorRamp(runner,opts,ts);renderReadout();renderDecompTimer(performance.now());return runner.state;},
