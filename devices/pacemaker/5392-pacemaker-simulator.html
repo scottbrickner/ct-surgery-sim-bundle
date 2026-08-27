@@ -591,6 +591,19 @@
       <button id="scnReset">Reset</button>
     </div>
     <div class="hintbox" id="scnStep">No scenario loaded.</div>
+
+    <!-- Direct user request: run this device standalone by default (its own
+         scenario library above, untouched), but let a facilitator align its
+         starting rhythm/rate with whatever the Console is currently running
+         before handing it to a learner for hands-on threshold testing -
+         confirmed with the user: a one-time PULL, not continuous remote
+         control (the pacemaker stays an overlay contributor - see the
+         bridge script below - a learner should still be operating real
+         dials, not watching the console drive them). -->
+    <h3 style="margin-top:16px">Pull from Console</h3>
+    <div class="note">One-time import of the Console's CURRENT intrinsic rhythm + rate into this device's own local patient model, as a starting point for hands-on threshold testing - this device keeps running independently afterward, exactly like loading any scenario above.</div>
+    <button class="sbtn" id="btn_pull_console">Pull current rhythm &amp; rate from Console</button>
+    <div class="hintbox" id="pullConsoleStatus">Not connected to a Console session yet - open the Console (or a monitor already joined to one) on this same sync bus first.</div>
   </div>
 
   <div class="fgrp" data-tab="scenarios">
@@ -2500,6 +2513,16 @@ window.__pacerBridge={
    */
   __testAdvanceClock:(steps)=>{ for(let i=0;i<(steps||1);i++)step(); },
 };
+// "Pull from Console" (see the HTML note above the button) needs RHY/set/
+// coach from a SEPARATE <script type="module"> block below, where the
+// synced lastSnapshot actually lives. None of the three are actually
+// global despite being top-level in a classic (non-module) script - this
+// whole script is itself wrapped in an IIFE for scoping, so `function`
+// declarations inside it stay scoped to that IIFE too, not window (only
+// genuinely top-level `function`/`var` attach to window) - exposed
+// explicitly here rather than duplicating any of this logic/data a second
+// time in the module script below.
+window.RHY=RHY; window.set=set; window.coach=coach;
 })();
 </script>
 <script type="module">
@@ -2525,6 +2548,61 @@ function onRemoteSnapshot(snapshot){
     window.__pacerBridge.setNotifyMode(snapshot.mode);
   }
 }
+
+/**
+ * "Pull from Console" (see the button's own HTML note above) - translates
+ * the shared engine's RHYTHM_LIBRARY vocabulary (engine/physiology.js, 17
+ * entries) onto this device's own, independently-built local rhythm model
+ * (RHY, defined near the top of the classic script above - a real, richer
+ * pre-existing vocabulary this project inherited, not something authored
+ * for this feature). Deliberately a plain literal here rather than
+ * importing RHYTHM_LIBRARY directly: this device's own script is a classic
+ * (non-module) script for everything except this one small sync bridge, and
+ * the two vocabularies don't share key names at all (e.g. "Third-Degree AV
+ * Block" vs "chb") - a translation table has to exist somewhere regardless.
+ * Rhythms with no reasonable local equivalent (VF, PEA, Torsades - this
+ * device's own teaching set has no polymorphic-VT or pulseless-electrical-
+ * activity distinct from its underlying organized rhythm) are simply
+ * omitted - the pull button falls back to the closest sinus-family rate
+ * with a clear status message rather than silently guessing.
+ */
+const RHY_FROM_ENGINE={
+  'Sinus Rhythm':'sinus','Sinus Tachycardia':'stach','Sinus Bradycardia':'sbrady',
+  'Atrial Fibrillation':'afib','Atrial Flutter':'aflutter',
+  'Junctional Rhythm':'junctional','First-Degree AV Block':'avb1',
+  'Second-Degree AV Block (Type I)':'mobitz1','Second-Degree AV Block (Type II)':'mobitz2',
+  'Third-Degree AV Block':'chb','Idioventricular Rhythm':'aivr',
+  'Ventricular Tachycardia':'vt','Asystole':'asystole',
+};
+function pullFromConsole(){
+  const statusEl=document.getElementById('pullConsoleStatus');
+  if(!lastSnapshot||!lastSnapshot.state){
+    statusEl.textContent='Not connected to a Console session yet - open the Console (or a monitor already joined to one) on this same sync bus first.';
+    return;
+  }
+  const engineRhythm=lastSnapshot.state.rhythm;
+  const hr=lastSnapshot.state.hr;
+  const localKey=RHY_FROM_ENGINE[engineRhythm];
+  if(!localKey||!window.RHY||!window.RHY[localKey]){
+    statusEl.textContent=`Console's current rhythm ("${engineRhythm}") has no close equivalent in this device's own teaching set - nothing changed. Pick a rhythm from the Scenario Library above instead.`;
+    return;
+  }
+  const conductsNormally=window.RHY[localKey].conduct==='normal';
+  const rate=Math.round(hr);
+  // conduct:'normal' rhythms (sinus family, blocks, pvc) derive the
+  // ventricular rate FROM the atrial rate via conduction - vRate stays 0,
+  // matching every existing scenario preset for these rhythms (e.g. the
+  // Threshold-test setup preset above: set({rhythm:'sinus',...,vRate:0,...})).
+  // Dissociated/escape rhythms (chb/junctional/aivr/vt/aflutter/afib) get
+  // the pulled rate as their VENTRICULAR rate instead - that's the
+  // clinically "headline" number for those - while the atrial rate keeps
+  // that rhythm's own typical default (window.set() already does this
+  // automatically for any field not explicitly passed).
+  window.set(conductsNormally?{rhythm:localKey,aRate:rate,vRate:0}:{rhythm:localKey,vRate:rate});
+  window.coach(`Pulled from Console: ${engineRhythm} at ${rate} bpm, set up as ${localKey} on this device. Threshold-test independently from here - this device will NOT keep following the Console.`);
+  statusEl.textContent=`Pulled "${engineRhythm}" at ${rate} bpm from the Console just now.`;
+}
+document.getElementById('btn_pull_console').addEventListener('click', pullFromConsole);
 const pacerDeviceSync=createDeviceSync({
   getSnapshot:()=>{
     if(!lastSnapshot||!window.__pacerBridge)return null;
@@ -2541,6 +2619,11 @@ window.ctPacerBridgeSync={
   pushNow:()=>pacerDeviceSync.pushNow(),
   heartbeatNow:()=>pacerDeviceSync.heartbeatNow(),
   setRelay:(url,code)=>pacerDeviceSync.setRelay(url,code),
+  // Testing hook: feeds a snapshot through the exact same onRemoteSnapshot()
+  // path a real incoming Console/monitor broadcast would, for verifying
+  // "Pull from Console" without needing a second real connected tab.
+  simulateRemoteSnapshotNow:(snapshot)=>onRemoteSnapshot(snapshot),
+  pullFromConsoleNow:()=>pullFromConsole(),
 };
 
 /* ---------------- Cloud Session join (Phase 9) ---------------- */
