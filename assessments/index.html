@@ -15,6 +15,21 @@
      own window shows both panels side by side for local single-window use. */
   body.learner .facilitator-only{display:none!important;}
 
+  /* Direct user request: "why does patient assessment monitor still have
+     separate facilitator screen if its run from the console" - when this
+     page detects a live Console session (see consoleConnected tracking near
+     the sync setup below), it collapses to the same learner-only layout
+     `?role=learner` already uses, plus a small banner explaining why and an
+     escape hatch (a facilitator who genuinely wants both open - e.g. local
+     tile authoring during a live session - can still show it). Kept as a
+     SEPARATE class from `.learner` rather than reusing it: this is a live,
+     reversible detection, not the URL-based pop-out identity. */
+  body.console-connected .facilitator-only{display:none!important;}
+  body.console-connected .shell{grid-template-columns:1fr;}
+  #consoleConnectedBanner{display:none; align-items:center; gap:var(--space-3); padding:var(--space-3) var(--space-4); margin-bottom:var(--space-5); border:1px solid var(--good); background:var(--good-wash); border-radius:var(--radius-md); color:var(--good); font-family:var(--font-mono); font-size:var(--text-xs);}
+  body.console-connected #consoleConnectedBanner{display:flex;}
+  #consoleConnectedBanner button{margin-left:auto;}
+
   .shell{max-width:var(--content-max); margin:0 auto; padding:0 var(--grid-margin) var(--space-8); display:grid; grid-template-columns:360px minmax(0,1fr); gap:var(--space-6);}
   @media (max-width:1000px){ .shell{grid-template-columns:1fr;} }
   body.learner .shell{grid-template-columns:1fr;}
@@ -90,6 +105,13 @@
   .assess-tile .at-findings li{margin-bottom:3px;}
 
   .empty-state{color:var(--ink-faint); font-size:13px; padding:var(--space-6) 0; text-align:center;}
+
+  /* Chart Review - facilitator textarea authoring + learner read-only view */
+  .chart-textarea{width:100%; box-sizing:border-box; font-family:var(--font-body); font-size:13px; line-height:1.5; padding:var(--space-3); margin-bottom:var(--space-4); border:1px solid var(--rule); border-radius:var(--radius-sm); background:var(--paper); color:var(--ink); resize:vertical;}
+  .chart-view{display:grid; gap:var(--space-5);}
+  .chart-section{border:1px solid var(--rule); border-radius:var(--radius-md); background:var(--paper-raised); padding:var(--space-4);}
+  .chart-section-label{font-family:var(--font-mono); font-size:var(--text-xs); text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); margin-bottom:var(--space-2);}
+  .chart-section-body{font-size:14px; line-height:1.6; white-space:pre-wrap;}
 </style>
 </head>
 <body>
@@ -101,6 +123,11 @@
       <span class="pill neutral" id="syncStatus"><span class="dot"></span>Same-machine sync</span>
       <span class="pill neutral facilitator-only" id="scenarioLabel">No scenario loaded</span>
     </div>
+  </div>
+
+  <div id="consoleConnectedBanner">
+    <span><span class="dot"></span> Connected to a Console session — the Console is driving this session's facilitator controls.</span>
+    <button class="act mini" id="btn_show_facilitator_anyway" type="button">Show facilitator panel anyway</button>
   </div>
 
   <div class="shell">
@@ -141,6 +168,18 @@
         <div class="body" id="tileEditor"><div class="hint">Select a tile above to edit it.</div></div>
       </details>
 
+      <!-- Chart Review, direct user request: "should be able to add
+           documentation and chart review sections here including MD notes,
+           procedure notes, Labs/diagnostics, eMAR." Static, facilitator-
+           authored, read-only-to-the-learner text (confirmed scope) - not a
+           structured/interactive EHR. Matches the existing tile pattern:
+           facilitator types ahead of time here, learner opens the Chart
+           Review tab (see the tab bar below) to read it. -->
+      <details class="rail-group" id="grp_chart">
+        <summary><span>Chart Review</span><span class="chev">▸</span></summary>
+        <div class="body" id="chartEditor"></div>
+      </details>
+
       <details class="rail-group" open>
         <summary><span>Pending Requests</span><span class="chev">▸</span></summary>
         <div class="body" id="pendingQueue"></div>
@@ -159,6 +198,7 @@
       <div class="priority-row" id="priorityRow"></div>
       <div class="tab-bar" id="tabBar"></div>
       <div class="tile-grid" id="tileGrid"></div>
+      <div class="chart-view" id="chartView"></div>
     </main>
   </div>
 
@@ -169,6 +209,7 @@
 import {
   CATEGORIES, REVEAL_RULES, createAssessmentState, addTile, updateTile, removeTile,
   requestTile, resolveRequest, getTileStatus, getPendingRequests, getSessionSummary,
+  CHART_SECTIONS, updateChartSection,
 } from './model.js';
 import { createDeviceSync, isValidAssessmentMessage } from '../sync/deviceSync.js';
 import { cloudClient, findSessionByCode, joinSession, hydrateSnapshot, writeSnapshot, sessionChannelName, parseSessionParams } from '../sync/cloudSession.js';
@@ -176,6 +217,8 @@ import { cloudClient, findSessionByCode, joinSession, hydrateSnapshot, writeSnap
 const byId = (id) => document.getElementById(id);
 const LOCAL_KEY = 'ct-sim-assessments-drafts-v1';
 const CATEGORY_LABELS = { outputs: 'Outputs', assessment: 'Assessment', sounds: 'Sounds', therapies: 'Therapies', patient: 'Patient' };
+const CHART_SECTION_LABELS = { mdNotes: 'MD Notes', procedureNotes: 'Procedure Notes', labs: 'Labs / Diagnostics', emar: 'eMAR' };
+const CHART_TAB = 'chart'; // the tab-bar value for Chart Review - not a real category (not in CATEGORIES, not a tile), handled as its own branch wherever activeTab is read
 
 /**
  * A reasonable starter set so this page is immediately useful/demoable
@@ -257,7 +300,10 @@ byId('btn_seed_default').addEventListener('click', () => {
 });
 byId('btn_new').addEventListener('click', () => {
   if (!confirm('Clear all tiles and requests?')) return;
-  state = createAssessmentState(state.scenarioId);
+  // Scoped to exactly what the confirm dialog says - tiles and requests,
+  // not chart (a facilitator who's typed up MD notes/labs ahead of time
+  // shouldn't lose them to a button that never mentioned charting).
+  state = { ...state, tiles: [], requests: {} };
   selectedTileId = null;
   render();
 });
@@ -323,14 +369,46 @@ function renderPriorityRow() {
 }
 
 function renderTabBar() {
-  byId('tabBar').innerHTML = CATEGORIES.map((c) => `<button class="tab-btn ${c === activeTab ? 'active' : ''}" data-tab="${c}">${CATEGORY_LABELS[c]}</button>`).join('');
+  // Chart Review is a real 6th tab alongside the 5 tile categories, but
+  // isn't a category or a tile at all - handled as its own value (CHART_TAB)
+  // rather than teaching CATEGORIES/the tile model about a non-tile concept.
+  const tabs = [...CATEGORIES.map((c) => [c, CATEGORY_LABELS[c]]), [CHART_TAB, 'Chart Review']];
+  byId('tabBar').innerHTML = tabs.map(([v, label]) => `<button class="tab-btn ${v === activeTab ? 'active' : ''}" data-tab="${v}">${label}</button>`).join('');
   byId('tabBar').querySelectorAll('[data-tab]').forEach((btn) => btn.addEventListener('click', () => { activeTab = btn.getAttribute('data-tab'); render(); }));
 }
 
 function renderTileGrid() {
+  const isChart = activeTab === CHART_TAB;
+  byId('tileGrid').hidden = isChart;
+  byId('chartView').hidden = !isChart;
+  if (isChart) { renderChartView(); return; }
   const tiles = state.tiles.filter((t) => t.category === activeTab && t.revealRule !== 'hidden');
   byId('tileGrid').innerHTML = tiles.length ? tiles.map((t) => assessTileHtml(t, false)).join('') : '<div class="empty-state">Nothing configured for this category yet.</div>';
   wireTileButtons(byId('tileGrid'));
+}
+
+/** Learner-facing Chart Review content - read-only, plain facilitator-authored text per section. A section with no content yet shows a quiet placeholder rather than an empty box (matches the tile grid's own "nothing configured yet" convention). */
+function renderChartView() {
+  byId('chartView').innerHTML = CHART_SECTIONS.map((s) => `
+    <div class="chart-section">
+      <div class="chart-section-label">${escapeHtml(CHART_SECTION_LABELS[s])}</div>
+      <div class="chart-section-body">${state.chart[s] ? escapeHtml(state.chart[s]).replace(/\n/g, '<br>') : '<span class="empty-state" style="padding:0">Nothing charted yet.</span>'}</div>
+    </div>`).join('');
+}
+
+/** Facilitator-side authoring - one plain textarea per section, committed on blur/change (not every keystroke, matching this file's own "log/sync on the meaningful moment, not every input tick" convention elsewhere). */
+function renderChartEditor() {
+  const el = byId('chartEditor');
+  if (!el.dataset.built) {
+    el.innerHTML = CHART_SECTIONS.map((s) => `
+      <div class="row"><label>${escapeHtml(CHART_SECTION_LABELS[s])}</label></div>
+      <textarea class="chart-textarea" id="chart_${s}" rows="4" placeholder="Type or paste ${escapeHtml(CHART_SECTION_LABELS[s]).toLowerCase()} here…"></textarea>`).join('');
+    CHART_SECTIONS.forEach((s) => {
+      byId(`chart_${s}`).addEventListener('change', (e) => { state = updateChartSection(state, s, e.target.value); if (activeTab === CHART_TAB) renderChartView(); });
+    });
+    el.dataset.built = 'true'; // built once - textareas keep native focus/cursor/undo history across re-renders, same reasoning wireTileButtons' container-scoped rebuild avoids for tiles
+  }
+  CHART_SECTIONS.forEach((s) => { const ta = byId(`chart_${s}`); if (ta.value !== state.chart[s] && document.activeElement !== ta) ta.value = state.chart[s]; });
 }
 
 function assessTileHtml(tile, isPriority) {
@@ -363,6 +441,7 @@ function render() {
   renderPriorityRow();
   renderTabBar();
   renderTileGrid();
+  renderChartEditor();
 }
 
 /* ---------------- Local drafts (localStorage), same pattern as the Scenario Builder ---------------- */
@@ -414,15 +493,46 @@ byId('btn_open_link').addEventListener('click', () => {
 });
 
 /* ---------------- Sync (Phase 8: reuses sync/deviceSync.js, same channel/relay every device already uses) ---------------- */
+// Direct user request: "why does patient assessment monitor still have
+// separate facilitator screen if its run from the console" - confirmed with
+// the user: auto-hide this page's own facilitator panel (tile editor,
+// pending queue, session summary) whenever a live Console session is
+// detected, since in that mode the Console is the sole facilitator control
+// surface and this panel's own scenario-loading/tile-editing controls would
+// just be a second, redundant place to configure the same session. Detected
+// the same way console.html detects a live pacemaker: the console now tags
+// its own outgoing snapshot with deviceLabel:"console" (a plain extra field,
+// safe on every shape this bus carries), noted here regardless of shape via
+// the SAME noteConsoleSeen() call every incoming message gets, before the
+// isValidAssessmentMessage() shape check below (a label is orthogonal to
+// which of the bus's structurally-distinct shapes carries it). A manual
+// "Show facilitator panel anyway" escape hatch stays available - never
+// permanently locks a facilitator out of their own tile-editing controls
+// (e.g. for local authoring during a session someone else is running).
+let consoleLastSeenAt = 0;
+let facilitatorPanelForcedOpen = false;
+function noteConsoleSeen(snapshot) {
+  if (snapshot && snapshot.deviceLabel === 'console') consoleLastSeenAt = Date.now();
+}
+function renderConsoleConnectionState() {
+  const live = !facilitatorPanelForcedOpen && (Date.now() - consoleLastSeenAt) < 3000;
+  document.body.classList.toggle('console-connected', live);
+}
+byId('btn_show_facilitator_anyway').addEventListener('click', () => {
+  facilitatorPanelForcedOpen = true;
+  renderConsoleConnectionState();
+});
+
 const deviceSync = createDeviceSync({
-  getSnapshot: () => ({ tiles: state.tiles, requests: state.requests, deviceLabel: "assessments" }),
+  getSnapshot: () => ({ tiles: state.tiles, requests: state.requests, chart: state.chart, deviceLabel: "assessments" }),
   onRemoteSnapshot: (snapshot) => {
+    noteConsoleSeen(snapshot);
     // Physiology broadcasts from the console/IntelliVue/HemoSphere/pacemaker
     // arrive on this exact channel too - isValidAssessmentMessage() is what
     // lets this receiver ignore them safely, same mutually-exclusive-shapes
     // pattern the v1/v2 physiology snapshots already use with each other.
     if (!isValidAssessmentMessage(snapshot)) return;
-    state = { ...state, tiles: snapshot.tiles, requests: snapshot.requests };
+    state = { ...state, tiles: snapshot.tiles, requests: snapshot.requests, chart: snapshot.chart || state.chart };
     render();
   },
 });
@@ -431,6 +541,7 @@ setInterval(() => {
   byId('syncStatus').className = 'pill ' + (deviceSync.isLinked() ? 'good' : 'neutral');
   byId('syncStatus').innerHTML = '<span class="dot"></span>' + (deviceSync.isLinked() ? 'Synced' : 'Same-machine sync');
   updatePendingWaitTimes(); // patch wait-time labels live without rebuilding Approve/Deny buttons (see comment above)
+  renderConsoleConnectionState(); // same ~3s liveness window pattern as console.html's own pacer/launcher connection detection
 }, 1000);
 
 /* ---------------- Cloud Session join (Phase 9) ---------------- */
@@ -476,6 +587,12 @@ window.ctAssessments = {
   pushNow: () => deviceSync.pushNow(),
   heartbeatNow: () => deviceSync.heartbeatNow(),
   setActiveTab: (c) => { activeTab = c; render(); },
+  // Testing hook, same rationale as every other one in this codebase:
+  // renderConsoleConnectionState() is normally only driven by the 1s
+  // interval above.
+  noteConsoleSeenNow: () => { noteConsoleSeen({ deviceLabel: 'console' }); renderConsoleConnectionState(); },
+  isConsoleConnected: () => document.body.classList.contains('console-connected'),
+  setChartSectionNow: (section, text) => { state = updateChartSection(state, section, text); render(); return state.chart; },
 };
 
 refreshDraftList();

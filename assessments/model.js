@@ -39,8 +39,30 @@ export const CATEGORIES = ['outputs', 'assessment', 'sounds', 'therapies', 'pati
 export const REVEAL_RULES = ['auto', 'approve', 'hidden'];
 export const DEFAULT_DELAY_THRESHOLD_MS = 60000; // a pending request waiting this long surfaces as "delayed" in the facilitator queue - a live operational cue, not a report metric
 
+// Chart Review, direct user request: "should be able to add documentation
+// and chart review sections here including MD notes, procedure notes,
+// Labs/diagnostics, eMAR." Confirmed scope with the user: static,
+// facilitator-authored, read-only-to-the-learner text per section - NOT a
+// structured/interactive EHR mockup (no individual lab values with flags,
+// no timestamped eMAR administration states, no orderable items). Matches
+// this page's existing tile pattern (facilitator authors ahead of time,
+// learner reads) rather than introducing a second content model.
+// Deliberately plain strings, not richer objects - the same "simplest shape
+// that can grow later without breaking" reasoning `findings` above uses.
+export const CHART_SECTIONS = ['mdNotes', 'procedureNotes', 'labs', 'emar'];
+
 export function createAssessmentState(scenarioId) {
-  return { scenarioId: scenarioId || '', tiles: [], requests: {} };
+  return { scenarioId: scenarioId || '', tiles: [], requests: {}, chart: emptyChart() };
+}
+
+function emptyChart() {
+  return Object.fromEntries(CHART_SECTIONS.map((s) => [s, '']));
+}
+
+/** Facilitator sets one chart section's text. No-ops on an unknown section name (defensive, matches this file's other no-op-on-invalid-input convention) - never throws on a typo'd caller. */
+export function updateChartSection(state, section, text) {
+  if (!CHART_SECTIONS.includes(section)) return state;
+  return { ...state, chart: { ...(state.chart || emptyChart()), [section]: text } };
 }
 
 function uniqueTileId(state, base) {

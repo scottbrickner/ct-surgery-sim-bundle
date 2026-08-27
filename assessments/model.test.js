@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createAssessmentState, addTile, updateTile, removeTile,
   requestTile, resolveRequest, getTileStatus, getPendingRequests, getSessionSummary,
+  CHART_SECTIONS, updateChartSection,
 } from './model.js';
 
 function withTile(revealRule, extra = {}) {
@@ -155,4 +156,31 @@ test('getSessionSummary: counts revealed/pending/denied/missed correctly, exclud
   s = resolveRequest(s, 'c', 'deny', 1500); // -> denied
   const summary = getSessionSummary(s);
   assert.deepEqual(summary, { total: 4, revealed: 2, pending: 0, denied: 1, missed: 1 });
+});
+
+/* ---------------- Chart Review (static, facilitator-authored, read-only sections) ---------------- */
+
+test('createAssessmentState starts every chart section as an empty string', () => {
+  const s = createAssessmentState('x');
+  assert.deepEqual(s.chart, Object.fromEntries(CHART_SECTIONS.map((k) => [k, ''])));
+});
+
+test('updateChartSection sets exactly the named section, leaves the others untouched', () => {
+  let s = createAssessmentState('x');
+  s = updateChartSection(s, 'mdNotes', 'Admitted for CABGx3.');
+  s = updateChartSection(s, 'labs', 'K+ 4.1, Hgb 9.8');
+  assert.equal(s.chart.mdNotes, 'Admitted for CABGx3.');
+  assert.equal(s.chart.labs, 'K+ 4.1, Hgb 9.8');
+  assert.equal(s.chart.procedureNotes, '');
+  assert.equal(s.chart.emar, '');
+});
+
+test('updateChartSection no-ops on an unknown section name rather than throwing or silently adding a stray key', () => {
+  const s = createAssessmentState('x');
+  const result = updateChartSection(s, 'notASection', 'whatever');
+  assert.deepEqual(result, s);
+});
+
+test('CHART_SECTIONS lists exactly the four confirmed sections', () => {
+  assert.deepEqual(CHART_SECTIONS, ['mdNotes', 'procedureNotes', 'labs', 'emar']);
 });

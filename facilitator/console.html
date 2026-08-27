@@ -1639,8 +1639,13 @@ const deviceSync=createDeviceSync({
   // carries the scenario's stages[] definition, only navigational position).
   getSnapshot:()=>{
     if(!runner)return null;
-    if(engineMode==="v1")return{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode};
-    return{currentStageId:runner.currentStageId,state:runner.state,mode:sessionMode};
+    // deviceLabel:"console" (not a device, but the same tagging mechanism
+    // the 4 device pages use - see their own getSnapshot()) lets Assessments
+    // detect "a console is actively running this session" specifically, to
+    // auto-hide its own facilitator panel only in that case (direct user
+    // request, see assessments/index.html's own docblock).
+    if(engineMode==="v1")return{partIndex:runner.partIndex,stepIndex:runner.stepIndex,state:runner.state,mode:sessionMode,deviceLabel:"console"};
+    return{currentStageId:runner.currentStageId,state:runner.state,mode:sessionMode,deviceLabel:"console"};
   },
   onRemoteSnapshot,
   relayUrl:csUrlParams.get("relay")||"",
