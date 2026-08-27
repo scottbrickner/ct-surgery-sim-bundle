@@ -281,18 +281,16 @@
              "any device/control can drive" precedent rather than picking
              one as the sole source of truth. -->
         <div class="row"><label>Rhythm</label></div>
-        <select id="assess_rhythm">
-          <option value="Sinus Rhythm">Sinus Rhythm</option>
-          <option value="Sinus Tachycardia">Sinus Tachycardia</option>
-          <option value="Sinus Bradycardia">Sinus Bradycardia</option>
-          <option value="Atrial Fibrillation">Atrial Fibrillation</option>
-          <option value="PEA">PEA</option>
-          <option value="Ventricular Tachycardia">Ventricular Tachycardia</option>
-          <option value="Ventricular Fibrillation">Ventricular Fibrillation</option>
-        </select>
+        <!-- Options populated from RHYTHM_LIBRARY at load (see the population
+             loop near that import) rather than hand-duplicated here AND on
+             ov_rhythm below - a single source of truth for the expanded
+             rhythm list, direct user request ("expand library of ECG
+             rhythms"). -->
+        <select id="assess_rhythm"></select>
+        <div class="hint" id="assess_rhythm_notes" style="margin-top:0"></div>
 
         <div class="gl">Cardiac / Hemodynamics</div>
-        <label class="row">HR <input type="range" id="ov_hr" min="20" max="220" value="80"><span class="val" id="ov_hr_v">80</span></label>
+        <label class="row">HR <input type="range" id="ov_hr" min="20" max="300" value="80"><span class="val" id="ov_hr_v">80</span></label>
         <div class="ov-status" id="ov_hr_status" hidden></div>
         <div class="checkrow"><label><input type="checkbox" id="bp_linked"> Link sys/dia (maintain a normal ~40 mmHg pulse pressure)</label></div>
         <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
@@ -361,6 +359,26 @@
         <label class="row">L Mediastinal <input type="range" id="ov_lmediastinal" min="0" max="200" step="5" value="0"><span class="val" id="ov_lmediastinal_v">0</span></label>
         <div class="ov-status" id="ov_lmediastinal_status" hidden></div>
 
+        <!-- Round 3, direct user request: "pacer adjustments should have own
+             menu in assessments/parameters not just in ACLS/BLS section."
+             Full mode/rate/output/sensitivity programming, newly exposed in
+             console.html for the first time (previously only the real
+             hardware pacemaker page had these) - see setPacerMode()/the
+             pacer.* OVERRIDE_MAP entries and renderPacerConnectionState()
+             for the connected-device read-only behavior below. -->
+        <div class="gl">Pacer</div>
+        <div class="hint" id="pacerConnHint" style="margin-top:0"></div>
+        <div class="row"><label>Mode</label></div>
+        <select id="pacer_mode"></select>
+        <label class="row">Rate (ppm) <input type="range" id="ov_pacer_rate" min="30" max="180" value="0"><span class="val" id="ov_pacer_rate_v">0</span></label>
+        <div class="ov-status" id="ov_pacer_rate_status" hidden></div>
+        <label class="row">Output (mA) <input type="range" id="ov_pacer_output" min="0" max="25" step="0.1" value="0"><span class="val" id="ov_pacer_output_v">0</span></label>
+        <div class="ov-status" id="ov_pacer_output_status" hidden></div>
+        <label class="row">Sensitivity (mV) <input type="range" id="ov_pacer_sensitivity" min="0.4" max="20" step="0.1" value="0"><span class="val" id="ov_pacer_sensitivity_v">0</span></label>
+        <div class="ov-status" id="ov_pacer_sensitivity_status" hidden></div>
+        <div class="btnrow" id="pacerCaptureRow" style="margin-top:8px"><button class="act" id="assess_pacer_captured">Pacer Capture: —</button></div>
+        <div class="hint" style="margin-top:0">Default is OFF, matching a freshly-connected patient with no pacing configured yet.</div>
+
         <div class="phase-note">Heart/lung sounds and the full interactive Patient Assessments Monitor (see assessments/index.html) are the learner-facing surface for these findings - this rail section is the facilitator's own input/override side of the same data, plus a few fields (ICP/CPP, urine output) not yet on that page.</div>
       </div>
     </details>
@@ -397,16 +415,10 @@
       <div class="body">
         <div class="gl">Rhythm / Pacer</div>
         <div class="row"><label>Intrinsic rhythm</label></div>
-        <select id="ov_rhythm">
-          <option value="Sinus Rhythm">Sinus Rhythm</option>
-          <option value="Sinus Tachycardia">Sinus Tachycardia</option>
-          <option value="Sinus Bradycardia">Sinus Bradycardia</option>
-          <option value="Atrial Fibrillation">Atrial Fibrillation</option>
-          <option value="PEA">PEA</option>
-          <option value="Ventricular Tachycardia">Ventricular Tachycardia</option>
-          <option value="Ventricular Fibrillation">Ventricular Fibrillation</option>
-        </select>
+        <select id="ov_rhythm"></select>
+        <div class="hint" id="ov_rhythm_notes" style="margin-top:0"></div>
         <div class="btnrow" style="margin-top:8px"><button class="act" id="ov_captured">Pacer Capture: —</button></div>
+        <div class="hint" style="margin-top:0">Full pacer programming (mode/rate/output/sensitivity) now lives in its own "Pacer" section under Patient Assessments &amp; Outputs, above. This toggle is a quick capture on/off shortcut kept here since it's used alongside shock/CPR.</div>
 
         <div class="gl">Clinical Events</div>
         <div class="btnrow">
@@ -587,7 +599,7 @@
 </div>
 
 <script type="module">
-import { getEffectiveRhythm, getEffectiveHR, applyInstant, computeCPP } from '../engine/physiology.js';
+import { getEffectiveRhythm, getEffectiveHR, applyInstant, computeCPP, RHYTHM_LIBRARY, jitterHR, PACER_MODES } from '../engine/physiology.js';
 import {
   administerPush, canAdministerPush, getPushDoseCount, getPushTotalDoseMg,
   setInfusionRate, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
@@ -847,8 +859,19 @@ function renderReadout(){
   const s=runner.state;
   const minute=s.minute;
   const MEDICATED={hr:()=>getMedicatedHR(s,minute),co:()=>getMedicatedCO(s,minute),rr:()=>getMedicatedRR(s,minute),etco2:()=>getEffectiveETCO2(s,minute)};
+  // Rhythm-library expansion, direct user request: an irregular/regularly-
+  // irregular intrinsic rhythm's DISPLAYED rate fluctuates tick to tick (see
+  // jitterHR's own docblock for why this is display-only, never written back
+  // into authored state.hr). Never applied while actually pacing (a captured
+  // paced rhythm is metronomic by definition) - detected via the same
+  // "Paced (...)" string getEffectiveRhythm() already returns, rather than
+  // re-deriving isPacing() here (that helper is intentionally private to
+  // physiology.js).
+  const isPacedNow=getEffectiveRhythm(s).startsWith("Paced");
+  const rhythmInfo=RHYTHM_LIBRARY[s.rhythm];
   const rows=READOUT_FIELDS.map(([k,label])=>{
-    const v=MEDICATED[k]?MEDICATED[k]():s[k];
+    let v=MEDICATED[k]?MEDICATED[k]():s[k];
+    if(k==="hr"&&!isPacedNow&&rhythmInfo)v=jitterHR(v,rhythmInfo.regularity);
     const cls=k==="hr"?"rd hero-primary":"rd";
     return `<div class="${cls}"><div class="rl">${label}</div><div class="rv">${typeof v==="number"?(Number.isInteger(v)?v:v.toFixed(1)):v}</div></div>`;
   });
@@ -878,6 +901,9 @@ function renderReadout(){
   if(cprEl)cprEl.textContent=s.circulation.cpr.active?("CPR active — "+s.circulation.cpr.quality+" quality"):"CPR not active";
   byId("ov_captured").textContent="Pacer Capture: "+(s.pacer.captured?"ON":"OFF");
   byId("ov_captured").classList.toggle("on",s.pacer.captured);
+  byId("assess_pacer_captured").textContent="Pacer Capture: "+(s.pacer.captured?"ON":"OFF");
+  byId("assess_pacer_captured").classList.toggle("on",s.pacer.captured);
+  if(byId("pacer_mode").value!==s.pacer.mode)byId("pacer_mode").value=s.pacer.mode;
   const flags=[["flag_arrest","arrestActive"],["flag_sternotomy","sternotomyPerformed"],["flag_ecmo","ecmoCannulated"]];
   flags.forEach(([id,k])=>{
     const el=byId(id);
@@ -889,10 +915,11 @@ function renderReadout(){
   // truth). Both show the INTRINSIC rhythm (what the dropdown can actually
   // set) - the readout grid's own Rhythm tile separately shows the
   // EFFECTIVE rhythm (post-pacer-capture precedence) via getEffectiveRhythm().
-  const RHYTHM_OPTIONS={"Sinus Rhythm":1,"Sinus Tachycardia":1,"Sinus Bradycardia":1,"Atrial Fibrillation":1,"PEA":1,"Ventricular Tachycardia":1,"Ventricular Fibrillation":1};
+  const RHYTHM_OPTIONS=RHYTHM_LIBRARY; // was a hand-duplicated whitelist object; RHYTHM_LIBRARY's own keys ARE that whitelist now (single source, see its own docblock in physiology.js)
   const rhythmVal=s.rhythm in RHYTHM_OPTIONS?s.rhythm:byId("ov_rhythm").value;
   byId("ov_rhythm").value=rhythmVal;
   byId("assess_rhythm").value=rhythmVal;
+  renderRhythmNotes();
   byId("assess_cpp_v").textContent=Math.round(computeCPP(getMedicatedMAP(s,minute),s.icp));
   if(byId("ov_urine_device").value!==s.urineOutput.deviceType)byId("ov_urine_device").value=s.urineOutput.deviceType;
   byId("simClockDisplay").textContent="t+"+s.minute.toFixed(1)+" min";
@@ -943,6 +970,7 @@ const OVERRIDE_MAP={
   ov_rpleural:"chestTubes.rPleural",ov_rmediastinal:"chestTubes.rMediastinal",ov_blake:"chestTubes.blake",
   ov_lpleural:"chestTubes.lPleural",ov_lmediastinal:"chestTubes.lMediastinal",
   ov_urine:"urineOutput.volumeMl",
+  ov_pacer_rate:"pacer.rate",ov_pacer_output:"pacer.outputMa",ov_pacer_sensitivity:"pacer.sensitivityMv",
 };
 function setPath(obj,path,value){const[h,...r]=path.split(".");if(!r.length){obj[h]=value;return;}obj[h]=obj[h]||{};setPath(obj[h],r.join("."),value);}
 function getPath(obj,path){return path.split(".").reduce((o,k)=>o==null?undefined:o[k],obj);}
@@ -1024,6 +1052,7 @@ function commitOverride(id,rawVal,{log}={}){
   const priorValue=getPath(runner.state,path);
   runner=srSetOverride(runner,path,val,currentReleaseChoice(),performance.now());
   stampInfusionOnsetIfRateChanged(path,priorValue,val);
+  if(path.startsWith("pacer."))stampConsolePacerIntent(); // see the pacer-connection-detection docblock below
   renderReadout();
   renderAllOverrideStatuses(performance.now());
   if(log&&priorValue!==val)logChange(`${OVERRIDE_LABELS[id]||id}: ${fmtVal(el,priorValue)} → ${fmtVal(el,val)}`);
@@ -1039,8 +1068,22 @@ for(const id in OVERRIDE_MAP){
     const priorValue=getPath(runner.state,path);
     runner=srSetOverride(runner,path,val,currentReleaseChoice(),performance.now());
     stampInfusionOnsetIfRateChanged(path,priorValue,val);
+    if(path.startsWith("pacer."))stampConsolePacerIntent(); // see the pacer-connection-detection docblock below
     renderReadout();
     renderOverrideStatus(id,OVERRIDE_MAP[id]);
+    // Real user report: "I think I broke the calculation by changing
+    // different parameters fast." Root cause wasn't wrong math - reproduced
+    // directly (window.ctSharedEngine.getState() always stayed internally
+    // consistent, pulse pressure exactly 40, MAP exactly matching its
+    // formula) - it's that BP linking/calculated-MAP only used to recompute
+    // on "change" (slider release), never on "input" (live drag). So while
+    // actively dragging one linked slider, the OTHER field and MAP visibly
+    // lagged/looked stale until release - exactly what a screenshot taken
+    // mid-drag, or a quick glance while moving to the next slider, would
+    // show as "inconsistent." Calling it here too (no log spam - logChange
+    // still only fires from "change") makes both track live during the drag
+    // itself, not just snap into consistency after releasing.
+    applyBPDerivedEffects(id);
   });
   el.addEventListener("change",()=>{ // drag finished / arrow-key nudge finished - the log-worthy moment
     logChange(`${OVERRIDE_LABELS[id]||id} set to ${vv.textContent}`);
@@ -1174,6 +1217,7 @@ const OVERRIDE_LABELS={
   ov_propofol:"Propofol",ov_fentanyl:"Fentanyl",ov_insulin:"Insulin",
   ov_rpleural:"R Pleural",ov_rmediastinal:"R Mediastinal",ov_blake:"Blake",ov_lpleural:"L Pleural",ov_lmediastinal:"L Mediastinal",
   ov_urine:"Urine Output",
+  ov_pacer_rate:"Pacer Rate",ov_pacer_output:"Pacer Output",ov_pacer_sensitivity:"Pacer Sensitivity",
 };
 
 /**
@@ -1225,18 +1269,115 @@ function renderActiveOverridesPanel(nowMs){
 function setRhythm(rhythm){
   if(!runner)return;
   runner=srOverride(runner,{rhythm});
+  // Direct user request: "if learner selects Sinus Tachycardia it defaults
+  // to a HR > 100... set to 120." Applying the library's defaultRate is a
+  // normal, still-freely-editable HR override (commitOverride, not a
+  // constraint) - a one-time convenience on selection, exactly like every
+  // other slider's own settable value.
+  const info=RHYTHM_LIBRARY[rhythm];
+  if(info)commitOverride("ov_hr",info.defaultRate,{log:false});
   renderReadout();
-  logChange(`Rhythm set to ${rhythm}`);
+  renderRhythmNotes();
+  logChange(`Rhythm set to ${rhythm}`+(info?` (default HR ${info.defaultRate})`:""));
+}
+function renderRhythmNotes(){
+  if(!runner)return;
+  const info=RHYTHM_LIBRARY[runner.state.rhythm];
+  const text=info
+    ? `${REGULARITY_LABELS[info.regularity]||info.regularity} · ${info.waveform}`
+    : "";
+  byId("ov_rhythm_notes").textContent=text;
+  byId("assess_rhythm_notes").textContent=text;
+}
+const REGULARITY_LABELS={regular:"Regular",irregular:"Irregular",regularly_irregular:"Regularly irregular"};
+// Both selects populated from the same RHYTHM_LIBRARY keys - was two
+// hand-duplicated <option> lists (a real drift risk once the library grew
+// past the original 7) - see the HTML comment above each <select>.
+for(const id of["ov_rhythm","assess_rhythm"]){
+  const sel=byId(id);
+  sel.innerHTML=Object.keys(RHYTHM_LIBRARY).map(r=>`<option value="${r}">${r}</option>`).join("");
 }
 byId("ov_rhythm").addEventListener("change",()=>setRhythm(byId("ov_rhythm").value));
 byId("assess_rhythm").addEventListener("change",()=>setRhythm(byId("assess_rhythm").value));
-byId("ov_captured").addEventListener("click",()=>{
+function togglePacerCapture(){
   if(!runner)return;
   const next=!runner.state.pacer.captured;
   runner=srOverride(runner,{pacer:{captured:next}});
+  stampConsolePacerIntent();
   renderReadout();
   logChange(`Pacer capture ${next?"ON":"OFF"}`);
-});
+}
+byId("ov_captured").addEventListener("click",togglePacerCapture);
+byId("assess_pacer_captured").addEventListener("click",togglePacerCapture);
+
+/**
+ * Round 3, direct user request: "pacer adjustments should have own menu in
+ * assessments/parameters." Full mode/rate/output/sensitivity programming -
+ * pacer.rate/outputMa/sensitivityMv ride the same generic OVERRIDE_MAP
+ * slider mechanism every other vital does; pacer.mode is discrete (same
+ * reason rhythm is: NUMERIC_PATHS/rampState explicitly excludes it), so it
+ * gets its own instant srOverride() handler, same pattern as setRhythm's
+ * srOverride() call and the pacer-capture toggle above (not
+ * srSetOverride() - a mode isn't held/released, it's just set).
+ */
+byId("pacer_mode").innerHTML=PACER_MODES.map(m=>`<option value="${m}">${m==="off"?"Off":m}</option>`).join("");
+function setPacerMode(mode){
+  if(!runner)return;
+  runner=srOverride(runner,{pacer:{mode}});
+  stampConsolePacerIntent();
+  renderReadout();
+  logChange(`Pacer mode set to ${mode==="off"?"Off":mode}`);
+}
+byId("pacer_mode").addEventListener("change",()=>setPacerMode(byId("pacer_mode").value));
+
+/**
+ * Real architecture finding, direct user report ("the pacemaker...doesn't
+ * communicate with what the console has programmed"): the pacemaker device
+ * page is an OVERLAY CONTRIBUTOR (see its own script comment) - it always
+ * pushes ITS OWN real hardware pacer.* state onto the shared session, never
+ * the other way around. So whenever a real Pacemaker window is connected,
+ * anything this panel sets gets silently overwritten on the next sync tick -
+ * confirmed directly, not assumed. Confirmed with the user: rather than
+ * making the sync bidirectional (a bigger, riskier change to a device
+ * deliberately built for a learner to operate its own physical-feeling
+ * dials), this panel detects a live contributor and switches to a clearly-
+ * labeled READ-ONLY status view of the real device's actual settings -
+ * never silently discards a facilitator's input by pretending to accept it.
+ *
+ * Detection: there's no per-peer device-type tag on the base sync bus (only
+ * Cloud Session's roster has that, and only for cloud-joined sessions) - so
+ * this uses the best signal actually available: if state.pacer arrives via
+ * onRemoteSnapshot looking different from what THIS panel itself most
+ * recently commanded, something else on the bus is actively asserting pacer
+ * state, which can only be the pacemaker bridge (the only other pacer.*
+ * writer on the bus - see console/IntelliVue/HemoSphere, none of which ever
+ * touch pacer.*). Treated as "live" for a short grace window after the most
+ * recent such assertion (~3s, comfortably longer than the bridge's own
+ * ~140ms push interval), so it reads as continuously live while the real
+ * device keeps pushing and reverts to editable soon after it's closed.
+ */
+let consoleOwnPacerIntent=null; // last {mode,rate,outputMa,sensitivityMv,captured} THIS panel itself set
+let pacerRemoteLiveAt=0;
+function stampConsolePacerIntent(){ if(runner)consoleOwnPacerIntent={...runner.state.pacer}; }
+function notePacerRemoteAssertion(pacer){
+  if(!pacer)return;
+  const matchesOwnIntent=consoleOwnPacerIntent
+    &&pacer.mode===consoleOwnPacerIntent.mode&&pacer.rate===consoleOwnPacerIntent.rate
+    &&pacer.outputMa===consoleOwnPacerIntent.outputMa&&pacer.sensitivityMv===consoleOwnPacerIntent.sensitivityMv;
+  if(!matchesOwnIntent)pacerRemoteLiveAt=performance.now();
+}
+function isPacerRemoteLive(nowMs){ return (nowMs-pacerRemoteLiveAt)<3000; }
+function renderPacerConnectionState(nowMs){
+  if(!runner)return;
+  const live=isPacerRemoteLive(nowMs!=null?nowMs:performance.now());
+  ["pacer_mode","ov_pacer_rate","ov_pacer_output","ov_pacer_sensitivity","assess_pacer_captured"].forEach(id=>{
+    const el=byId(id); if(el)el.disabled=live;
+  });
+  byId("pacerConnHint").textContent=live
+    ?"● A real Pacemaker device is connected - showing its live settings (read-only here). Program the pacer from that device."
+    :"No pacemaker device connected - these fields simulate the pacer directly.";
+  byId("pacerConnHint").classList.toggle("warn-text",live);
+}
 [["ev_arrest","arrestActive","Arrest"],["ev_sternotomy","sternotomyPerformed","Sternotomy"],["ev_ecmo","ecmoCannulated","ECMO cannulated"]].forEach(([id,flag,label])=>{
   byId(id).addEventListener("click",()=>{
     if(!runner)return;
@@ -1400,8 +1541,14 @@ function consoleTick(ts){
     // MM:SS display itself resolves anyway.
     if(runner.pendingAutoAdvance&&ts-lastDecompRenderMs>=1000){lastDecompRenderMs=ts;renderDecompTimer(ts);}
   }
+  // Same throttled-independent-redraw pattern as the decomp timer just above,
+  // and for the identical reason: pacer connection liveness needs to EXPIRE
+  // (flip the panel back to editable) even when nothing else changes tick to
+  // tick, so it can't only be driven off `runner!==before`.
+  if(ts-lastPacerConnRenderMs>=1000){lastPacerConnRenderMs=ts;renderPacerConnectionState(ts);}
   requestAnimationFrame(consoleTick);
 }
+let lastPacerConnRenderMs=0;
 requestAnimationFrame(consoleTick);
 
 /* ---------------- Sync with the monitors ---------------- */
@@ -1426,6 +1573,12 @@ function onRemoteSnapshot(snapshot){
   // whatever IntelliVue's idle local baseline happened to be, a few hundred
   // ms after every console-side change - not visible from a single snapshot
   // read, only from watching it drift back down over repeated samples.
+  // Pacer-connection detection (see the pacer panel's own docblock near
+  // setPacerMode) - noted regardless of engineMode, since the pacemaker
+  // bridge always sends v1-shaped snapshots whether the console itself is
+  // running a v1 or v2 scenario; only full-state ADOPTION stays gated to v1
+  // below, unchanged from the existing v2-in-console fix.
+  if(isValidSnapshot(snapshot)&&snapshot.state)notePacerRemoteAssertion(snapshot.state.pacer);
   if(isValidSnapshot(snapshot)&&runner&&engineMode==="v1"){
     const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
     runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
@@ -1693,6 +1846,14 @@ window.ctSharedEngine={
   advanceToStageNow:(stageId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.advanceToStage(runner,stageId,ts);syncControlsFromRunner();render();return runner.state;},
   chooseBranchNow:(destinationId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.chooseBranch(runner,destinationId,ts);syncControlsFromRunner();render();return runner.state;},
   cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
+  // Testing hooks, same rationale as every rAF/setInterval-gated redraw in
+  // this file (see tickNow's own precedent): renderPacerConnectionState's
+  // liveness check and renderRhythmNotes are both normally only re-run from
+  // consoleTick's throttled ~1Hz redraw, which this environment's suspended
+  // requestAnimationFrame never fires under automated testing.
+  renderPacerConnectionStateNow:(ts)=>{renderPacerConnectionState(ts);return{live:isPacerRemoteLive(ts!=null?ts:performance.now())};},
+  noteRemotePacerNow:(pacer)=>notePacerRemoteAssertion(pacer),
+  renderRhythmNotesNow:()=>{renderRhythmNotes();return byId("ov_rhythm_notes").textContent;},
   getRampProgress:(ts)=>runner&&srGetRampProgress(runner,ts),
   getAutoAdvanceCountdown:(ts)=>runner&&srGetAutoAdvanceCountdown(runner,ts),
   startCustomDeclineNow:(opts,ts)=>{if(!runner)return null;runner=srStartFacilitatorRamp(runner,opts,ts);renderReadout();renderDecompTimer(performance.now());return runner.state;},

@@ -236,3 +236,82 @@ export const URINE_DEVICE_TYPES = ['external', 'foley', 'urinal_bedpan'];
 export function computeCPP(map, icp) {
   return map - icp;
 }
+
+// Round 3 rhythm-library expansion, direct user request: "expand library of
+// ECG rhythms; note their default rates, regularity, waveforms" plus
+// "if learner selects Sinus Tachycardia it defaults to a HR > 100... set to
+// 120." Representative rates are drawn from this program's own vetted ECG
+// teaching-tracing library (real tracings used in the parallel ECG/ACLS
+// course, not invented for this simulator) - each is a typical/teaching
+// value for that rhythm category, not a claim that real patients never
+// present outside this range. Selecting a rhythm applies `defaultRate` as a
+// normal, still-freely-editable HR override (see console.html's setRhythm) -
+// a one-time convenience, not an ongoing constraint.
+//
+// `regularity` drives jitterHR() below:
+//   'regular'            - no jitter, the set rate displays exactly.
+//   'regularly_irregular' - a patterned irregularity (e.g. Wenckebach's
+//                           progressively-dropped-beat grouping, or a 2nd-
+//                           degree Type II block's intermittent non-conducted
+//                           P waves) - modeled here as a SMALLER random
+//                           jitter band, not a literal beat-grouping
+//                           simulation. Flagged as a real simplification, not
+//                           silently precise.
+//   'irregular'          - genuinely chaotic beat-to-beat variation (AFib,
+//                           Torsades) - a LARGER random jitter band.
+// `waveform` is a short clinical description surfaced as reference text in
+// the console (see console.html's rhythm-notes hint) - it is NOT a claim
+// that every device renders this exact morphology; IntelliVue's own local
+// ECG-trace engine (see that file's RHYTHM_MAP) renders a real distinct
+// shape for whichever of these it has a case for, same "waveform" idea
+// expressed as pixels instead of prose.
+export const RHYTHM_LIBRARY = {
+  'Sinus Rhythm': { defaultRate: 75, regularity: 'regular', waveform: 'Normal P-QRS-T sequence, upright P before every QRS, PR 120-200ms, narrow QRS.' },
+  'Sinus Tachycardia': { defaultRate: 120, regularity: 'regular', waveform: 'Normal sinus morphology at a fast rate (>100 bpm); at very fast rates the P wave can merge into the preceding T.' },
+  'Sinus Bradycardia': { defaultRate: 45, regularity: 'regular', waveform: 'Normal sinus morphology at a slow rate (<60 bpm); P-QRS-T relationship unchanged.' },
+  'Atrial Fibrillation': { defaultRate: 80, regularity: 'irregular', waveform: 'No discrete P waves - fibrillatory baseline; irregularly irregular R-R intervals; narrow QRS unless a pre-existing conduction defect.' },
+  'Atrial Flutter': { defaultRate: 150, regularity: 'regular', waveform: 'Sawtooth flutter (F) waves, classically ~300/min atrial rate; ventricular rate set by the conduction ratio (2:1 shown here at ~150 - 4:1 block presenting near 75 is also common).' },
+  'Supraventricular Tachycardia': { defaultRate: 180, regularity: 'regular', waveform: 'Narrow-complex, regular, very fast (typically 150-250); P waves often absent or buried in the preceding T wave.' },
+  'Junctional Rhythm': { defaultRate: 50, regularity: 'regular', waveform: 'Narrow QRS at an escape rate (40-60); P waves absent, inverted before the QRS, or buried within/just after it (retrograde atrial activation).' },
+  'First-Degree AV Block': { defaultRate: 75, regularity: 'regular', waveform: 'Normal P-QRS-T sequence with a fixed, prolonged PR interval (>200ms); every P conducts.' },
+  'Second-Degree AV Block (Type I)': { defaultRate: 50, regularity: 'regularly_irregular', waveform: 'Progressively lengthening PR interval until a P wave fails to conduct (dropped QRS), then the pattern repeats (Wenckebach grouping).' },
+  'Second-Degree AV Block (Type II)': { defaultRate: 60, regularity: 'regularly_irregular', waveform: 'Fixed PR interval on conducted beats with sudden, unpredictable non-conducted P waves (no progressive lengthening); often a wider QRS than Type I.' },
+  'Third-Degree AV Block': { defaultRate: 40, regularity: 'regular', waveform: 'Complete AV dissociation - P waves march through at their own regular rate, independent of a separately regular escape QRS rhythm.' },
+  'Idioventricular Rhythm': { defaultRate: 60, regularity: 'regular', waveform: 'Wide QRS, no associated P waves, ventricular escape focus; "accelerated" idioventricular rhythm runs roughly 40-120 (a typical accelerated rate is shown here).' },
+  'PEA': { defaultRate: 100, regularity: 'regular', waveform: 'Organized electrical activity (rendered as its underlying morphology) without a palpable pulse - pulselessness is conveyed by flat arterial pressure, not a distinct waveform.' },
+  'Ventricular Tachycardia': { defaultRate: 180, regularity: 'regular', waveform: 'Wide, monomorphic QRS complexes at a fast, regular rate; no discrete P waves.' },
+  'Torsades de Pointes': { defaultRate: 250, regularity: 'irregular', waveform: 'Polymorphic wide-complex tachycardia with QRS amplitude/axis twisting around the baseline; often precipitated by a prolonged QT.' },
+  'Ventricular Fibrillation': { defaultRate: 0, regularity: 'irregular', waveform: 'Chaotic, disorganized fibrillatory baseline with no discrete QRS complexes; no cardiac output.' },
+  'Asystole': { defaultRate: 0, regularity: 'regular', waveform: 'No discernible electrical activity - flatline.' },
+};
+
+/**
+ * Cosmetic, display-only jitter for an irregular rhythm's instantaneous
+ * rate. NEVER writes to authored state.hr and NEVER belongs in a sync
+ * payload (same "nothing frame/time-relative on the wire" rule as
+ * scenarioRunner's activeRamp) - each device re-rolls its own jittered
+ * display number independently, every render tick. That's a deliberate
+ * design choice, not an oversight: two real monitors sampling the same
+ * genuinely irregular rhythm at the same instant frequently do show
+ * slightly different instantaneous rates, and it keeps the shared engine's
+ * actual state (and every existing replay/sync/test guarantee built on it)
+ * exactly as deterministic as it was before this rhythm library existed.
+ * `rand` defaults to Math.random but is injectable so this stays a pure,
+ * exactly-testable function - tests pass a fixed rand to assert exact
+ * bounds instead of a statistical range.
+ */
+export function jitterHR(baseRate, regularity, rand = Math.random) {
+  if (regularity !== 'irregular' && regularity !== 'regularly_irregular') return baseRate;
+  if (baseRate <= 0) return baseRate;
+  const amplitude = regularity === 'irregular' ? 0.20 : 0.08;
+  const delta = (rand() * 2 - 1) * amplitude * baseRate;
+  return Math.max(0, Math.round(baseRate + delta));
+}
+
+// The real Medtronic 5392's own mode list (devices/pacemaker/...MODE_LIST),
+// plus 'off' for "no pacing configured" - the shared engine's own baseline.
+// Exported so console.html's new dedicated Pacer panel (Round 3, direct
+// request: "pacer adjustments should have own menu in assessments/
+// parameters, not just in ACLS/BLS") offers the exact same mode vocabulary
+// the real hardware simulator does, rather than a second, divergent list.
+export const PACER_MODES = ['off', 'AAI', 'AOO', 'VVI', 'VOO', 'DDD', 'DDI', 'DOO'];

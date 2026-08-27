@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, applyInstant, rampState, getEffectiveRhythm, getEffectiveHR, computeCPP, URINE_DEVICE_TYPES } from './physiology.js';
+import { createState, applyInstant, rampState, getEffectiveRhythm, getEffectiveHR, computeCPP, URINE_DEVICE_TYPES, RHYTHM_LIBRARY, jitterHR, PACER_MODES } from './physiology.js';
 
 test('createState fills in full defaults with no overrides', () => {
   const s = createState();
@@ -125,4 +125,65 @@ test('getEffectiveHR shows the pacer\'s programmed rate when it exactly equals t
 test('getEffectiveHR shows the intrinsic HR when captured but demand-inhibited (intrinsic rate exceeds the programmed pacer rate)', () => {
   const s = createState({ hr: 90, pacer: { mode: 'VVI', captured: true, rate: 50 } });
   assert.equal(getEffectiveHR(s), 90);
+});
+
+test('RHYTHM_LIBRARY: every entry has a valid defaultRate/regularity/waveform', () => {
+  const validRegularity = new Set(['regular', 'irregular', 'regularly_irregular']);
+  for (const [name, info] of Object.entries(RHYTHM_LIBRARY)) {
+    assert.equal(typeof info.defaultRate, 'number', `${name}.defaultRate`);
+    assert.ok(info.defaultRate >= 0, `${name}.defaultRate >= 0`);
+    assert.ok(validRegularity.has(info.regularity), `${name}.regularity`);
+    assert.equal(typeof info.waveform, 'string', `${name}.waveform`);
+    assert.ok(info.waveform.length > 0, `${name}.waveform non-empty`);
+  }
+});
+
+test('RHYTHM_LIBRARY includes every rhythm the pre-existing engine/UI already referenced (no silent narrowing)', () => {
+  // The 7 rhythms console.html's <select> options and IntelliVue's RHYTHM_MAP
+  // already relied on before this library existed - a regression here would
+  // silently break an existing selectable value, not just fail to add new ones.
+  const preExisting = ['Sinus Rhythm', 'Sinus Tachycardia', 'Sinus Bradycardia', 'Atrial Fibrillation', 'PEA', 'Ventricular Tachycardia', 'Ventricular Fibrillation'];
+  for (const name of preExisting) assert.ok(name in RHYTHM_LIBRARY, name);
+});
+
+test('jitterHR returns the exact base rate unchanged for a regular rhythm, regardless of rand', () => {
+  assert.equal(jitterHR(75, 'regular', () => 0), 75);
+  assert.equal(jitterHR(75, 'regular', () => 1), 75);
+});
+
+test('jitterHR returns the exact base rate unchanged at rate 0 (asystole/vfib), even for an irregular regularity', () => {
+  assert.equal(jitterHR(0, 'irregular', () => 1), 0);
+});
+
+test('jitterHR stays within the documented +/-20% band for "irregular" and is centered on the base rate', () => {
+  const base = 80;
+  const atMax = jitterHR(base, 'irregular', () => 1); // rand()=1 -> delta = +1*0.20*80 = +16
+  const atMin = jitterHR(base, 'irregular', () => 0); // rand()=0 -> delta = -1*0.20*80 = -16
+  const atMid = jitterHR(base, 'irregular', () => 0.5); // rand()=0.5 -> delta = 0
+  assert.equal(atMax, 96);
+  assert.equal(atMin, 64);
+  assert.equal(atMid, 80);
+});
+
+test('jitterHR stays within the documented +/-8% (smaller) band for "regularly_irregular"', () => {
+  const base = 60;
+  assert.equal(jitterHR(base, 'regularly_irregular', () => 1), 65); // +1*0.08*60=4.8 -> round 65
+  assert.equal(jitterHR(base, 'regularly_irregular', () => 0), 55); // -4.8 -> round 55
+});
+
+test('jitterHR floors at 0 defensively, even though a real rand() in [0,1) can never actually drive it negative', () => {
+  // Amplitude is proportional to baseRate (max 20%), so delta magnitude is
+  // always < baseRate for any real rand() in [0,1) - the floor is genuinely
+  // unreachable via Math.random() itself. Exercised here only via an
+  // out-of-spec injected rand, to confirm the defensive Math.max(0,...)
+  // still holds if that invariant is ever violated (e.g. a future amplitude
+  // change), not because normal use can trigger it.
+  assert.equal(jitterHR(80, 'irregular', () => -10), 0);
+});
+
+test('PACER_MODES starts with "off" (the shared engine\'s existing pacer.mode default/sentinel) followed by every real Medtronic 5392 mode except the clinically-equivalent OOO', () => {
+  assert.equal(PACER_MODES[0], 'off');
+  assert.equal(PACER_MODES.length, 8);
+  assert.deepEqual([...PACER_MODES].sort(), ['AAI', 'AOO', 'DDD', 'DDI', 'DOO', 'VOO', 'VVI', 'off'].sort());
+  assert.ok(!PACER_MODES.includes('OOO')); // OOO (no pace, no sense) is clinically equivalent to 'off', deliberately not duplicated
 });
