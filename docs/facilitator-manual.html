@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Facilitator Manual — Clinical Patient Simulator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800;900&family=Source+Sans+Pro:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="../design-system/tokens.css">
+<link rel="stylesheet" href="../design-system/components.css">
+<style>
+  /* Manual-specific layout - built from this project's own shared tokens
+     (design-system/tokens.css), not a new palette. Two-column: a sticky
+     table-of-contents rail + the manual body, collapsing to one column
+     under 900px (same breakpoint convention console.html/assessments use
+     for their own rail). */
+  .manual-shell{max-width:var(--content-max); margin:0 auto; padding:0 var(--grid-margin) var(--space-8); display:grid; grid-template-columns:220px minmax(0,1fr); gap:var(--space-6);}
+  @media (max-width:900px){ .manual-shell{grid-template-columns:1fr;} }
+
+  .toc{position:sticky; top:var(--space-6); align-self:start; border:1px solid var(--rule); border-radius:var(--radius-md); background:var(--paper-raised); padding:var(--space-4);}
+  @media (max-width:900px){ .toc{position:static;} }
+  .toc-label{font-family:var(--font-mono); font-size:var(--text-2xs); letter-spacing:0.06em; text-transform:uppercase; color:var(--ink-faint); margin-bottom:var(--space-3);}
+  .toc ol{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:var(--space-1);}
+  .toc li a{display:block; padding:var(--space-2) var(--space-2); border-radius:var(--radius-sm); color:var(--ink-soft); font-size:var(--text-sm); text-decoration:none; line-height:1.4;}
+  .toc li a:hover{background:var(--paper-sunken); color:var(--ink);}
+  .toc li.sub a{padding-left:var(--space-4); font-size:var(--text-xs); color:var(--ink-faint);}
+
+  .manual-body{min-width:0;}
+  .manual-body section{margin-bottom:var(--space-8); scroll-margin-top:var(--space-6);}
+  .manual-body h2{font-family:var(--font-display); font-size:var(--text-2xl); margin-bottom:var(--space-2); padding-top:var(--space-6); border-top:1px solid var(--rule);}
+  .manual-body section:first-of-type h2{border-top:none; padding-top:0;}
+  .manual-body h3{font-family:var(--font-display); font-size:var(--text-lg); margin:var(--space-6) 0 var(--space-3);}
+  .manual-body p{max-width:68ch; line-height:1.65; color:var(--ink-soft); margin-bottom:var(--space-3);}
+  .manual-body p.lead{color:var(--ink); font-size:var(--text-md);}
+  .manual-body ul, .manual-body ol{max-width:66ch; line-height:1.65; color:var(--ink-soft); margin:0 0 var(--space-4); padding-left:1.3em;}
+  .manual-body li{margin-bottom:var(--space-2);}
+  .manual-body strong{color:var(--ink); font-weight:600;}
+  .manual-body code{font-family:var(--font-mono); font-size:0.92em; background:var(--paper-sunken); border:1px solid var(--rule); border-radius:4px; padding:1px 5px; color:var(--accent-ink);}
+
+  .callout{border:1px solid var(--rule); border-left:3px solid var(--accent); background:var(--paper-raised); border-radius:var(--radius-md); padding:var(--space-4); margin:var(--space-4) 0; max-width:66ch;}
+  .callout .cl-label{font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.05em; color:var(--accent-ink); margin-bottom:var(--space-1);}
+  .callout p{margin-bottom:0;}
+  .callout.warn{border-left-color:var(--warn);}
+  .callout.warn .cl-label{color:var(--warn);}
+  .callout.good{border-left-color:var(--good);}
+  .callout.good .cl-label{color:var(--good);}
+
+  .kbd{display:inline-block; font-family:var(--font-mono); font-size:var(--text-2xs); border:1px solid var(--rule-strong); border-bottom-width:2px; border-radius:4px; padding:1px 6px; color:var(--ink-soft); background:var(--paper-sunken); margin:0 2px;}
+
+  .stepnum{counter-reset:manualstep;}
+  .stepnum > li{counter-increment:manualstep; position:relative; padding-left:2.2em;}
+  .stepnum > li::before{content:counter(manualstep); position:absolute; left:0; top:0; width:1.5em; height:1.5em; border-radius:50%; background:var(--accent-wash); color:var(--accent-ink); font-family:var(--font-mono); font-size:var(--text-2xs); font-weight:600; display:flex; align-items:center; justify-content:center;}
+
+  .roadmap{border:1px dashed var(--rule-strong); border-radius:var(--radius-md); padding:var(--space-5); margin-top:var(--space-4);}
+  .roadmap ul{margin-bottom:0;}
+</style>
+</head>
+<body>
+
+  <div class="page-head">
+    <div class="eyebrow">Facilitator Guide</div>
+    <h1>IntelliVue &amp; HemoSphere — Facilitator Basics</h1>
+    <p class="dek">Everything a facilitator needs to run the two monitors on their own: opening the facilitator controls, loading a quick scenario, adjusting vitals live, and syncing with a learner's own screen.</p>
+    <div class="status-row">
+      <span class="disclaimer">Training simulation only. Not for clinical use.</span>
+      <span class="pill neutral">Basics — Part 1</span>
+    </div>
+  </div>
+
+  <div class="manual-shell">
+    <nav class="toc" aria-label="Table of contents">
+      <div class="toc-label">On this page</div>
+      <ol>
+        <li><a href="#before-you-start">Before you start</a></li>
+        <li><a href="#intellivue">IntelliVue basics</a></li>
+        <li class="sub"><a href="#iv-open">Opening the controls</a></li>
+        <li class="sub"><a href="#iv-scenario">Loading a scenario</a></li>
+        <li class="sub"><a href="#iv-rhythm">Setting the rhythm</a></li>
+        <li class="sub"><a href="#iv-vitals">Adjusting vitals live</a></li>
+        <li class="sub"><a href="#iv-sync">Syncing to a learner's screen</a></li>
+        <li class="sub"><a href="#iv-keys">Keyboard shortcuts</a></li>
+        <li><a href="#hemosphere">HemoSphere Alta basics</a></li>
+        <li class="sub"><a href="#hs-open">Opening the controls</a></li>
+        <li class="sub"><a href="#hs-sensor">Sensor / mode</a></li>
+        <li class="sub"><a href="#hs-scenario">Loading a scenario</a></li>
+        <li class="sub"><a href="#hs-drivers">Adjusting vitals live</a></li>
+        <li class="sub"><a href="#hs-tiles">Choosing what's on screen</a></li>
+        <li><a href="#together">Running both together</a></li>
+        <li><a href="#troubleshooting">Quick troubleshooting</a></li>
+        <li><a href="#roadmap">What's coming next</a></li>
+      </ol>
+    </nav>
+
+    <div class="manual-body">
+
+      <section id="before-you-start">
+        <h2>Before you start</h2>
+        <p class="lead">Both devices are plain web pages — nothing to install. Open them in a browser and they work; open more than one at once and they sync automatically.</p>
+        <ul>
+          <li>Running locally for practice? Start the server once with <code>node serve.js</code>, then open <code>http://localhost:8080/</code>.</li>
+          <li>Running a real session? Just open <strong>ct-surgery-sim.netlify.app</strong> — nothing to start.</li>
+          <li>Any window/tab of IntelliVue or HemoSphere opened on the <strong>same computer</strong> automatically shows the same patient, live, with zero setup — that's the fastest way to demo both monitors side by side.</li>
+        </ul>
+        <div class="callout">
+          <div class="cl-label">This guide's scope</div>
+          <p>This covers running <strong>IntelliVue</strong> and <strong>HemoSphere Alta</strong> directly, on their own — each device has its own facilitator controls built in, so you don't need anything else to get started. A later guide will cover the Facilitator Console (which unifies control of every device from one screen), building custom scenarios, and the Pacemaker / ZOLL / Patient Assessments Monitor.</p>
+        </div>
+      </section>
+
+      <section id="intellivue">
+        <h2>IntelliVue basics</h2>
+        <p class="lead">Simulates a Philips IntelliVue MX-series bedside monitor — ECG, pleth, arterial line, PA line, CVP, respiration, and capnography waveforms, plus the numeric tiles a real unit shows.</p>
+
+        <h3 id="iv-open">Opening the controls</h3>
+        <ol class="stepnum">
+          <li>Open the IntelliVue page.</li>
+          <li>Click <strong>Facilitator</strong> in the bottom-right corner of the screen (or press <span class="kbd">F</span>). A panel titled <strong>Facilitator Control</strong> slides in from the right.</li>
+          <li>Click the <strong>×</strong> in the panel's top-right corner, or press <span class="kbd">F</span> again, to close it — the monitor screen underneath is exactly what a learner sees, so close the panel before stepping back to observe.</li>
+        </ol>
+
+        <h3 id="iv-scenario">Loading a scenario</h3>
+        <p>The fastest way to set up a teaching moment is <strong>Load Scenario</strong>, at the top of the Facilitator Control panel — five one-click presets:</p>
+        <ul>
+          <li><strong>CTICU Baseline</strong> — stable post-op cardiac patient, no alarms.</li>
+          <li><strong>Symptomatic Bradycardia</strong> — sinus bradycardia with hypotension.</li>
+          <li><strong>Respiratory Desaturation</strong> — a sedation-hold / post-extubation picture.</li>
+          <li><strong>Septic Shock (PA cath)</strong> — elevated CO, low SVR, PAP line shown.</li>
+          <li><strong>Neuro / ↑ ICP</strong> — ICP/CPP tiles shown, Cushing's pattern.</li>
+        </ul>
+        <p>Click any one of them and the monitor updates immediately — numerics, waveforms, and which tiles are on screen all change together.</p>
+
+        <h3 id="iv-rhythm">Setting the rhythm</h3>
+        <p>The <strong>Rhythm</strong> dropdown (below the CT Surgery scenario section) drives the actual ECG waveform shape, not just the number — selecting a rhythm redraws real, distinct morphology for that rhythm, not a generic trace with a different label. The library covers the full range a class typically needs: sinus rhythm/brady/tach, atrial fibrillation, atrial flutter, SVT, junctional, all three degrees of AV block (including both types of 2°), paced, VT, torsades, VF, and asystole.</p>
+
+        <h3 id="iv-vitals">Adjusting vitals live</h3>
+        <p>Scroll to <strong>Vital Signs</strong> for direct sliders — HR, SpO₂, ART sys/dia, CVP, PAP sys/dia, PAWP, ICP, RR, etCO₂, CO/CI, and temperature. Drag any slider and the monitor updates in real time, waveform included. <strong>Parameters On Screen</strong>, just below, is where you choose which extra tiles are visible — ECG, pleth, RR, and NBP are always on; toggle ART, a second arterial line, PAP, CVP, ICP, CPP, etCO₂, CO/CI, and temperature on or off to match what this patient actually has lines for.</p>
+        <div class="callout">
+          <div class="cl-label">Also available, not covered here</div>
+          <p>The panel also has tools for teaching specific skills — arterial-line waveform troubleshooting (site, damping, valve pathology, a fast-flush test), a PA catheter with RV migration/wedge procedure, dynamic events (hemorrhage, a Levophed drip, fluid boluses, a PVC, VF arrest), and a Progressive Transition tool that ramps the whole picture toward a target over a set time. Worth exploring on your own — a deeper walkthrough of these is planned for a future version of this guide.</p>
+        </div>
+
+        <h3 id="iv-sync">Syncing to a learner's screen</h3>
+        <p>The <strong>Cross-Device Sync</strong> section shows whether this window is currently linked to another one. For a learner on a separate device (a tablet, a second laptop), click <strong>Open Learner Display</strong> to get a clean link with no facilitator chrome, or use <strong>Copy Learner Link</strong> to send it another way. For a device that isn't on the same network as this computer, enter a <strong>Relay URL</strong> first and click <strong>Connect Relay</strong> — same-machine sync needs none of this.</p>
+
+        <h3 id="iv-keys">Keyboard shortcuts</h3>
+        <p>With the monitor window focused: <span class="kbd">F</span> toggles the facilitator panel, <span class="kbd">Space</span> silences the current alarm. The panel itself lists the rest (full-screen, zero, flush, inject a PVC) in its own footer note.</p>
+      </section>
+
+      <section id="hemosphere">
+        <h2>HemoSphere Alta basics</h2>
+        <p class="lead">Simulates an Edwards Acumen HemoSphere hemodynamic monitor — cardiac output/index, SVV/PPV, SVR/SVRI, MAP, CVP, ScvO₂, and the Hypotension Prediction Index (HPI), plus its own Goal-Directed Therapy screen.</p>
+
+        <h3 id="hs-open">Opening the controls</h3>
+        <p>Same pattern as IntelliVue: click <strong>Facilitator</strong> (bottom-right) or press <span class="kbd">F</span> to open <strong>Facilitator Control</strong>; the same button/key closes it.</p>
+
+        <h3 id="hs-sensor">Sensor / mode</h3>
+        <p>At the top of the panel, <strong>Sensor / Mode</strong> picks which physical sensor this patient is wearing — <strong>FloTrac</strong> (arterial-only), <strong>Swan-Ganz</strong> (pulmonary artery catheter + oximetry — the default, and the one that unlocks HPI and the fuller parameter set), or <strong>ClearSight</strong> (non-invasive cuff). This matters for teaching: HPI and the advanced hemodynamics need Swan CCO + Acumen IQ; ScvO₂ needs the oximetry sensor calibrated (there's a guided calibration flow under <strong>Open SvO₂ Calibration…</strong> if you want to demonstrate that workflow specifically).</p>
+
+        <h3 id="hs-scenario">Loading a scenario</h3>
+        <p><strong>Load Scenario</strong> has four one-click presets, each tuned to show a specific hemodynamic picture:</p>
+        <ul>
+          <li><strong>Stable Post-op</strong> — normal CO/CI, everything in target range.</li>
+          <li><strong>Hypovolemia</strong> — SVV/PPV rise, CO/CI fall, HPI climbs.</li>
+          <li><strong>Vasoplegia / Sepsis</strong> — CO rises, SVR and MAP fall, ScvO₂ drops.</li>
+          <li><strong>Cardiogenic / LV failure</strong> — CO/CI fall, SVR rises, ScvO₂ falls, HPI runs high.</li>
+        </ul>
+
+        <h3 id="hs-drivers">Adjusting vitals live</h3>
+        <p><strong>Drivers</strong> holds the sliders that move the numbers directly — CO, MAP, HR, CVP, SVV, PPV, ScvO₂, HPI, ART sys/dia, and temperature. Everything downstream (CI, SVR/SVRI, SVI, sCO/sCI) is computed live from these, exactly like the real device — you're setting the inputs a bedside clinician can't directly control either.</p>
+        <p>The <strong>Goal-Directed Therapy</strong> panel on the main screen (not the facilitator drawer) is worth knowing about even though it's learner-facing: pick a parameter and a target range, hit <strong>Start / Reset</strong>, and the monitor tracks time-in-target live — a good way to have a learner titrate toward a specific hemodynamic goal and see how they did.</p>
+
+        <h3 id="hs-tiles">Choosing what's on screen</h3>
+        <p><strong>Key Parameter Tiles</strong> is a tap-to-toggle list (sCO, sCI, SVI, SVV, PPV, SVR, SVRI, MAP, CVP, ScvO₂, HPI) controlling which tiles the learner sees on the main screen — same idea as IntelliVue's Parameters On Screen. Tap any tile on the actual monitor screen (or the "globe" trend view) to set its target range and alarm limits directly.</p>
+        <p>Same <strong>Cross-Device Sync</strong> section as IntelliVue, working the same way — Open Learner Display, Copy Learner Link, or a Relay URL for a separate device.</p>
+      </section>
+
+      <section id="together">
+        <h2>Running both together</h2>
+        <p>Open IntelliVue and HemoSphere Alta as two windows/tabs on the <strong>same computer</strong> and they sync to each other automatically — no setup, no relay, no code. Drive vitals from either one's own Facilitator Control panel and the other updates live. Each panel's own <strong>Shared Flagship Scenario</strong> and <strong>CT Surgery scenarios (stepped)</strong> sections step through the same built-in cases identically from either device, so you don't have to pick a "master" screen.</p>
+        <div class="callout good">
+          <div class="cl-label">Running a real class?</div>
+          <p>The <strong>Facilitator Console</strong> (linked from the homepage) unifies IntelliVue's and HemoSphere's controls — plus the pacemaker and Patient Assessments Monitor — into one screen on your own laptop, so you're not clicking between two facilitator panels mid-session. It's the recommended way to run anything beyond a quick solo demo. A full walkthrough of the Console is planned for the next version of this guide.</p>
+        </div>
+      </section>
+
+      <section id="troubleshooting">
+        <h2>Quick troubleshooting</h2>
+        <ul>
+          <li><strong>Two windows aren't syncing.</strong> Confirm they're both open on the <em>same</em> computer (same-machine sync needs nothing else) — a separate device needs either the Console's session link or a Relay URL entered on both ends.</li>
+          <li><strong>The facilitator panel won't open.</strong> Click directly on the <strong>Facilitator</strong> label bottom-right, or click anywhere in the monitor window first so it has keyboard focus, then press <span class="kbd">F</span>.</li>
+          <li><strong>A scenario preset didn't seem to change anything.</strong> Check you clicked the preset card itself (the title + description are one button) — a partial click on the panel background does nothing.</li>
+          <li><strong>Numbers look "stuck" mid-demo.</strong> Check whether a Progressive Transition is running (its status line says so, near the bottom of the panel) — while one runs, values are actively ramping toward a target and won't respond to a slider until you stop it or it finishes.</li>
+        </ul>
+      </section>
+
+      <section id="roadmap">
+        <h2>What's coming next</h2>
+        <p>This is the first part of a growing facilitator manual. Planned next:</p>
+        <div class="roadmap">
+          <ul>
+            <li>Running and building scenarios in the <strong>Facilitator Console</strong> and <strong>Scenario Builder</strong></li>
+            <li>The <strong>Medtronic 5392 Pacemaker</strong> — standalone use, threshold testing, and pulling the current rhythm/rate from a live Console session</li>
+            <li>The <strong>ZOLL R Series</strong> defibrillator/pacer/monitor</li>
+            <li>The <strong>Patient Assessments Monitor</strong> — configuring tiles, the approval queue, and the Chart Review tab</li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <footer class="doc-foot">Clinical Patient Simulator · Facilitator Manual, Part 1 · <a href="../index.html">Back to launch page</a></footer>
+
+</body>
+</html>
