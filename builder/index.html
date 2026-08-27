@@ -100,8 +100,21 @@
         <div class="row"><label>Author email</label><input type="email" id="auth_email" placeholder="you@med.usc.edu" autocomplete="email"></div>
         <div class="btnrow"><button class="act mini" id="btn_send_code">Email me a sign-in code</button></div>
         <div class="row" id="authCodeRow" style="display:none">
-          <label>6-digit code</label>
-          <input type="text" id="auth_code" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" maxlength="6">
+          <!-- Real bug found via direct user report, screenshot in hand: a
+               genuine Supabase sign-in email arrived with an 8-DIGIT code
+               ("83004403"), not 6 - this field's maxlength="6" made it
+               physically impossible to type the real code in (silently
+               truncated to the first 6 digits, which then fails
+               verification with no obvious reason why). Supabase's OTP
+               length is a dashboard-configurable setting this project
+               doesn't control and shouldn't assume a fixed value for -
+               widened to a generous safety cap (garbage-paste protection,
+               not a length assumption) and de-specified the label/
+               placeholder/status copy below from "6-digit" to plain
+               "sign-in code" so this doesn't silently break again if that
+               setting ever changes. -->
+          <label>Sign-in code</label>
+          <input type="text" id="auth_code" inputmode="numeric" autocomplete="one-time-code" placeholder="code from your email" maxlength="12">
           <div class="btnrow"><button class="act mini primary" id="btn_verify_code">Verify &amp; Sign In</button></div>
         </div>
         <div class="auth-note" id="authStatusNote"></div>
@@ -598,8 +611,8 @@ byId('btn_delete_local').addEventListener('click', () => {
 // redirect as the PRIMARY flow, even though Supabase's default email
 // template supports both: a link-triggered top-level redirect can behave
 // unpredictably if this page is ever opened inside a SharePoint/Teams
-// iframe (see index.html's embedding target), while reading a 6-digit code
-// out of an email and typing it into the page works identically everywhere,
+// iframe (see index.html's embedding target), while reading the code out
+// of an email and typing it into the page works identically everywhere,
 // embedded or not. See supabase/README.md for the one-time dashboard config
 // this depends on (Auth -> URL Configuration redirect allow-list).
 let currentUser = null;
@@ -639,7 +652,7 @@ byId('btn_send_code').addEventListener('click', async () => {
   btn.disabled = false;
   byId('authStatusNote').textContent = error
     ? ('Error: ' + error.message)
-    : 'Sent. Check your email for a 6-digit code (also works as a clickable link, but the code below is the reliable path).';
+    : 'Sent. Check your email for a sign-in code (also works as a clickable link, but the code below is the reliable path).';
   byId('authCodeRow').style.display = error ? 'none' : 'block';
 });
 

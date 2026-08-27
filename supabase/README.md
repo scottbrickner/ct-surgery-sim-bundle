@@ -127,6 +127,22 @@ confirmation (code arrives, `verifyOtp` succeeds) is still pending an hourly
 reset as of this note - not yet a fully closed loop, but the template gap
 itself is fixed and shouldn't need touching again.
 
+**2026-08-28 follow-up**: a real email arrived (screenshot in hand) - and
+the code in it is **8 digits** (`83004403`), not 6. This project's own
+`builder/index.html` sign-in field had `maxlength="6"` hardcoded, so even
+though the email itself was now correct, the code was PHYSICALLY impossible
+to type in full - it got silently truncated to the first 6 digits, which
+then fails `verifyOtp` with no obvious reason why. That's a real app-side
+bug now fixed (widened the field, de-specified the label/placeholder/status
+copy from "6-digit" to plain "sign-in code" so it can't silently break again
+if Supabase's own OTP length setting ever changes back). **This file's own
+"should deliver a working 6-digit code" line above (2026-08-27 follow-up)
+is now known to be an unverified assumption, not a checked fact** - don't
+trust the digit count without checking a real email first. The Supabase-side
+piece (does the code actually verify now that the field can hold it) is
+still the next thing to confirm end-to-end once the rate limit allows
+another real attempt.
+
 Things worth trying if you pick this back up:
 - Send the drafted Resend support request (see above) and act on their
   answer - this is the most likely fastest path to a real diagnosis at
