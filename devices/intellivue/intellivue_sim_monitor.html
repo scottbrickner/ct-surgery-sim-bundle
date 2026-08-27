@@ -1376,8 +1376,14 @@ const syncConnectBtn=byId("sync_connect");if(syncConnectBtn)syncConnectBtn.addEv
   const st=byId("sync_relayStatus");if(st)st.textContent="Connecting… session code "+code+".";
 });
 const syncCopyBtn=byId("sync_copyLink");if(syncCopyBtn)syncCopyBtn.addEventListener("click",()=>{
-  try{navigator.clipboard.writeText(learnerLink());}catch(e){}
-  const st=byId("sync_relayStatus");if(st)st.textContent="Learner link copied"+(deviceSync.relay.code?" — code "+deviceSync.relay.code:" — connect a relay first for a working cross-device link")+".";
+  const st=byId("sync_relayStatus");
+  // writeText() rejects ASYNCHRONOUSLY (document not focused; real
+  // permission denial inside a sandboxed iframe - a genuine risk for this
+  // project's own SharePoint/Teams embedding target) - a bare try/catch
+  // doesn't catch that, so this used to claim "copied" unconditionally.
+  const onCopied=()=>{ if(st)st.textContent="Learner link copied"+(deviceSync.relay.code?" — code "+deviceSync.relay.code:" — connect a relay first for a working cross-device link")+"."; };
+  const onFailed=()=>{ if(st)st.textContent="Could not copy the link — copy it manually."; };
+  try{ navigator.clipboard.writeText(learnerLink()).then(onCopied).catch(onFailed); }catch(e){ onFailed(); }
 });
 if(fsUrlParams.get("relay"))byId("sync_relayUrl").value=fsUrlParams.get("relay");
 window.ctSharedEngine.syncPushNow=()=>deviceSync.pushNow();window.ctSharedEngine.syncHeartbeatNow=()=>deviceSync.heartbeatNow();window.ctSharedEngine.syncSetRelay=(url,code)=>deviceSync.setRelay(url,code); // testing hooks only - see sync/deviceSync.js

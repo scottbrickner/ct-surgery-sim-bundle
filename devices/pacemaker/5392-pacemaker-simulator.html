@@ -1824,7 +1824,16 @@ function checkLoggableChanges(){
 }
 setInterval(checkLoggableChanges,LOG_POLL_MS);
 
-const _debriefCopy=$('debriefCopy'); if(_debriefCopy) _debriefCopy.onclick=()=>{ try{ navigator.clipboard.writeText(debriefText()); }catch(e){} coach('Debrief log copied to clipboard.'); };
+const _debriefCopy=$('debriefCopy'); if(_debriefCopy) _debriefCopy.onclick=()=>{
+  // Same async-rejection gap as copyLink's fix above - writeText() can
+  // reject after this call already returned, so the old code's unconditional
+  // coach() call was claiming success even on failure.
+  try{
+    navigator.clipboard.writeText(debriefText())
+      .then(()=>coach('Debrief log copied to clipboard.'))
+      .catch(()=>coach('Could not copy the debrief log - select and copy it manually.'));
+  }catch(e){ coach('Could not copy the debrief log - select and copy it manually.'); }
+};
 const _debriefDownload=$('debriefDownload'); if(_debriefDownload) _debriefDownload.onclick=()=>{
   const blob=new Blob([debriefText()],{type:'text/plain'});
   const url=URL.createObjectURL(blob);
@@ -2470,8 +2479,17 @@ function applyRole(){
       if(!/^wss?:\/\//i.test(relay.url)){ relayLog('Enter your relay URL first (wss://…).'); return; }
       try{ localStorage.setItem('sim5392_relay',relay.url); }catch(e){}
       if(!relay.code) relay.code=genCode(); relayLog('Connecting…  Code: '+relay.code); renderPairing(); connectRelay(); };
-    const cl=$('copyLink'); if(cl) cl.onclick=()=>{ const l=learnerLink(); try{ navigator.clipboard.writeText(l); }catch(e){}
-      relayLog('Learner link copied — send it to the learner’s device.  Code: '+relay.code); };
+    const cl=$('copyLink'); if(cl) cl.onclick=()=>{ const l=learnerLink();
+      // navigator.clipboard.writeText() rejects ASYNCHRONOUSLY (document not
+      // focused; real permission denial inside a sandboxed iframe - a
+      // genuine risk for this project's own SharePoint/Teams embedding
+      // target) - a bare try/catch around the call doesn't catch that, and
+      // this used to claim "copied" unconditionally regardless of outcome.
+      try{
+        navigator.clipboard.writeText(l)
+          .then(()=>relayLog('Learner link copied — send it to the learner’s device.  Code: '+relay.code))
+          .catch(()=>relayLog('Could not copy the link — copy it manually.  Code: '+relay.code));
+      }catch(e){ relayLog('Could not copy the link — copy it manually.  Code: '+relay.code); } };
     if(relay.url&&relay.code){ renderPairing(); connectRelay(); } // control reopened via a link that carries the code
   }
   setDockPad();

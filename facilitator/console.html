@@ -541,6 +541,19 @@
       <button class="act mini" id="open_pacemaker" type="button">Pacemaker</button>
       <button class="act mini" id="open_assessments" type="button">Assessments</button>
       <span class="launcher-sep"></span>
+      <!-- ZOLL R Series - direct user request. A separately-deployed device
+           (its own repo/GitHub Pages site, not part of this bundle - see
+           CLAUDE.md), so it's NOT wired through openLearnerWindow()/
+           monitorLink() like the same-origin devices above: it has no
+           ?role=learner/?relay= scheme of its own, just its own root
+           landing page with its own Facilitator/Learner links. "Copy for
+           ZOLL" is a separate, repeatable action (paste target: the
+           companion app's own "Pull from Clinical Patient Simulator"
+           field) - a facilitator may copy fresh values multiple times as
+           the rhythm changes during a session, independent of opening it. -->
+      <button class="act mini" id="open_zoll" type="button">ZOLL ↗</button>
+      <button class="act mini" id="copy_for_zoll" type="button">Copy for ZOLL</button>
+      <span class="launcher-sep"></span>
       <button class="act mini" id="jump_scenario" type="button">Scenario &amp; Stage ▸</button>
       <span class="hint" id="launcherStatus" style="margin:0 0 0 4px"></span>
     </div>
@@ -1667,6 +1680,21 @@ function refreshLinks(){
 }
 refreshLinks();
 
+// Real bug found via a genuine unhandled-promise-rejection error, not
+// guessed: navigator.clipboard.writeText() returns a Promise that can
+// reject ASYNCHRONOUSLY (document not focused; real permission denial
+// inside a sandboxed iframe - a genuine risk for this project's own
+// SharePoint/Teams embedding target, not just a test-environment quirk) -
+// a plain `try{...}catch(e){}` around the call does NOT catch that, since
+// the throw happens after the synchronous call already returned. Every one
+// of this file's 7 clipboard-copy call sites had this exact shape and was
+// reporting/assuming success without ever checking. Centralized here so
+// every one of them reports accurately instead of assuming.
+function copyToClipboard(text,onSuccess,onFail){
+  try{ navigator.clipboard.writeText(text).then(onSuccess||(()=>{})).catch(()=>{ if(onFail)onFail(); }); }
+  catch(e){ if(onFail)onFail(); }
+}
+
 /* ---------------- Learner monitor launcher (direct user request) ---------------- */
 // Reuses monitorLink() (relay-aware, already built for the copy-link inputs
 // below) rather than a second link-building implementation - a window name
@@ -1694,9 +1722,9 @@ function openLearnerWindow(path,winName,label){
     status.textContent=`Opened ${label} for a learner.`;
     status.className="hint";
   }else{
-    try{navigator.clipboard.writeText(url);}catch(e){}
-    status.textContent=`Your browser blocked the ${label} pop-up window. Its link was copied to your clipboard instead — paste it into a new tab, or check your browser's pop-up settings for this site.`;
-    status.className="hint warn-text";
+    copyToClipboard(url,
+      ()=>{ status.textContent=`Your browser blocked the ${label} pop-up window. Its link was copied to your clipboard instead — paste it into a new tab, or check your browser's pop-up settings for this site.`; status.className="hint warn-text"; },
+      ()=>{ status.textContent=`Your browser blocked the ${label} pop-up window, and the link couldn't be copied to your clipboard either — copy it manually: ${url}`; status.className="hint warn-text"; });
   }
 }
 [
@@ -1712,9 +1740,44 @@ byId("jump_scenario").addEventListener("click",()=>{
   grp.open=true;
   grp.scrollIntoView({behavior:"smooth",block:"start"});
 });
-byId("copyIntelliVue").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkIntelliVue").value);}catch(e){}});
-byId("copyHemoSphere").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkHemoSphere").value);}catch(e){}});
-byId("copyPacemaker").addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("linkPacemaker").value);}catch(e){}});
+
+// ZOLL R Series - a genuinely separate deployment (its own repo/GitHub
+// Pages site), so it gets its own small open+copy pair rather than being
+// forced through monitorLink()/openLearnerWindow() (both same-origin-only,
+// and ZOLL has no ?role=learner/?relay= scheme of its own anyway). Links to
+// ZOLL's own root landing page, not a specific route - that page already
+// offers its own Facilitator/Learner choice, so this doesn't need to guess
+// which one the click was for.
+const ZOLL_URL="https://scottbrickner.github.io/zoll-r-series-simulator/";
+byId("open_zoll").addEventListener("click",()=>{
+  const status=byId("launcherStatus");
+  const w=window.open(ZOLL_URL,"ctsurgery_zoll");
+  if(w){ w.focus(); status.textContent="Opened ZOLL R Series."; status.className="hint"; }
+  else{
+    copyToClipboard(ZOLL_URL,
+      ()=>{ status.textContent="Your browser blocked the ZOLL pop-up window. Its link was copied to your clipboard instead — paste it into a new tab, or check your browser's pop-up settings for this site."; status.className="hint warn-text"; },
+      ()=>{ status.textContent=`Your browser blocked the ZOLL pop-up window, and the link couldn't be copied to your clipboard either — copy it manually: ${ZOLL_URL}`; status.className="hint warn-text"; });
+  }
+});
+// "Copy for ZOLL" - the clipboard-mediated bridge (see ZOLL's own
+// CHANGELOG [0.1.37] for why this is deliberately NOT a live network pull:
+// reconciled against that project's own no-backend/no-network-dependency
+// decisions). Format matches parsePulledSnapshot() on the ZOLL side
+// exactly: "<rhythm>, <hr> bpm". Uses getEffectiveRhythm/getEffectiveHR
+// (not raw state.rhythm/state.hr) so a captured-and-pacing patient copies
+// the ACTUAL displayed rhythm/rate, same precedence the readout itself
+// shows - not the masked intrinsic values underneath.
+byId("copy_for_zoll").addEventListener("click",()=>{
+  const status=byId("launcherStatus");
+  if(!runner){ status.textContent="No scenario loaded yet - nothing to copy."; status.className="hint warn-text"; return; }
+  const text=`${getEffectiveRhythm(runner.state)}, ${Math.round(getEffectiveHR(runner.state))} bpm`;
+  copyToClipboard(text,
+    ()=>{ status.textContent=`Copied "${text}" - paste into ZOLL's "Pull from Clinical Patient Simulator" field.`; status.className="hint"; },
+    ()=>{ status.textContent=`Could not access the clipboard - copy this manually: ${text}`; status.className="hint warn-text"; });
+});
+byId("copyIntelliVue").addEventListener("click",()=>{copyToClipboard(byId("linkIntelliVue").value);});
+byId("copyHemoSphere").addEventListener("click",()=>{copyToClipboard(byId("linkHemoSphere").value);});
+byId("copyPacemaker").addEventListener("click",()=>{copyToClipboard(byId("linkPacemaker").value);});
 byId("relayConnect").addEventListener("click",()=>{
   const url=(byId("relayUrl").value||"").trim();
   if(!/^wss?:\/\//i.test(url)){byId("relayStatus").textContent="Enter a relay URL first (wss://…).";return;}
@@ -1752,7 +1815,7 @@ function refreshCloudLinks(){
   byId("cloudLinkAssessments").value=cloudDeviceLink("assessments/index.html","assessments");
 }
 ["IntelliVue","HemoSphere","Pacemaker","Assessments"].forEach(name=>{
-  byId("cloudCopy"+name).addEventListener("click",()=>{try{navigator.clipboard.writeText(byId("cloudLink"+name).value);}catch(e){}});
+  byId("cloudCopy"+name).addEventListener("click",()=>{copyToClipboard(byId("cloudLink"+name).value);});
 });
 
 function renderCloudPairing(){
