@@ -26,13 +26,13 @@ test('encode is deterministic for the same input', () => {
 
 test('encode produces a larger matrix for longer text', () => {
   const short = encode('https://x.co/?s=ABCDEF');
-  const long = encode('https://ct-surgery-sim.netlify.app/devices/hemosphere-alta/HemoSphere_Alta_Sim.html?session=ABCDEF&role=learner&device=hemosphere');
+  const long = encode('https://ct-surgery-sim.netlify.app/devices/hemosphere-alta/hemosphere_alta_sim.html?session=ABCDEF&role=learner&device=hemosphere');
   assert.ok(long.length >= short.length);
 });
 
 test('encode returns null only in the genuinely-impossible case (never for realistic session-link lengths)', () => {
   // Sanity bound, not a real product path - our longest real payload (a full
   // learner link) is well under 100 chars.
-  const realistic = encode('https://ct-surgery-sim.netlify.app/devices/intellivue/IntelliVue_Sim_Monitor.html?session=ABCDEF&role=learner');
+  const realistic = encode('https://ct-surgery-sim.netlify.app/devices/intellivue/intellivue_sim_monitor.html?session=ABCDEF&role=learner');
   assert.ok(realistic !== null);
 });

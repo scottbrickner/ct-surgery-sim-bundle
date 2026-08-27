@@ -58,10 +58,10 @@ facilitator/
   console.html                       # standalone facilitator control page — imports engine/scenarios/sync directly, meant to run on the instructor's own laptop
 devices/
   intellivue/
-    IntelliVue_Sim_Monitor.html        # primary IntelliVue prototype — richest fidelity, has the 4-scenario CT pack
-    IntelliVue_Tachy_DualScreen.html   # fork with the working pop-out (?role=learner + postMessage) pattern to port over
+    intellivue_sim_monitor.html        # primary IntelliVue prototype — richest fidelity, has the 4-scenario CT pack
+    intellivue_tachy_dualscreen.html   # fork with the working pop-out (?role=learner + postMessage) pattern to port over
   hemosphere-alta/
-    HemoSphere_Alta_Sim.html           # Edwards HemoSphere Alta prototype, also has the duplicate 4-scenario CT pack
+    hemosphere_alta_sim.html           # Edwards HemoSphere Alta prototype, also has the duplicate 4-scenario CT pack
   pacemaker/
     5392-pacemaker-simulator.html      # Medtronic 5392 sim — facilitator/learner/practice roles + its own BroadcastChannel/relay sync (untouched), plus a Phase 5 bridge into the shared engine bus (a small addition at the end of the original script + a new, separate <script type="module"> tag)
     pace-scenarios.json                # 12 PACE-prefixed pacer scenarios
@@ -89,8 +89,8 @@ node serve.js
 
 ```
 http://localhost:8080/facilitator/console.html
-http://localhost:8080/devices/intellivue/IntelliVue_Sim_Monitor.html
-http://localhost:8080/devices/hemosphere-alta/HemoSphere_Alta_Sim.html
+http://localhost:8080/devices/intellivue/intellivue_sim_monitor.html
+http://localhost:8080/devices/hemosphere-alta/hemosphere_alta_sim.html
 http://localhost:8080/devices/pacemaker/5392-pacemaker-simulator.html
 ```
 

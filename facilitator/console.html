@@ -1661,8 +1661,8 @@ function monitorLink(devicePath){
   return base+"?role=learner"+(r.url?"&relay="+encodeURIComponent(r.url):"")+(r.code?"&code="+encodeURIComponent(r.code):"");
 }
 function refreshLinks(){
-  byId("linkIntelliVue").value=monitorLink("devices/intellivue/IntelliVue_Sim_Monitor.html");
-  byId("linkHemoSphere").value=monitorLink("devices/hemosphere-alta/HemoSphere_Alta_Sim.html");
+  byId("linkIntelliVue").value=monitorLink("devices/intellivue/intellivue_sim_monitor.html");
+  byId("linkHemoSphere").value=monitorLink("devices/hemosphere-alta/hemosphere_alta_sim.html");
   byId("linkPacemaker").value=monitorLink("devices/pacemaker/5392-pacemaker-simulator.html");
 }
 refreshLinks();
@@ -1700,8 +1700,8 @@ function openLearnerWindow(path,winName,label){
   }
 }
 [
-  ["open_intellivue","devices/intellivue/IntelliVue_Sim_Monitor.html","ctsurgery_intellivue","IntelliVue"],
-  ["open_hemosphere","devices/hemosphere-alta/HemoSphere_Alta_Sim.html","ctsurgery_hemosphere","HemoSphere"],
+  ["open_intellivue","devices/intellivue/intellivue_sim_monitor.html","ctsurgery_intellivue","IntelliVue"],
+  ["open_hemosphere","devices/hemosphere-alta/hemosphere_alta_sim.html","ctsurgery_hemosphere","HemoSphere"],
   ["open_pacemaker","devices/pacemaker/5392-pacemaker-simulator.html","ctsurgery_pacemaker","the Pacemaker"],
   ["open_assessments","assessments/index.html","ctsurgery_assessments","Assessments"],
 ].forEach(([id,path,winName,label])=>{
@@ -1746,8 +1746,8 @@ function cloudDeviceLink(devicePath,deviceLabel){
   return buildSessionLink(location.href.split("?")[0].split("#")[0].replace(/facilitator\/console\.html$/,devicePath),cloudSession.code,{role:"learner",device:deviceLabel});
 }
 function refreshCloudLinks(){
-  byId("cloudLinkIntelliVue").value=cloudDeviceLink("devices/intellivue/IntelliVue_Sim_Monitor.html","intellivue");
-  byId("cloudLinkHemoSphere").value=cloudDeviceLink("devices/hemosphere-alta/HemoSphere_Alta_Sim.html","hemosphere");
+  byId("cloudLinkIntelliVue").value=cloudDeviceLink("devices/intellivue/intellivue_sim_monitor.html","intellivue");
+  byId("cloudLinkHemoSphere").value=cloudDeviceLink("devices/hemosphere-alta/hemosphere_alta_sim.html","hemosphere");
   byId("cloudLinkPacemaker").value=cloudDeviceLink("devices/pacemaker/5392-pacemaker-simulator.html","pacemaker");
   byId("cloudLinkAssessments").value=cloudDeviceLink("assessments/index.html","assessments");
 }

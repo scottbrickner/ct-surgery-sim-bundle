@@ -104,12 +104,12 @@ forward, same "derived overlay, never mutates authored state" rule as
   actually changes (not on every re-render — see
   `stampInfusionOnsetIfRateChanged()`). The live readout's HR/CO/RR/MAP
   rows now show `getMedicated*()` values, not raw ones.
-- **`devices/intellivue/IntelliVue_Sim_Monitor.html`** —
+- **`devices/intellivue/intellivue_sim_monitor.html`** —
   `applyEngineValuesLight` now sets its HR tile from `getMedicatedHR`
   instead of the raw `getEffectiveHR`. One call site, used by every
   local-driving AND remote-sync code path (see the file's own comments on
   why the light-apply split makes this a single fix point).
-- **`devices/hemosphere-alta/HemoSphere_Alta_Sim.html`** — HR/MAP/CO/SVV/
+- **`devices/hemosphere-alta/hemosphere_alta_sim.html`** — HR/MAP/CO/SVV/
   PPV/ScvO2 all go through the `getMedicated*()`/`getEffective*()`
   composition (Phase 5 wired HR/MAP/CO, Phase 7 added SVV/PPV/ScvO2).
   Because this device already derives SVR/CI live from MAP/CVP/CO (a

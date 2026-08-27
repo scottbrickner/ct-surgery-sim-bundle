@@ -50,6 +50,6 @@ http.createServer((req, res) => {
   });
 }).listen(PORT, () => {
   console.log(`Serving ${ROOT} at http://localhost:${PORT}/`);
-  console.log(`Devices: http://localhost:${PORT}/devices/intellivue/IntelliVue_Sim_Monitor.html`);
-  console.log(`         http://localhost:${PORT}/devices/hemosphere-alta/HemoSphere_Alta_Sim.html`);
+  console.log(`Devices: http://localhost:${PORT}/devices/intellivue/intellivue_sim_monitor.html`);
+  console.log(`         http://localhost:${PORT}/devices/hemosphere-alta/hemosphere_alta_sim.html`);
 });

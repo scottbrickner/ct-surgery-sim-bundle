@@ -4,7 +4,7 @@ This is the ONE schema for scenarios that drive the shared physiology engine
 (`engine/physiology.js` + `engine/scenarioRunner.js`). It's new as of Phase 1
 and deliberately separate from the pre-existing scenario packs already in
 this repo (`devices/pacemaker/pace-scenarios.json`, and the hardcoded CTSCN-4
-pack inside `HemoSphere_Alta_Sim.html`/`IntelliVue_Sim_Monitor.html`) - per
+pack inside `hemosphere_alta_sim.html`/`intellivue_sim_monitor.html`) - per
 `docs/BUILD_PROMPT.md` §8.3, those stay as each device's own secondary/
 practice content and are not migrated to this format.
 

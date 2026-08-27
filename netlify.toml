@@ -30,6 +30,31 @@
 [build]
   publish = "."
 
+# 2026-08-27: the three device files with mixed-case names were renamed to
+# all-lowercase (devices/intellivue/IntelliVue_Sim_Monitor.html etc.) - a
+# mixed-case filename made Netlify's own automatic pretty-URL rewriting
+# (lowercases + strips .html) 301-redirect every request through an extra
+# hop, which was harmless for real browsers (redirects are followed
+# transparently) but broke naive tooling that doesn't follow redirects.
+# These explicit redirects keep any link/QR code/bookmark already shared
+# using the OLD mixed-case names working, permanently, rather than 404ing
+# the moment someone reuses a link handed out before this rename.
+[[redirects]]
+  from = "/devices/intellivue/IntelliVue_Sim_Monitor.html"
+  to = "/devices/intellivue/intellivue_sim_monitor.html"
+  status = 301
+  force = true
+[[redirects]]
+  from = "/devices/intellivue/IntelliVue_Tachy_DualScreen.html"
+  to = "/devices/intellivue/intellivue_tachy_dualscreen.html"
+  status = 301
+  force = true
+[[redirects]]
+  from = "/devices/hemosphere-alta/HemoSphere_Alta_Sim.html"
+  to = "/devices/hemosphere-alta/hemosphere_alta_sim.html"
+  status = 301
+  force = true
+
 [[headers]]
   for = "/*"
   [headers.values]

@@ -663,9 +663,33 @@ function artN(pe,site,valve,len){let P=Object.assign({},SITES[site]||SITES.radia
   else if(valve==="AR"){P.up=.06;P.notch=.42;P.dmin=.30;P.dw=.02;P.dec=1.5;bisf=true;}
   let d=pe-P.del;if(d<0)d+=len;let n;
   if(d<P.up){n=Math.pow(Math.sin(d/P.up*Math.PI/2),anac?1.4:0.82);if(anac)n-=0.10*gauss(d,P.up*0.5,P.up*0.16,1);}
-  else if(d<P.notch){const k=(d-P.up)/(P.notch-P.up);n=1-(1-P.dmin)*Math.pow(k,0.85);if(bisf)n+=0.28*gauss(d,(P.up+P.notch)/2,0.03,1);}
+  // Same infinite-initial-slope fix as plethN's own downslope segment
+  // (k^p blows up as k->0 for 0<p<1) - raised to 1.6, endpoint values at
+  // k=0/k=1 unchanged, curve now rounds smoothly off the systolic peak
+  // instead of diving near-vertically the instant it leaves it. Affects
+  // both ART and PAP (PAP's own trace reuses this same function).
+  else if(d<P.notch){const k=(d-P.up)/(P.notch-P.up);n=1-(1-P.dmin)*Math.pow(k,1.6);if(bisf)n+=0.28*gauss(d,(P.up+P.notch)/2,0.03,1);}
   else if(d<P.notch+0.022){const k=(d-P.notch)/0.022;n=P.dmin-0.05*Math.sin(k*Math.PI);}
-  else n=(P.dmin+P.dw)*Math.exp(-(d-P.notch-0.022)*P.dec);
+  else{
+    // Real, pre-existing (not this project's own) continuity bug found via
+    // direct user report ("this looks very much not like real life") and
+    // confirmed by hand: at d=notch+0.022 this branch used to evaluate to
+    // (P.dmin+P.dw)*exp(0) = P.dmin+P.dw, while the PRECEDING branch ends
+    // its own range at exactly P.dmin (sin(pi)=0) - a real, unconditional
+    // value jump of P.dw (0.02-0.09 depending on site/valve) rendered as a
+    // visible stair-step artifact on every single beat, not an occasional
+    // glitch. The intended shape (small dicrotic-wave bounce-back after the
+    // notch, then decay to diastole) is preserved, just phased in smoothly
+    // instead of snapping in: `base` alone continues P.dmin's own decay
+    // toward 0 (matching the notch branch's end value exactly at t=0), and
+    // `bump` is a proper impulse response (0 at t=0, peaks at t=1/P.dec
+    // with height ~P.dw, decays after) added on top - continuous in VALUE
+    // at the seam by construction, not just visually closer.
+    const t=d-P.notch-0.022;
+    const base=P.dmin*Math.exp(-t*P.dec);
+    const bump=P.dw*P.dec*t*Math.exp(1-t*P.dec);
+    n=base+bump;
+  }
   return clamp(n,0,1.12);}
 function overDampN(pe,len){let d=pe;if(d<0)d+=len;if(d<0.20)return 0.85*Math.pow(d/0.20,0.9);return 0.85*Math.exp(-(d-0.20)*2.0);}
 function underDampN(pe,len){const base=artN(pe,"radial","none",len);let d=pe;if(d<0)d+=len;
@@ -684,8 +708,17 @@ function artPressure(line){let sys=line==="abp"?state.sys:state.sys-6,dia=line==
 function rvWave(pe,len){let d=pe;if(d<0)d+=len;const hi=state.paSys,lo=4;let s;
   if(d<0.05)s=Math.pow(d/0.05,0.7);else if(d<0.10)s=1;else if(d<0.30)s=1-0.95*((d-0.10)/0.20);else s=0.05+0.13*((d-0.30)/(len-0.30));
   return lo+(hi-lo)*clamp(s,0,1);}
+// Direct user report ("this looks very much not like real life"): the
+// downslope segment's exponent used to be < 1 (0.9) - k^p has an INFINITE
+// slope as k->0 for any 0<p<1, so the curve dove near-vertically the
+// instant it left the systolic peak instead of rounding smoothly off it,
+// even though the peak's own branch already correctly eases to zero slope
+// there. Raised to 1.6 (a smooth ease-out, zero slope at k=0 matching the
+// peak) - endpoint VALUES at k=0 and k=1 are unchanged (still 1 and 0.5),
+// only the shape between them is smoother; every neighboring boundary
+// stays exactly as continuous as before.
 function plethN(pe){if(pe<0.14)return Math.pow(Math.sin(pe/0.14*Math.PI/2),0.92);
-  if(pe<0.34){const k=(pe-0.14)/0.20;return 1-0.5*Math.pow(k,0.9);}if(pe<0.40){const k=(pe-0.34)/0.06;return 0.5-0.05*Math.sin(k*Math.PI);}return 0.5*Math.exp(-(pe-0.40)*1.9);}
+  if(pe<0.34){const k=(pe-0.14)/0.20;return 1-0.5*Math.pow(k,1.6);}if(pe<0.40){const k=(pe-0.34)/0.06;return 0.5-0.05*Math.sin(k*Math.PI);}return 0.5*Math.exp(-(pe-0.40)*1.9);}
 function cvpWave(tb,mean,resp){let aA=1.0,cA=0.5,vA=0.85;if(state.path.tr){cA=0.4;vA=2.2;}
   let cannon=0;if((state.path.cannon||state.rhythm==="avb3")&&(state.beatCount%3===0))cannon=1.6;
   const a=gauss(tb,0.13,0.034,aA+cannon),c=gauss(tb,0.28,0.028,cA),v=gauss(tb,0.50,0.06,vA);

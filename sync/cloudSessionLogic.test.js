@@ -47,7 +47,7 @@ test('parseSessionParams rejects an unrecognized role value, falling back to lea
 });
 
 test('buildSessionLink produces a URL carrying session+role, and device only when given', () => {
-  const link = buildSessionLink('https://ct-surgery-sim.netlify.app/devices/intellivue/IntelliVue_Sim_Monitor.html', 'K3RTQ9', { role: 'learner', device: 'intellivue' });
+  const link = buildSessionLink('https://ct-surgery-sim.netlify.app/devices/intellivue/intellivue_sim_monitor.html', 'K3RTQ9', { role: 'learner', device: 'intellivue' });
   const url = new URL(link);
   assert.equal(url.searchParams.get('session'), 'K3RTQ9');
   assert.equal(url.searchParams.get('role'), 'learner');
