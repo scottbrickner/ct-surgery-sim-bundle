@@ -103,6 +103,30 @@ works) for Resend to check server-side - see chat history around
 description above. Sending it, and following up with Resend support's
 answer, is the next concrete step whenever this gets picked back up.
 
+**2026-08-27 follow-up**: as a temporary unblock while the Resend SMTP issue
+above remains unresolved, custom SMTP was disabled to fall back to
+Supabase's built-in (no-SMTP) sender. That immediately surfaced a second,
+previously-undocumented (and incorrectly assumed-fixed) issue: **the actual
+Magic Link email template in this project did NOT contain `{{ .Token }}`**
+- despite this file's own "Configure Auth" section above claiming "the
+default 'Magic Link' template already includes both a clickable link and a
+6-digit `{{ .Token }}` code." That claim was wrong for this project's actual
+template state (never independently verified in the dashboard before now -
+correcting it here rather than leaving stale docs in place). Fixed by
+manually adding `{{ .Token }}` to the template body via **Authentication ->
+Emails -> Templates -> Magic Link** in the dashboard - the editor was NOT
+locked while on the built-in sender, contradicting this file's other
+assumption ("locked unless custom SMTP is enabled"). Both stale assumptions
+are corrected by this note; don't trust either one without checking the
+dashboard directly first.
+
+With the token now in the template, the built-in sender should deliver a
+working 6-digit code. Its ~2-sends/hour rate limit was hit during this same
+troubleshooting session (two sign-in attempts), so final end-to-end
+confirmation (code arrives, `verifyOtp` succeeds) is still pending an hourly
+reset as of this note - not yet a fully closed loop, but the template gap
+itself is fixed and shouldn't need touching again.
+
 Things worth trying if you pick this back up:
 - Send the drafted Resend support request (see above) and act on their
   answer - this is the most likely fastest path to a real diagnosis at
