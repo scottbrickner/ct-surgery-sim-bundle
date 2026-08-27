@@ -12,6 +12,20 @@
 # not a fresh security review, a deliberate continuation of an already-agreed
 # policy. Adjust the SharePoint/Microsoft domains below if Keck's tenant
 # setup differs from what that prior deploy assumed.
+#
+# 2026-08-27: added Genially's domains (view.genially.com serves both its
+# published-viewer AND the "Embed a website" element's parent frame when
+# playing/editing an interactive that embeds one of these pages; app.
+# genially.com is the editor's own live-preview canvas, which embeds the
+# same way while authoring - both covered by the *.genially.com wildcard;
+# genial.ly is Genially's short-link/marketing domain, added defensively
+# since some published links resolve under it) so any of this bundle's
+# pages (IntelliVue, HemoSphere, pacemaker, console, etc.) can be embedded
+# as a Genially "Embed a website" element. Confirmed via Iframely's public
+# Genially embed reference (iframely.com/domains/genially) which Genially's
+# own support docs weren't reachable to cross-check at the time - if a
+# custom Genially domain (a paid-tier vanity domain feature) is ever used
+# instead, that specific domain needs adding here too.
 
 [build]
   publish = "."
@@ -24,4 +38,4 @@
     Referrer-Policy = "no-referrer"
     # Allow this site to be embedded inside SharePoint Online / Teams pages
     # (and itself). Direct access to the URL is unaffected.
-    Content-Security-Policy = "frame-ancestors 'self' https://*.sharepoint.com https://*.sharepoint.us https://*.microsoftonline.com https://teams.microsoft.com"
+    Content-Security-Policy = "frame-ancestors 'self' https://*.sharepoint.com https://*.sharepoint.us https://*.microsoftonline.com https://teams.microsoft.com https://*.genially.com https://*.genial.ly"
