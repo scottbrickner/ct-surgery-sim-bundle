@@ -326,6 +326,8 @@ Layout: a sticky table-of-contents rail (same responsive collapse-under-900px pa
 
 254 tests passing, unchanged.
 
+**Real root cause found for Builder sign-in, confirmed via Supabase's own Auth Logs, not guessed - full detail in `supabase/README.md`'s "2026-08-28, same day, root cause found" entry.** With the field-truncation bug fixed, a fresh code still failed "expired or invalid" - the Logs showed a `GET /auth/v1/verify?token=...` **15 seconds** after the code email sent, far too fast for a human, almost certainly USC's email security scanner auto-visiting the magic link to scan it for malware. The magic link and the numeric code share the SAME one-time token, so the scanner's visit silently burns the code before the human ever gets to type it in - explaining every prior "expired or invalid" failure even on codes typed within seconds of arriving. **Fix (pending the user's own dashboard edit + confirmation): remove the clickable link from the Magic Link email template entirely, leaving only `{{ .Token }}`** - with no link, there's nothing for a scanner to prefetch. This also retroactively validates this project's own "code-entry over magic-link" design decision (originally reasoned around iframe-redirect reliability) - the link was self-defeating even outside an iframe, not just unreliable inside one.
+
 ## Gotchas carried over from source projects
 
 - The pacemaker-sim's original references folder had a literal trailing `: ` in its name (a shell-unfriendly artifact) — not reproduced here; this repo's `docs/references/` is a clean name.

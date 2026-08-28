@@ -143,6 +143,61 @@ piece (does the code actually verify now that the field can hold it) is
 still the next thing to confirm end-to-end once the rate limit allows
 another real attempt.
 
+**2026-08-28, same day, root cause found - confirmed via Supabase's own
+Auth Logs, not guessed.** With the field fixed, a fresh 8-digit code still
+failed with "Token has expired or is invalid" on every attempt. The Logs
+(**Authentication → Logs** in the dashboard) told the real story:
+
+```
+17:01:01  POST /auth/v1/otp                          200   (code emailed)
+17:01:16  GET  /auth/v1/verify?token=e2392082...      303   (x2)
+17:01:30  POST /auth/v1/verify                        403
+17:01:38  POST /auth/v1/verify                        403
+17:01:39  POST /auth/v1/verify                        403
+17:01:40  POST /auth/v1/verify                        403
+```
+
+The `GET /auth/v1/verify?token=...` at 17:01:16 - **15 seconds** after the
+email sent, far too fast for a human to have read the email and clicked
+anything - is the email's own clickable magic link being auto-visited.
+Almost certainly USC's email security scanner (Microsoft Defender for
+Office 365 Safe Links or equivalent) pre-fetching every link in incoming
+mail to scan for malware, before the recipient ever opens it.
+
+**The magic link and the 8-digit code represent the SAME one-time token.**
+The instant the scanner's GET consumes it, the code representing that same
+token is dead - so every subsequent `POST /auth/v1/verify` (the human
+actually typing the code in) gets 403, even entered within seconds of
+receiving the email. This is why widening the code field wasn't enough by
+itself: the field bug and this one were two independent, stacked problems
+hitting the same sign-in attempt.
+
+**The fix: remove the clickable link from the email template entirely,
+leaving only `{{ .Token }}`.** With no link in the email, there's nothing
+for a scanner to prefetch and burn. Apply via **Authentication → Emails →
+Templates → Magic Link**, replacing the body with:
+
+```html
+<h2>Your sign-in code</h2>
+<p>Enter this code on the Scenario Builder sign-in screen:</p>
+<p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">{{ .Token }}</p>
+<p>This code expires shortly and can only be used once. If you didn't request this, you can ignore this email.</p>
+```
+
+No other links anywhere in the template either (no logo image, no
+unsubscribe footer link) - any link is fetchable by the same scanner, so
+the safest version of this fix is a template with zero clickable URLs, not
+just the removal of the one that happens to matter. Once applied, this
+also makes the earlier "code-entry over magic-link, in case of an iframe
+redirect" design decision (see the top of this file) doubly correct: the
+link was never just unreliable inside an iframe, it was actively
+self-defeating outside one too.
+
+**Still pending as of this note**: end-to-end confirmation that a code
+from the link-free template actually verifies - blocked on the built-in
+sender's ~2-sends/hour rate limit from the two attempts already made
+today. Update this note once confirmed either way.
+
 Things worth trying if you pick this back up:
 - Send the drafted Resend support request (see above) and act on their
   answer - this is the most likely fastest path to a real diagnosis at
