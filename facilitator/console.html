@@ -232,35 +232,63 @@
 
     <!-- Separated out from Scenario & Stage per direct user feedback: the
          scripted scenario timeline and a facilitator-triggered clinical
-         deterioration are two different concerns that happened to share one
-         rail group - Custom Decline works at ANY point in ANY scenario
-         (v1 or v2), independent of scenario navigation, so it reads more
-         clearly as its own thing rather than nested under "Scenario." No
-         logic changes - same ids, same handlers, same mechanism, just
-         relocated. -->
+         change are two different concerns that happened to share one rail
+         group - this panel works at ANY point in ANY scenario (v1 or v2),
+         independent of scenario navigation, so it reads more clearly as its
+         own thing rather than nested under "Scenario."
+         Renamed and rebuilt from "Custom Decline," direct user redesign
+         request: the old panel was framed as decline-only (all 6 vitals
+         unconditionally set toward a worse target, one flat catastrophic
+         outcome). Generalized to "Scheduled / Acute Clinical Change" - can
+         represent improvement OR decline - with every vital independently
+         toggle-able (default: HR/BP sys+dia/MAP/SpO2/RR; optional: CVP/PA
+         sys+dia/ICP), MAP calculated-vs-manual scoped to this panel only,
+         grace period genuinely optional (a checkbox, not just a settable-
+         to-zero number), and a real Hold-vs-"Decline Further" choice - the
+         latter reveals a full second, chainable stage (engine support:
+         startFacilitatorRamp's `nextStage` field). Vitals list, per-stage
+         wiring, and outcome-preset logic all live together just below this
+         rail group (search "Scheduled / Acute Clinical Change" in the
+         script). -->
     <details class="rail-group" id="grp_deterioration">
-      <summary><span>Deterioration / Clinical Change</span><span class="chev">▸</span></summary>
+      <summary><span>Scheduled / Acute Clinical Change</span><span class="chev">▸</span></summary>
       <div class="body">
-        <div class="gl">Custom Decline (Facilitator-Timed)</div>
-        <div class="hint" style="margin-top:0">Ramp CURRENT vitals toward a target you set. If unaddressed after a grace period, the chosen outcome fires — usable at any point in any scenario, independent of stage navigation.</div>
-        <label class="row">HR <input type="range" id="cd_hr" min="20" max="220" value="120"><span class="val" id="cd_hr_v">120</span></label>
-        <label class="row">BP sys <input type="range" id="cd_sbp" min="40" max="260" value="80"><span class="val" id="cd_sbp_v">80</span></label>
-        <label class="row">BP dia <input type="range" id="cd_dbp" min="20" max="160" value="50"><span class="val" id="cd_dbp_v">50</span></label>
-        <label class="row">MAP <input type="range" id="cd_map" min="30" max="150" value="55"><span class="val" id="cd_map_v">55</span></label>
-        <label class="row">CVP <input type="range" id="cd_cvp" min="0" max="30" value="14"><span class="val" id="cd_cvp_v">14</span></label>
-        <label class="row">SpO₂ <input type="range" id="cd_spo2" min="50" max="100" value="88"><span class="val" id="cd_spo2_v">88</span></label>
-        <label class="row">Ramp over (min) <input type="number" id="cd_duration" min="0.5" step="0.5" value="5" style="width:64px"></label>
-        <label class="row">Grace period (min) <input type="number" id="cd_grace" min="0" step="0.5" value="3" style="width:64px"></label>
+        <div class="hint" style="margin-top:0">Ramp selected vitals from their CURRENT values toward new targets you set below - can represent improvement or decline, not just deterioration. Toggle a vital OFF if it shouldn't change this time; only toggled-ON vitals move.</div>
+
+        <div class="gl">Stage 1</div>
+        <div id="cd1_vitals"></div>
+        <label class="row">Ramp over (min) <input type="number" id="cd1_duration" min="0.5" step="0.5" value="5" style="width:64px"></label>
+        <div class="checkrow" id="cd1_grace_on_row"><label><input type="checkbox" id="cd1_grace_on"> Grace period before outcome fires</label></div>
+        <label class="row" id="cd1_grace_row" hidden>Grace (min) <input type="number" id="cd1_grace" min="0" step="0.5" value="3" style="width:64px"></label>
         <div class="row"><label>If unaddressed</label></div>
-        <select id="cd_outcome">
-          <option value="none">Hold (decline only)</option>
-          <option value="arrest" selected>Cardiac Arrest (PEA)</option>
+        <select id="cd1_outcome">
+          <option value="none" selected>Hold (settle here, no further change)</option>
+          <option value="declineFurther">Decline Further (start Stage 2 below)</option>
+          <option value="arrest">Cardiac Arrest (PEA)</option>
           <option value="vfib">Cardiac Arrest (V-Fib)</option>
           <option value="vtach">Cardiac Arrest (Pulseless V-Tach)</option>
           <option value="lossOfCapture">Loss of Pacer Capture</option>
         </select>
-        <input type="text" id="cd_label" placeholder="Countdown label (optional)" style="margin-top:8px">
-        <div class="btnrow" style="margin-top:8px"><button class="act big danger" id="cd_start">Start Custom Decline</button></div>
+        <input type="text" id="cd1_label" placeholder="Countdown label (optional)" style="margin-top:8px">
+
+        <div id="cd_stage2_wrap" hidden>
+          <div class="gl" style="margin-top:14px">Stage 2 (if Stage 1 goes unaddressed)</div>
+          <div id="cd2_vitals"></div>
+          <label class="row">Ramp over (min) <input type="number" id="cd2_duration" min="0.5" step="0.5" value="5" style="width:64px"></label>
+          <div class="checkrow" id="cd2_grace_on_row"><label><input type="checkbox" id="cd2_grace_on"> Grace period before outcome fires</label></div>
+          <label class="row" id="cd2_grace_row" hidden>Grace (min) <input type="number" id="cd2_grace" min="0" step="0.5" value="3" style="width:64px"></label>
+          <div class="row"><label>If unaddressed</label></div>
+          <select id="cd2_outcome">
+            <option value="none" selected>Hold (settle here, no further change)</option>
+            <option value="arrest">Cardiac Arrest (PEA)</option>
+            <option value="vfib">Cardiac Arrest (V-Fib)</option>
+            <option value="vtach">Cardiac Arrest (Pulseless V-Tach)</option>
+            <option value="lossOfCapture">Loss of Pacer Capture</option>
+          </select>
+          <input type="text" id="cd2_label" placeholder="Countdown label (optional)" style="margin-top:8px">
+        </div>
+
+        <div class="btnrow" style="margin-top:8px"><button class="act big danger" id="cd_start">Start Clinical Change</button></div>
         <div id="cdTimer" style="margin-top:6px"></div>
       </div>
     </details>
@@ -1442,12 +1470,126 @@ function achieveROSC(actionLabel){
 byId("btn_shock").addEventListener("click",()=>achieveROSC("Deliver Shock"));
 byId("btn_cardiovert").addEventListener("click",()=>achieveROSC("Synchronized Cardioversion"));
 
-/* ---------------- Custom Decline (facilitator-timed, SME-configured) ---------------- */
-const CD_TARGET_MAP={cd_hr:"hr",cd_sbp:"bp.sbp",cd_dbp:"bp.dbp",cd_map:"bp.map",cd_cvp:"cvp",cd_spo2:"spo2"};
-for(const id in CD_TARGET_MAP){
-  const el=byId(id),vv=byId(id+"_v");
-  el.addEventListener("input",()=>{vv.textContent=fmtVal(el,parseFloat(el.value));});
+/* ---------------- Scheduled / Acute Clinical Change (facilitator-timed, SME-configured, chainable 2-stage) ---------------- */
+// Renamed and rebuilt from "Custom Decline" per direct user redesign
+// request - see the rail-group HTML comment above for the full rationale.
+// Stage 1 and Stage 2 are structurally IDENTICAL (same vitals, same toggle/
+// ramp/grace/outcome shape) so both are built from one data-driven template
+// keyed by a `prefix` ("cd1"/"cd2") rather than hand-duplicating markup and
+// wiring twice - matches this file's existing OVERRIDE_MAP convention for
+// the same reason (a single source of truth for what fields exist).
+const CD_VITALS=[
+  // Defaults per direct spec: "the default should always have heart rate,
+  // blood pressure, map, pulse ox, respiratory rate."
+  {path:"hr",label:"HR",min:0,max:300,step:1,def:80,defaultOn:true},
+  {path:"bp.sbp",label:"BP sys",min:0,max:260,step:1,def:120,defaultOn:true},
+  {path:"bp.dbp",label:"BP dia",min:0,max:160,step:1,def:70,defaultOn:true},
+  {path:"bp.map",label:"MAP",min:0,max:150,step:1,def:87,defaultOn:true,isMap:true},
+  {path:"spo2",label:"SpO₂",min:0,max:100,step:1,def:98,defaultOn:true},
+  {path:"rr",label:"RR",min:0,max:50,step:1,def:14,defaultOn:true},
+  // Optional per direct spec: "CVP, PA pressures, ICP, CPP... and any other
+  // additional parameters that we would decide" - CPP itself isn't in this
+  // list since it's always MAP-ICP (computeCPP), never independently
+  // settable, same convention as the read-only CPP display elsewhere in
+  // this file; shown here as a live-calculated readout under ICP instead.
+  {path:"cvp",label:"CVP",min:0,max:30,step:1,def:8,defaultOn:false},
+  {path:"pa.systolic",label:"PA sys",min:0,max:80,step:1,def:25,defaultOn:false},
+  {path:"pa.diastolic",label:"PA dia",min:0,max:50,step:1,def:10,defaultOn:false},
+  {path:"icp",label:"ICP",min:0,max:80,step:1,def:10,defaultOn:false,isIcp:true},
+];
+function cdSlug(path){return path.replace(/\./g,"_");}
+function cdVitalRowHTML(prefix,v){
+  const id=`${prefix}_${cdSlug(v.path)}`;
+  let html=`<label class="row cd-vital-row">`+
+    `<input type="checkbox" class="cd-on" id="${id}_on"${v.defaultOn?" checked":""}>`+
+    `<span style="flex:0 0 62px">${v.label}</span>`+
+    `<input type="range" id="${id}" min="${v.min}" max="${v.max}" step="${v.step}" value="${v.def}"${v.defaultOn?"":" disabled"}>`+
+    `<span class="val" id="${id}_v">${v.def}</span>`+
+    `</label>`;
+  // MAP mode buttons and the CPP readout ride along right after their own
+  // vital's row - scoped per-stage (cd1_mapmode_*/cd2_mapmode_*), completely
+  // independent of the Assessments panel's own map_mode_manual/calc toggle;
+  // this stage's target MAP can be calculated from ITS OWN sys/dia targets
+  // even while live MAP is being tracked manually, or vice versa.
+  if(v.isMap){
+    html+=`<div class="row" style="margin-top:0"><label>MAP source (this stage)</label></div>`+
+      `<div class="mode-pair"><button class="act on" id="${prefix}_mapmode_manual" type="button">Manual</button>`+
+      `<button class="act" id="${prefix}_mapmode_calc" type="button">Calculated</button></div>`;
+  }
+  if(v.isIcp){
+    html+=`<div class="row wide-label"><label>CPP (calculated)</label><span class="val" id="${prefix}_cpp_v">—</span></div>`;
+  }
+  return html;
 }
+byId("cd1_vitals").innerHTML=CD_VITALS.map(v=>cdVitalRowHTML("cd1",v)).join("");
+byId("cd2_vitals").innerHTML=CD_VITALS.map(v=>cdVitalRowHTML("cd2",v)).join("");
+
+const cdMapMode={cd1:"manual",cd2:"manual"}; // 'manual' | 'calculated', independent per stage
+function cdRecalcCpp(prefix){
+  const cppEl=byId(`${prefix}_cpp_v`);
+  if(!byId(`${prefix}_icp_on`).checked){cppEl.textContent="—";return;}
+  const mapVal=parseFloat(byId(`${prefix}_bp_map`).value),icpVal=parseFloat(byId(`${prefix}_icp`).value);
+  cppEl.textContent=Math.round(mapVal-icpVal);
+}
+function cdRecalcMap(prefix){
+  if(cdMapMode[prefix]!=="calculated")return;
+  const sbp=parseFloat(byId(`${prefix}_bp_sbp`).value),dbp=parseFloat(byId(`${prefix}_bp_dbp`).value);
+  const mapVal=Math.round((sbp+2*dbp)/3);
+  byId(`${prefix}_bp_map`).value=mapVal; byId(`${prefix}_bp_map_v`).textContent=mapVal;
+  cdRecalcCpp(prefix);
+}
+function cdSetMapMode(prefix,mode){
+  cdMapMode[prefix]=mode;
+  byId(`${prefix}_mapmode_manual`).classList.toggle("on",mode==="manual");
+  byId(`${prefix}_mapmode_calc`).classList.toggle("on",mode==="calculated");
+  byId(`${prefix}_bp_map`).disabled=(mode==="calculated")||!byId(`${prefix}_bp_map_on`).checked;
+  if(mode==="calculated")cdRecalcMap(prefix);
+}
+
+/**
+ * Wire one stage's toggles/sliders/grace-checkbox/outcome-select. `allowDeclineFurther`
+ * gates whether this stage's own outcome list includes "declineFurther" (only
+ * Stage 1's does - Stage 2 is the UI's terminal stage, matching the "UI
+ * exposes 2 levels for now" scope note even though the engine's `nextStage`
+ * chaining is itself unbounded; a Stage 3 would just be a third mirrored
+ * panel, not an engine change, if ever needed).
+ */
+function cdWireStage(prefix,{allowDeclineFurther}){
+  for(const v of CD_VITALS){
+    const id=`${prefix}_${cdSlug(v.path)}`;
+    const onEl=byId(`${id}_on`),rangeEl=byId(id),vv=byId(`${id}_v`);
+    onEl.addEventListener("change",()=>{
+      rangeEl.disabled=!onEl.checked||(v.isMap&&cdMapMode[prefix]==="calculated");
+      if(v.isMap||v.isIcp)cdRecalcCpp(prefix);
+    });
+    rangeEl.addEventListener("input",()=>{
+      vv.textContent=fmtVal(rangeEl,parseFloat(rangeEl.value));
+      if(v.path==="bp.sbp"||v.path==="bp.dbp")cdRecalcMap(prefix);
+      if(v.isMap||v.isIcp)cdRecalcCpp(prefix);
+    });
+  }
+  byId(`${prefix}_mapmode_manual`).addEventListener("click",()=>cdSetMapMode(prefix,"manual"));
+  byId(`${prefix}_mapmode_calc`).addEventListener("click",()=>cdSetMapMode(prefix,"calculated"));
+
+  // Grace period optional per direct spec: "grace time should be optional" -
+  // a checkbox, not just a number a facilitator has to remember to zero out.
+  // Both the grace checkbox AND the grace field itself are hidden entirely
+  // for "Hold" (nothing to delay), since Hold has no outcome to fire.
+  const graceOnEl=byId(`${prefix}_grace_on`),graceRow=byId(`${prefix}_grace_row`),
+        graceOnRow=byId(`${prefix}_grace_on_row`),outcomeEl=byId(`${prefix}_outcome`);
+  graceOnEl.addEventListener("change",()=>{graceRow.hidden=!graceOnEl.checked;});
+  function syncOutcomeUI(){
+    const isHold=outcomeEl.value==="none";
+    graceOnRow.hidden=isHold;
+    graceRow.hidden=isHold||!graceOnEl.checked;
+    if(allowDeclineFurther)byId("cd_stage2_wrap").hidden=(outcomeEl.value!=="declineFurther");
+  }
+  outcomeEl.addEventListener("change",syncOutcomeUI);
+  syncOutcomeUI();
+}
+cdWireStage("cd1",{allowDeclineFurther:true});
+cdWireStage("cd2",{allowDeclineFurther:false});
+
 const CD_OUTCOME_PRESETS={
   none:null,
   arrest:{rhythm:"PEA",hr:150,bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
@@ -1455,25 +1597,45 @@ const CD_OUTCOME_PRESETS={
   vtach:{rhythm:"Ventricular Tachycardia",hr:180,bp:{sbp:0,dbp:0,map:0},pa:{systolic:0,diastolic:0},cvp:0,spo2:0,pacer:{captured:false},flags:{arrestActive:true}},
   lossOfCapture:{pacer:{captured:false}},
 };
-const CD_OUTCOME_LABELS={arrest:"cardiac arrest (PEA)",vfib:"cardiac arrest (V-Fib)",vtach:"cardiac arrest (pulseless V-Tach)",lossOfCapture:"loss of pacer capture"};
+const CD_OUTCOME_LABELS={declineFurther:"further decline (Stage 2)",arrest:"cardiac arrest (PEA)",vfib:"cardiac arrest (V-Fib)",vtach:"cardiac arrest (pulseless V-Tach)",lossOfCapture:"loss of pacer capture"};
+
+/**
+ * Reads one stage's UI into the exact opts shape startFacilitatorRamp()
+ * expects. `allowNextStage` mirrors cdWireStage's `allowDeclineFurther` -
+ * Stage 2 is read with it false, so even if its outcome select somehow held
+ * "declineFurther" (it never offers that option, but this keeps the
+ * function itself correct rather than relying only on the UI never
+ * allowing it) it falls through to being treated as an unrecognized preset
+ * key (CD_OUTCOME_PRESETS[...] undefined -> no-op patch), never recurses.
+ */
+function cdReadStage(prefix,{allowNextStage}){
+  const target={};
+  for(const v of CD_VITALS){
+    const id=`${prefix}_${cdSlug(v.path)}`;
+    if(!byId(`${id}_on`).checked)continue;
+    setPath(target,v.path,parseFloat(byId(id).value));
+  }
+  const durationMinutes=parseFloat(byId(`${prefix}_duration`).value)||0;
+  const outcomeKey=byId(`${prefix}_outcome`).value;
+  const isHold=outcomeKey==="none";
+  const isDeclineFurther=allowNextStage&&outcomeKey==="declineFurther";
+  const graceMinutes=byId(`${prefix}_grace_on`).checked?(parseFloat(byId(`${prefix}_grace`).value)||0):0;
+  const label=byId(`${prefix}_label`).value.trim()||(isHold?"":CD_OUTCOME_LABELS[outcomeKey]||"");
+  const cfg={target,durationMinutes,label};
+  if(!isHold){
+    cfg.autoAdvanceAfterMinutes=graceMinutes; // 0 when grace is unchecked - fires as soon as the ramp settles, no separate countdown phase
+    if(isDeclineFurther)cfg.nextStage=cdReadStage("cd2",{allowNextStage:false});
+    else cfg.outcomePatch=CD_OUTCOME_PRESETS[outcomeKey];
+  }
+  return cfg;
+}
 byId("cd_start").addEventListener("click",()=>{
   if(!runner)return;
-  const target={};
-  for(const id in CD_TARGET_MAP)setPath(target,CD_TARGET_MAP[id],parseFloat(byId(id).value));
-  const durationMinutes=parseFloat(byId("cd_duration").value)||0;
-  const graceMinutes=parseFloat(byId("cd_grace").value)||0;
-  const outcomeKey=byId("cd_outcome").value;
-  const outcomePatch=CD_OUTCOME_PRESETS[outcomeKey];
-  const label=byId("cd_label").value.trim()||(outcomeKey!=="none"?CD_OUTCOME_LABELS[outcomeKey]:"");
-  runner=srStartFacilitatorRamp(runner,{
-    target,durationMinutes,
-    autoAdvanceAfterMinutes:outcomeKey!=="none"?graceMinutes:undefined,
-    outcomePatch:outcomePatch||undefined,
-    label,
-  },performance.now());
+  const cfg=cdReadStage("cd1",{allowNextStage:true});
+  runner=srStartFacilitatorRamp(runner,cfg,performance.now());
   renderReadout();
   renderDecompTimer(performance.now());
-  logChange(`Custom Decline started${label?" — "+label:""} (over ${durationMinutes} min${outcomeKey!=="none"?", "+graceMinutes+" min grace":""})`);
+  logChange(`Clinical Change started${cfg.label?" — "+cfg.label:""} (over ${cfg.durationMinutes} min)`);
 });
 
 /* ---------------- Live-tick an in-flight ramp + auto-advance + override releases ---------------- */
