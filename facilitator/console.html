@@ -128,6 +128,11 @@
   .rd.flag-on{border-color:var(--critical); background:var(--critical-wash);}
   .rd.flag-on .rv{color:var(--critical);}
   .rd.hero-primary .rv{font-size:38px;}
+  /* "Monitored" toggle, direct user request - a group marked not-connected
+     reads as visually de-emphasized (dim + not bold), distinct from both a
+     normal reading and the critical/flag-on red, so it can never be
+     mistaken for an alarming real value. */
+  .rv-unmonitored{color:var(--ink-soft); font-weight:500; opacity:0.7;}
 
   .section-gap{margin-top:var(--space-7);}
 
@@ -659,7 +664,7 @@
 </div>
 
 <script type="module">
-import { getEffectiveRhythm, getEffectiveHR, applyInstant, computeCPP, RHYTHM_LIBRARY, jitterHR, PACER_MODES } from '../engine/physiology.js';
+import { getEffectiveRhythm, getEffectiveHR, applyInstant, computeCPP, RHYTHM_LIBRARY, jitterHR, PACER_MODES, isMonitored, MONITOR_GROUPS } from '../engine/physiology.js';
 import {
   administerPush, canAdministerPush, getPushDoseCount, getPushTotalDoseMg,
   setInfusionRate, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
@@ -929,7 +934,17 @@ function renderReadout(){
   // physiology.js).
   const isPacedNow=getEffectiveRhythm(s).startsWith("Paced");
   const rhythmInfo=RHYTHM_LIBRARY[s.rhythm];
+  // "Monitored" toggle, direct user request - a group marked NOT monitored
+  // (no sensor/catheter/probe "connected") shows "— —" here regardless of
+  // whatever the underlying authored number actually is, same convention
+  // HemoSphere's own pre-existing paramAvailable()/"Connect sensor" already
+  // uses. Independent of isPerfusing()/isPulsatile() (patient physiology,
+  // not equipment) - both can gate the SAME tile without conflict, since
+  // this check runs first and short-circuits before any physiology read.
   const rows=READOUT_FIELDS.map(([k,label])=>{
+    if(MONITOR_GROUPS[k]&&!isMonitored(s,k)){
+      return `<div class="rd"><div class="rl">${label}</div><div class="rv rv-unmonitored">— —</div></div>`;
+    }
     let v=MEDICATED[k]?MEDICATED[k]():s[k];
     if(k==="hr"&&!isPacedNow&&rhythmInfo)v=jitterHR(v,rhythmInfo.regularity);
     const cls=k==="hr"?"rd hero-primary":"rd";
@@ -941,9 +956,10 @@ function renderReadout(){
   // size - it overflowed its tile into MAP's at the grid's narrower column
   // widths. Kept visually prominent (bold, still larger than the plainer
   // fields) without reusing the class built for short 2-3-digit values.
-  rows.push(`<div class="rd"><div class="rl">BP</div><div class="rv" style="font-size:26px">${Math.round(getEffectiveSBP(s))}/${Math.round(getEffectiveDBP(s))}</div></div>`);
-  rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv">${Math.round(getMedicatedMAP(s,minute))}</div></div>`);
-  rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv" style="font-size:22px">${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}</div></div>`);
+  const bpOn=isMonitored(s,"bp"),paOn=isMonitored(s,"pa");
+  rows.push(`<div class="rd"><div class="rl">BP</div><div class="rv${bpOn?"":" rv-unmonitored"}" style="font-size:26px">${bpOn?`${Math.round(getEffectiveSBP(s))}/${Math.round(getEffectiveDBP(s))}`:"— / —"}</div></div>`);
+  rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv${bpOn?"":" rv-unmonitored"}">${bpOn?Math.round(getMedicatedMAP(s,minute)):"—"}</div></div>`);
+  rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv${paOn?"":" rv-unmonitored"}" style="font-size:22px">${paOn?`${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}`:"— / —"}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:18px">${getEffectiveRhythm(s)}</div></div>`);
   byId("readout").innerHTML=rows.join("");
   // Phase 6: perfusion status, at a glance - this is the exact distinction
@@ -1102,6 +1118,46 @@ for(const id in OVERRIDE_MAP){
   manual.min=el.min; manual.max=el.max; manual.step=el.step||"1";
   vv.insertAdjacentElement("afterend",manual);
 }
+
+/**
+ * "Monitored" toggles, direct user request: "we need to make sure that we
+ * are able to fully toggle on and off various vital signs in the patient
+ * assessments and outputs." One checkbox per MONITOR_GROUPS key (physiology.js),
+ * injected right before that group's first slider row - same "inject
+ * generically rather than hand-duplicate 12 HTML spots" convention as the
+ * manual-entry loop just above. Unchecking marks the group NOT monitored
+ * (no sensor/catheter/probe connected) - the console readout, and both real
+ * device shells, then show "not connected" for it regardless of whatever
+ * the underlying authored number still is; the slider itself stays fully
+ * enabled throughout, since a facilitator can still be setting up what the
+ * value WOULD read once reconnected. Uses srOverride() (the plain instant
+ * helper), not srSetOverride() - "is this monitored" has no hold/release
+ * semantics of its own, same reasoning as rhythm/pacer-capture/event flags.
+ */
+const MONITOR_GROUP_LABELS={
+  hr:"HR",bp:"Arterial line (BP/MAP)",pa:"PA catheter",cvp:"CVP",co:"CO",
+  svv:"SVV",ppv:"PPV",scvo2:"ScvO₂ (oximetry cable)",spo2:"SpO₂ (pulse ox)",
+  rr:"RR",temp:"Temp probe",icp:"ICP (bolt/EVD)",
+};
+const MONITOR_ANCHOR_ID={
+  hr:"ov_hr",bp:"ov_sbp",pa:"ov_pasys",cvp:"ov_cvp",co:"ov_co",svv:"ov_svv",
+  ppv:"ov_ppv",scvo2:"ov_scvo2",spo2:"ov_spo2",rr:"ov_rr",temp:"ov_temp",icp:"ov_icp",
+};
+for(const group in MONITOR_ANCHOR_ID){
+  const anchorRow=byId(MONITOR_ANCHOR_ID[group]).closest("label.row");
+  anchorRow.insertAdjacentHTML("beforebegin",
+    `<div class="checkrow mon-row"><label><input type="checkbox" id="mon_${group}" checked> ${MONITOR_GROUP_LABELS[group]} monitored <span class="hint" style="display:inline">(uncheck to show "not connected")</span></label></div>`);
+}
+function setMonitored(group,on){
+  if(!runner)return;
+  runner=srOverride(runner,{monitored:{[group]:on}});
+  renderReadout();
+  logChange(`${MONITOR_GROUP_LABELS[group]} ${on?"marked connected/monitored":"marked NOT monitored"}`);
+}
+for(const group in MONITOR_ANCHOR_ID){
+  byId(`mon_${group}`).addEventListener("change",()=>setMonitored(group,byId(`mon_${group}`).checked));
+}
+
 function commitOverride(id,rawVal,{log}={}){
   const el=byId(id),vv=byId(id+"_v"),manual=byId(id+"_manual");
   const min=parseFloat(el.min),max=parseFloat(el.max);
@@ -1165,6 +1221,11 @@ function syncControlsFromRunner(){
     vv.textContent=fmtVal(el,v);
     if(manual)manual.value=fmtVal(el,v);
   }
+  // Monitored checkboxes reflect whatever the just-loaded/synced state
+  // actually says - matters on scenario navigation (a scenario could author
+  // a stage that unplugs a sensor) and on a remote snapshot arriving from
+  // another facilitator tab, not just this tab's own clicks.
+  for(const group in MONITOR_ANCHOR_ID)byId(`mon_${group}`).checked=isMonitored(s,group);
   renderAllOverrideStatuses(performance.now());
 }
 

@@ -97,7 +97,56 @@ const BASE_STATE = Object.freeze({
     lastPerfusingAtMinute: null,
     atLoss: null, // { bp: {sbp,dbp,map}, etco2, co, scvo2 } snapshotted at the instant perfusion was lost - co/scvo2 added Phase 7 (HemoSphere synchronization), same snapshot, same reason
   },
+  // Direct user request: "we need to make sure that we are able to fully
+  // toggle on and off various vital signs in the patient assessments and
+  // outputs" - distinct from isPerfusing()/isPulsatile() (which describe the
+  // PATIENT's actual physiology) and distinct from a raw value being
+  // authored (which can already be anything, including 0, per the separate
+  // "no limits" request). This models whether a parameter is currently BEING
+  // MONITORED at all - e.g. no PA catheter placed yet, an oximetry cable
+  // unplugged, no ICP bolt - independent of what the underlying authored
+  // number is. A group toggled off shows as "not connected" (see
+  // isMonitored()/MONITOR_GROUPS below) on every surface that displays it,
+  // while the number keeps being tracked underneath so switching back on
+  // shows it immediately - matching HemoSphere's own pre-existing
+  // paramAvailable()/"Connect sensor" convention, generalized here so it
+  // works consistently across the console readout AND both real device
+  // shells instead of being HemoSphere-only. All true by default (matches
+  // every pre-Round-4 scenario's actual behavior - nothing was ever
+  // "unmonitored" before this field existed) - deepMerge() means an existing
+  // scenario JSON that never mentions `monitored` still gets this full
+  // default map for free, zero migration needed.
+  monitored: {
+    hr: true, bp: true, pa: true, cvp: true, co: true, svv: true, ppv: true,
+    scvo2: true, spo2: true, rr: true, temp: true, icp: true,
+  },
 });
+
+// Which state paths each togglable monitoring group covers - e.g. the "bp"
+// group is sys+dia+map together (one arterial line, one on/off switch), not
+// three independent toggles, matching how a real monitor has one pressure
+// line per site, not one per number derived from it. Exported so
+// console.html can build one checkbox per group without hand-duplicating
+// this list, same convention as NUMERIC_PATHS/OVERRIDE_MAP elsewhere.
+export const MONITOR_GROUPS = {
+  hr: ['hr'],
+  bp: ['bp.sbp', 'bp.dbp', 'bp.map'],
+  pa: ['pa.systolic', 'pa.diastolic'],
+  cvp: ['cvp'],
+  co: ['co'],
+  svv: ['svv'],
+  ppv: ['ppv'],
+  scvo2: ['scvo2'],
+  spo2: ['spo2'],
+  rr: ['rr'],
+  temp: ['temp'],
+  icp: ['icp'],
+};
+
+/** Is `group` (a MONITOR_GROUPS key) currently being monitored? Defensively defaults true for a legacy state object that predates this field entirely, or an unrecognized key - "unknown" should never silently read as "hidden." */
+export function isMonitored(state, group) {
+  return state.monitored?.[group] !== false;
+}
 
 // Exported (not just internal to rampState) so scenarioRunner.js's override-
 // release machinery can build/read single-path patches without duplicating

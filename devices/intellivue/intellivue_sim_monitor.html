@@ -28,13 +28,55 @@
   #waveWrap{flex:1 1 auto;position:relative;min-width:0;background:#000;}
   #wave,#labels{position:absolute;top:0;left:0;display:block;}
   #nums{flex:0 0 250px;display:flex;flex-direction:column;background:#000;border-left:1px solid #0a0a0a;overflow-y:auto;}
-  .tile{flex:0 0 auto;border:1px solid rgba(255,255,255,.18);margin:3px 4px;border-radius:4px;padding:1px 7px 2px;position:relative;min-height:60px;display:flex;flex-direction:column;justify-content:center;background:#040404;cursor:pointer;}
+  /* Direct user request: "consider it rearranging waveforms to adapt like
+     the philips monitor does in real life with more or less parameters;
+     consider larger size for the number parameters." Waveform bands
+     already did this (layout()'s `bh=H/keys.length`, pre-existing, see
+     below); numeric tiles didn't - flex:0 0 auto with a fixed min-height
+     meant hiding a tile just left empty space in #nums instead of growing
+     the remaining ones. Now flex:1 1 0 so visible tiles share #nums's full
+     height, and a JS-computed density tier (scaleNumTiles(), data-density
+     on #nums) scales font sizes so text stays proportionate to the bigger
+     box - a real Philips monitor showing 4 parameters uses noticeably
+     larger numerals than one showing 12, not just bigger empty tiles. */
+  .tile{flex:1 1 0;min-height:48px;border:1px solid rgba(255,255,255,.18);margin:3px 4px;border-radius:4px;padding:1px 7px 2px;position:relative;display:flex;flex-direction:column;justify-content:center;background:#040404;cursor:pointer;}
   .tile:hover{border-color:#2f6f9a;}
   .tile .lab{font-size:12px;font-weight:700;line-height:1.1;display:flex;justify-content:space-between;align-items:baseline;}
   .tile .lim{font-size:9px;color:#7a7a7a;font-weight:600;}
   .tile .big{font-size:40px;font-weight:700;line-height:.9;font-variant-numeric:tabular-nums;letter-spacing:-1px;}
   .tile .big.med{font-size:28px;} .tile .big.sm{font-size:22px;}
   .tile .sub{font-size:11px;font-weight:600;opacity:.85;}
+  /* Density tiers - "lg" (the original, unscaled sizes just above) is the
+     implicit default for the common 6-8-visible-tiles case; these three
+     override it further up/down. Reasoned thresholds (a facilitator toggling
+     parameters shouldn't cross a tier on every single click), not cited.
+     Each tier also sets its own min-height, big enough to fit that tier's
+     OWN (taller) lab+big+sub stack - a real bug caught during verification:
+     with a single shared 44px floor, "xl"'s 64px numerals genuinely
+     overflowed their own tile box on a short viewport (confirmed via
+     getBoundingClientRect, not just eyeballed) since #nums's flex-grow
+     shares total height evenly across tiles regardless of which tier needs
+     more. If the column still doesn't have enough total height for these
+     floors, #nums's own pre-existing overflow-y:auto scrolls instead of
+     letting tiles visually collide - correct fallback, not a new one. */
+  #nums[data-density="xl"] .tile{min-height:92px;}
+  #nums[data-density="xl"] .tile .big{font-size:64px;}
+  #nums[data-density="xl"] .tile .big.med{font-size:46px;}
+  #nums[data-density="xl"] .tile .big.sm{font-size:36px;}
+  #nums[data-density="xl"] .tile .lab{font-size:15px;}
+  #nums[data-density="xl"] .tile .sub{font-size:13px;}
+  #nums:not([data-density]) .tile,#nums[data-density="lg"] .tile{min-height:68px;}
+  #nums[data-density="md"] .tile{min-height:58px;}
+  #nums[data-density="md"] .tile .big{font-size:32px;}
+  #nums[data-density="md"] .tile .big.med{font-size:23px;}
+  #nums[data-density="md"] .tile .big.sm{font-size:18px;}
+  #nums[data-density="md"] .tile .lab{font-size:11px;}
+  #nums[data-density="md"] .tile .sub{font-size:10px;}
+  #nums[data-density="sm"] .tile .big{font-size:24px;}
+  #nums[data-density="sm"] .tile .big.med{font-size:18px;}
+  #nums[data-density="sm"] .tile .big.sm{font-size:15px;}
+  #nums[data-density="sm"] .tile .lab{font-size:10px;}
+  #nums[data-density="sm"] .tile .sub{font-size:9px;}
   .tile.alarm-red{animation:tr .8s steps(1) infinite;} .tile.alarm-yel{animation:ty 1.2s steps(1) infinite;}
   @keyframes tr{50%{background:#5a0000;}} @keyframes ty{50%{background:#4a3f00;}}
   .hide{display:none!important;}
@@ -831,14 +873,27 @@ function syncNumTiles(){const map={t_abp:"abp",t_abp2:"abp2",t_pap:"pap",t_cvp:"
   document.querySelectorAll(".tile").forEach(t=>{const c=cssv("--"+t.dataset.color);t.style.borderColor=hexA(c,.5);t.querySelector(".big").style.color=c;const lab=t.querySelector(".lab>span");if(lab)lab.style.color=c;});
   byId("l_abp").textContent=state.labels.abp;byId("l_abp2").textContent=state.labels.abp2;
   byId("l_pap").textContent=state.paCath==="RV"?"RV":state.labels.pap;
-  refreshLimLabels();}
+  refreshLimLabels();scaleNumTiles();}
+function scaleNumTiles(){
+  const visible=document.querySelectorAll("#nums .tile:not(.hide)").length;
+  byId("nums").dataset.density=visible<=5?"xl":visible<=8?"lg":visible<=11?"md":"sm";
+}
 function refreshLimLabels(){const set=(id,key)=>{const e=byId(id);if(e)e.textContent=alm[key].on?(alm[key].lo+"–"+alm[key].hi):"off";};
   set("lim_hr","hr");set("lim_spo2","spo2");set("lim_rr","rr");set("lim_abp","abp");set("lim_pap","pap");set("lim_cvp","cvp");set("lim_icp","icp");set("lim_cpp","cpp");set("lim_etco2","etco2");set("lim_temp","temp");}
 function hexA(hex,a){hex=hex.replace('#','');const n=parseInt(hex,16);return`rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
 function updateNumerics(){tickDisp(performance.now());if(state.trans){syncControls();updateTransUI();}const perf=perfusing(),R=v=>Math.round(v);const map=R((disp.sys+2*disp.dia)/3);
-  byId("v_hr").textContent=(state.rhythm==="vfib"||state.rhythm==="asystole")?"--":R(disp.hr);
-  byId("v_spo2").textContent=perf?R(disp.spo2):"--";byId("s_perf").textContent=perf?clamp((disp.spo2-80)/8,0.3,9).toFixed(1):"0.0";
-  byId("v_rr").textContent=state.rr<1?"0":R(disp.rr);
+  // engineMonitored is only non-null while the shared engine is actually
+  // driving (flagship/console session) - native/practice mode has no such
+  // concept and always shows a number, unaffected. HR/SpO2/RR are core
+  // parameters with no state.show entry (see applyMonitoredToShow's own
+  // docblock) - "not monitored" for these three means dashed here instead
+  // of removed from the layout entirely.
+  const hrNC=engineMonitored&&engineMonitored.hr===false;
+  const spo2NC=engineMonitored&&engineMonitored.spo2===false;
+  const rrNC=engineMonitored&&engineMonitored.rr===false;
+  byId("v_hr").textContent=hrNC?"--":((state.rhythm==="vfib"||state.rhythm==="asystole")?"--":R(disp.hr));
+  byId("v_spo2").textContent=spo2NC?"--":(perf?R(disp.spo2):"--");byId("s_perf").textContent=(!spo2NC&&perf)?clamp((disp.spo2-80)/8,0.3,9).toFixed(1):"0.0";
+  byId("v_rr").textContent=rrNC?"--":(state.rr<1?"0":R(disp.rr));
   byId("v_nbp").textContent=state.nbpSys+"/"+state.nbpDia;byId("v_nbpmap").textContent=R((state.nbpSys+2*state.nbpDia)/3);byId("nbp_time").textContent=state.nbpTime;
   // Phase 6: !perfusing() replaces the direct vfib/asystole check here too -
   // same reasoning as the ART waveform above. A perfusing-but-nonpulsatile
@@ -861,13 +916,26 @@ function evaluateAlarms(map,perf){const A=[];const tiles=["t_hr","t_spo2","t_rr"
   function chk(key,val,tile,loM,hiM){const c=alm[key];if(!c||!c.on)return;const r=RED[key]||[9999,9999];
     if(r[0]&&val<=c.lo-r[0])A.push({p:3,m:"*** "+loM,n:tile});else if(val<c.lo)A.push({p:2,m:"** "+loM,n:tile});
     else if(r[1]&&val>=c.hi+r[1])A.push({p:3,m:"*** "+hiM,n:tile});else if(val>c.hi)A.push({p:2,m:"** "+hiM,n:tile});}
-  if(state.rhythm==="vfib")A.push({p:3,m:"*** VENT FIB",n:"t_hr"});
-  if(state.rhythm==="asystole")A.push({p:3,m:"*** ASYSTOLE",n:"t_hr"});
-  if(state.rhythm==="vtach"||state.rhythm==="torsades")A.push({p:3,m:"*** VENT TACH",n:"t_hr"});
-  if(perf&&!["vtach","torsades"].includes(state.rhythm))chk("hr",disp.hr,"t_hr","Brady","Tachy");
-  if(perf&&alm.spo2.on){if(disp.spo2<alm.spo2.lo-RED.spo2[0])A.push({p:3,m:"*** Desat",n:"t_spo2"});else if(disp.spo2<alm.spo2.lo)A.push({p:2,m:"** SpO₂ Low",n:"t_spo2"});}
-  if(perf)chk("abp",map,"t_abp","ABP Low","ABP High");
-  if(state.rr>0){chk("rr",disp.rr,"t_rr","RR Low","RR High");}else A.push({p:3,m:"*** Apnea",n:"t_co2"});
+  // Direct consequence of the "monitored" toggle: a disconnected sensor
+  // shouldn't alarm - real monitors don't alarm on a parameter they aren't
+  // displaying. HR/SpO2/RR have no state.show entry (see
+  // applyMonitoredToShow) so they're gated on engineMonitored directly here
+  // instead; ABP's own alarm check had no `state.show.abp` gate at all even
+  // BEFORE this feature (every other togglable tile - cvp/pap/icp/cpp -
+  // already had one) - added for consistency, since it's now newly visible
+  // as a real gap once a facilitator can actually turn ABP monitoring off.
+  const hrNC=engineMonitored&&engineMonitored.hr===false;
+  const spo2NC=engineMonitored&&engineMonitored.spo2===false;
+  const rrNC=engineMonitored&&engineMonitored.rr===false;
+  if(!hrNC){
+    if(state.rhythm==="vfib")A.push({p:3,m:"*** VENT FIB",n:"t_hr"});
+    if(state.rhythm==="asystole")A.push({p:3,m:"*** ASYSTOLE",n:"t_hr"});
+    if(state.rhythm==="vtach"||state.rhythm==="torsades")A.push({p:3,m:"*** VENT TACH",n:"t_hr"});
+    if(perf&&!["vtach","torsades"].includes(state.rhythm))chk("hr",disp.hr,"t_hr","Brady","Tachy");
+  }
+  if(!spo2NC&&perf&&alm.spo2.on){if(disp.spo2<alm.spo2.lo-RED.spo2[0])A.push({p:3,m:"*** Desat",n:"t_spo2"});else if(disp.spo2<alm.spo2.lo)A.push({p:2,m:"** SpO₂ Low",n:"t_spo2"});}
+  if(perf&&state.show.abp)chk("abp",map,"t_abp","ABP Low","ABP High");
+  if(!rrNC){if(state.rr>0){chk("rr",disp.rr,"t_rr","RR Low","RR High");}else A.push({p:3,m:"*** Apnea",n:"t_co2"});}
   if(state.show.co2&&state.rr>0)chk("etco2",disp.etco2,"t_co2","etCO₂ Low","etCO₂ High");
   if(state.show.cvp)chk("cvp",disp.cvp,"t_cvp","CVP Low","CVP High");
   if(state.show.pap&&state.paCath==="PA"&&!state.wedge)chk("pap",(disp.paSys+2*disp.paDia)/3,"t_pap","PAP Low","PAP High");
@@ -1189,8 +1257,31 @@ function mapEngineRhythm(effRhythm){const m=RHYTHM_MAP[effRhythm];if(!m){console
 // Cheap per-frame update during a live ramp: only the numeric fields the render loop
 // already samples live. Deliberately does NOT call layout() - layout()->paintBg() does a
 // full canvas fillRect, which would blank the scrolling waveform trace on every tick.
+// Direct user request: "toggle on/off various vital signs in the patient
+// assessments and outputs" (console) should actually rearrange THIS
+// device's own tile grid + waveform bands - "like the Phillips monitor
+// does in real life" - not just change a number underneath. Maps the
+// shared engine's `monitored` groups (physiology.js) onto this device's
+// own PRE-EXISTING state.show.* visibility system (built well before this
+// feature - see layout()/activeWaves()'s already-dynamic reflow), rather
+// than inventing a second one. HR/SpO2/RR have no state.show entry at all
+// (a real monitor never fully removes its 3 core parameters from the
+// layout, only shows them dashed when disconnected) - those three are
+// handled separately via `engineMonitored` in updateNumerics() below.
+// Returns whether anything actually changed, so the caller only pays for a
+// layout() reflow when a group's visibility genuinely flipped.
+function applyMonitoredToShow(es){
+  const m=es.monitored||{};
+  const next={abp:m.bp!==false,pap:m.pa!==false,cvp:m.cvp!==false,icp:m.icp!==false,cpp:m.icp!==false,coci:m.co!==false,temp:m.temp!==false};
+  let changed=false;
+  for(const k in next){if(state.show[k]!==next[k]){state.show[k]=next[k];changed=true;}}
+  return changed;
+}
+let engineMonitored=null; // the shared engine's last-seen `monitored` object, or null in native/practice mode (no such concept there - always show numbers)
 function applyEngineValuesLight(es){
   sharedPerfusing=isPerfusing(es);sharedPulsatile=isPulsatile(es);
+  engineMonitored=es.monitored||null;
+  const showChanged=applyMonitoredToShow(es);
   state.hr=getMedicatedHR(es,es.minute);state.sys=getEffectiveSBP(es);state.dia=getEffectiveDBP(es);state.cvp=es.cvp;
   state.paSys=es.pa.systolic;state.paDia=es.pa.diastolic;state.spo2=es.spo2;
   if(es.rr)state.rr=es.rr;if(es.temp)state.temp=es.temp;state.co=es.co;
@@ -1198,14 +1289,19 @@ function applyEngineValuesLight(es){
   state.rhythm=mapEngineRhythm(getEffectiveRhythm(es));
   state.nbpSys=Math.round(state.sys);state.nbpDia=Math.round(state.dia);
   rrSec=60/Math.max(20,state.hr);updateCO();
+  // Same "only reflow on an actual change" rule the file's own per-frame-
+  // vs-discrete split is already built around (see this function's own
+  // historical docblock above it, and applyEngineStateFull's) - a
+  // monitored toggle is discrete/rare, not part of the 60/sec ramp tick, so
+  // this never fires spuriously during a live ramp.
+  if(showChanged){refreshToggleUI();layout();}
 }
 // Discrete navigation (Next/Prev/Reset/jump): also surface the relevant tiles and
 // refresh controls/canvas layout once - matches how loadScenario()/ctApplyIV() already
 // call layout() once per discrete scenario change, not per frame.
 function applyEngineStateFull(es){
   cancelTrans(); // the shared engine owns transitions while the flagship scenario drives state
-  state.show.abp=true;state.show.cvp=true;state.show.pap=true;state.show.coci=true;
-  applyEngineValuesLight(es);
+  applyEngineValuesLight(es); // derives state.show.{abp,pap,cvp,icp,cpp,coci,temp} from es.monitored - replaces the old hardcoded "always true" set now that monitoring can be toggled off
   syncControls();refreshClinicalUI();refreshToggleUI();layout();
 }
 

@@ -356,23 +356,42 @@ function bsa(){return 0.007184*Math.pow(drv.ht,0.725)*Math.pow(drv.wt,0.425);}
 function deriv(){const B=bsa();const CO=ccoAvg;const sv=CO*1000/Math.max(20,drv.pr);const svr=80*(drv.map-drv.cvp)/Math.max(0.5,CO);
   return {bsa:B,ci:CO/B,sv:sv,svi:sv/B,svr:svr,svri:svr*B,dpdt:clamp(380+(drv.map-65)*9+(CO-5)*40,200,2000),ea:clamp(0.5+(drv.svv-6)*0.06+(svr-1000)/2200,0.3,2.5)};}
 function sensorsOK(t){const s=drv.sensors;if(t==="flow")return s.cco||s.acumen;if(t==="cco")return s.cco;if(t==="acumen")return s.acumen;if(t==="adv")return s.cco&&s.acumen;if(t==="oximetry")return s.oximetry;return true;}
-function paramAvailable(k){const t=P[k].need;if(!sensorsOK(t)){const m={flow:"Connect sensor",cco:"Connect Swan CCO",acumen:"Connect Acumen IQ",adv:"Swan CCO + Acumen IQ",oximetry:"Connect Oximetry"}[t];return{ok:false,msg:m};}
+// Direct user request: "toggle on/off various vital signs" (console) should
+// show as "not connected" on every surface that displays it, this device
+// included - not just a console-side bookkeeping marker. `engineMonitored`
+// (set from the shared engine's `monitored` object, see physiology.js) is
+// checked FIRST, before this device's own pre-existing sensors.*
+// connection gate - both can independently mark a parameter unavailable,
+// for two different real reasons (no sensor physically connected, vs. a
+// facilitator has simply turned monitoring off), same as IntelliVue's own
+// engineMonitored/state.show split. engineMonitored is null in native/
+// practice mode (no such concept there), so that mode is fully unaffected -
+// this device's own facilitator-controlled sensors.* toggles are untouched.
+let engineMonitored=null;
+function paramAvailable(k){
+  const p=P[k];
+  if(engineMonitored&&p.group&&engineMonitored[p.group]===false)return{ok:false,msg:"Not connected"};
+  const t=p.need;if(!sensorsOK(t)){const m={flow:"Connect sensor",cco:"Connect Swan CCO",acumen:"Connect Acumen IQ",adv:"Swan CCO + Acumen IQ",oximetry:"Connect Oximetry"}[t];return{ok:false,msg:m};}
   if(t==="oximetry"&&!drv.oxiCal)return{ok:false,msg:"Calibration required"};return{ok:true};}
+// `group`: which MONITOR_GROUPS key (physiology.js) this parameter's
+// shared-engine monitoring status ties to - see paramAvailable() above. No
+// `group` (hpi) means this parameter isn't exposed as a monitored/
+// unmonitored toggle anywhere - only its own native sensor gate applies.
 const P={
-  co:{lab:"CO",u:"L/min",c:"--co",lo:4,hi:8,dec:1,gmin:0,gmax:12,need:"flow",val:()=>ccoAvg},
-  ci:{lab:"CI",u:"L/min/m²",c:"--co",lo:2.5,hi:4.0,dec:1,gmin:0,gmax:12,need:"flow",val:()=>ccoAvg/bsa()},
-  sco:{lab:"sCO",u:"L/min STAT",c:"--co",lo:4,hi:8,dec:1,gmin:0,gmax:12,need:"cco",val:()=>scoVal},
-  sci:{lab:"sCI",u:"L/min/m² STAT",c:"--co",lo:2.5,hi:4.0,dec:1,gmin:0,gmax:12,need:"cco",val:()=>scoVal/bsa()},
-  sv:{lab:"SV",u:"mL/beat",c:"--sv",lo:60,hi:100,dec:0,gmin:0,gmax:160,need:"flow",val:()=>deriv().sv},
-  svi:{lab:"SVI",u:"mL/beat/m²",c:"--sv",lo:33,hi:47,dec:0,gmin:0,gmax:80,need:"flow",val:()=>deriv().svi},
-  svv:{lab:"SVV",u:"%",c:"--svv",lo:0,hi:13,dec:0,gmin:0,gmax:50,lowGood:1,need:"acumen",val:()=>drv.svv},
-  ppv:{lab:"PPV",u:"%",c:"--ppv",lo:0,hi:13,dec:0,gmin:0,gmax:50,lowGood:1,need:"acumen",val:()=>drv.ppv},
-  svr:{lab:"SVR",u:"dyn·s/cm⁵",c:"--svr",lo:800,hi:1200,dec:0,gmin:0,gmax:2400,need:"flow",val:()=>deriv().svr},
-  svri:{lab:"SVRI",u:"dyn·s/cm⁵·m²",c:"--svr",lo:1970,hi:2390,dec:0,gmin:0,gmax:4000,need:"flow",val:()=>deriv().svri},
-  map:{lab:"MAP",u:"mmHg",c:"--map",lo:65,hi:100,dec:0,gmin:0,gmax:160,need:"acumen",val:()=>drv.map},
-  pr:{lab:"PR",u:"bpm",c:"--pr",lo:60,hi:100,dec:0,gmin:0,gmax:200,need:"flow",val:()=>drv.pr},
-  cvp:{lab:"CVP",u:"mmHg",c:"--cvp",lo:2,hi:10,dec:0,gmin:0,gmax:30,need:"cco",val:()=>drv.cvp},
-  scvo2:{lab:"ScvO₂",u:"%",c:"--scvo2",lo:65,hi:75,dec:0,gmin:0,gmax:99,need:"oximetry",val:()=>drv.scvo2},
+  co:{lab:"CO",u:"L/min",c:"--co",lo:4,hi:8,dec:1,gmin:0,gmax:12,need:"flow",group:"co",val:()=>ccoAvg},
+  ci:{lab:"CI",u:"L/min/m²",c:"--co",lo:2.5,hi:4.0,dec:1,gmin:0,gmax:12,need:"flow",group:"co",val:()=>ccoAvg/bsa()},
+  sco:{lab:"sCO",u:"L/min STAT",c:"--co",lo:4,hi:8,dec:1,gmin:0,gmax:12,need:"cco",group:"co",val:()=>scoVal},
+  sci:{lab:"sCI",u:"L/min/m² STAT",c:"--co",lo:2.5,hi:4.0,dec:1,gmin:0,gmax:12,need:"cco",group:"co",val:()=>scoVal/bsa()},
+  sv:{lab:"SV",u:"mL/beat",c:"--sv",lo:60,hi:100,dec:0,gmin:0,gmax:160,need:"flow",group:"co",val:()=>deriv().sv},
+  svi:{lab:"SVI",u:"mL/beat/m²",c:"--sv",lo:33,hi:47,dec:0,gmin:0,gmax:80,need:"flow",group:"co",val:()=>deriv().svi},
+  svv:{lab:"SVV",u:"%",c:"--svv",lo:0,hi:13,dec:0,gmin:0,gmax:50,lowGood:1,need:"acumen",group:"svv",val:()=>drv.svv},
+  ppv:{lab:"PPV",u:"%",c:"--ppv",lo:0,hi:13,dec:0,gmin:0,gmax:50,lowGood:1,need:"acumen",group:"ppv",val:()=>drv.ppv},
+  svr:{lab:"SVR",u:"dyn·s/cm⁵",c:"--svr",lo:800,hi:1200,dec:0,gmin:0,gmax:2400,need:"flow",group:"co",val:()=>deriv().svr},
+  svri:{lab:"SVRI",u:"dyn·s/cm⁵·m²",c:"--svr",lo:1970,hi:2390,dec:0,gmin:0,gmax:4000,need:"flow",group:"co",val:()=>deriv().svri},
+  map:{lab:"MAP",u:"mmHg",c:"--map",lo:65,hi:100,dec:0,gmin:0,gmax:160,need:"acumen",group:"bp",val:()=>drv.map},
+  pr:{lab:"PR",u:"bpm",c:"--pr",lo:60,hi:100,dec:0,gmin:0,gmax:200,need:"flow",group:"hr",val:()=>drv.pr},
+  cvp:{lab:"CVP",u:"mmHg",c:"--cvp",lo:2,hi:10,dec:0,gmin:0,gmax:30,need:"cco",group:"cvp",val:()=>drv.cvp},
+  scvo2:{lab:"ScvO₂",u:"%",c:"--scvo2",lo:65,hi:75,dec:0,gmin:0,gmax:99,need:"oximetry",group:"scvo2",val:()=>drv.scvo2},
   hpi:{lab:"HPI",u:"",c:"--hpi",lo:0,hi:85,dec:0,gmin:0,gmax:100,lowGood:1,need:"adv",val:()=>drv.hpi},
 };
 let keyParams=["ci","sco","scvo2","svv"];
@@ -669,6 +688,7 @@ loadScn("postop");layout();setView("mon");requestAnimationFrame(frame);
 // formula. Preserving this device's live derivation is more faithful to how
 // a real monitor behaves than adding an override field it wouldn't have.
 function applyEngineValuesLight(es){
+  engineMonitored=es.monitored||null;
   drv.co=getMedicatedCO(es,es.minute);drv.map=getMedicatedMAP(es,es.minute);drv.pr=getMedicatedHR(es,es.minute);drv.cvp=es.cvp;
   // Phase 7 (HemoSphere synchronization): SVV/PPV/ScvO2 now go through the
   // same perfusion-aware overlay MAP/CO already use, closing this phase's

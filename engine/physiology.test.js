@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createState, applyInstant, rampState, getEffectiveRhythm, getEffectiveHR, computeCPP, URINE_DEVICE_TYPES, RHYTHM_LIBRARY, jitterHR, PACER_MODES } from './physiology.js';
+import { createState, applyInstant, rampState, getEffectiveRhythm, getEffectiveHR, computeCPP, URINE_DEVICE_TYPES, RHYTHM_LIBRARY, jitterHR, PACER_MODES, isMonitored, MONITOR_GROUPS } from './physiology.js';
 
 test('createState fills in full defaults with no overrides', () => {
   const s = createState();
@@ -24,6 +24,31 @@ test('computeCPP is plain MAP - ICP arithmetic', () => {
 
 test('URINE_DEVICE_TYPES lists exactly the three confirmed device options', () => {
   assert.deepEqual(URINE_DEVICE_TYPES, ['external', 'foley', 'urinal_bedpan']);
+});
+
+test('createState defaults every MONITOR_GROUPS key to monitored (true)', () => {
+  const s = createState();
+  for (const key of Object.keys(MONITOR_GROUPS)) assert.equal(s.monitored[key], true, `${key} should default to monitored`);
+});
+
+test('isMonitored reads the live flag, and toggling one group leaves every other group untouched', () => {
+  let s = createState();
+  assert.equal(isMonitored(s, 'spo2'), true);
+  s = applyInstant(s, { monitored: { spo2: false } });
+  assert.equal(isMonitored(s, 'spo2'), false);
+  assert.equal(isMonitored(s, 'hr'), true); // deep-merge, not a full overwrite of the monitored object
+  assert.equal(isMonitored(s, 'bp'), true);
+});
+
+test('isMonitored defaults to true for a legacy state object that predates the `monitored` field entirely, and for an unrecognized key', () => {
+  const legacyState = { hr: 80 }; // no `monitored` key at all - e.g. a pre-Round-4 scenario's raw baseline before createState() merges it
+  assert.equal(isMonitored(legacyState, 'hr'), true);
+  assert.equal(isMonitored(createState(), 'notARealGroup'), true);
+});
+
+test('MONITOR_GROUPS groups BP as one sys+dia+map toggle and PA as one sys+dia toggle, not per-number', () => {
+  assert.deepEqual(MONITOR_GROUPS.bp, ['bp.sbp', 'bp.dbp', 'bp.map']);
+  assert.deepEqual(MONITOR_GROUPS.pa, ['pa.systolic', 'pa.diastolic']);
 });
 
 test('createState deep-merges partial overrides without dropping sibling fields', () => {
