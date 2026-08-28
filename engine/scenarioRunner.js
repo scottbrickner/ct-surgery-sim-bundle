@@ -204,10 +204,20 @@ export function checkAutoAdvance(runner, nowMs) {
   if (!runner.pendingAutoAdvance) return runner;
   if (nowMs < runner.pendingAutoAdvance.fireAtMs) return runner;
   if (runner.pendingAutoAdvance.kind === 'custom') {
-    const { patch, label } = runner.pendingAutoAdvance;
+    const { patch, nextStage, label } = runner.pendingAutoAdvance;
+    // A configured next stage takes precedence over a flat outcome patch -
+    // chains into ANOTHER startFacilitatorRamp() call (ramping from the
+    // state this stage just settled at) instead of applying a one-shot
+    // patch. Reuses startFacilitatorRamp() itself rather than a separate
+    // "apply stage 2" code path, so a 3rd/4th chained stage works exactly
+    // the same way, recursively, with no special-casing per depth - see
+    // that function's own docblock for the full field shape a stage takes.
+    if (nextStage) {
+      return startFacilitatorRamp({ ...runner, pendingAutoAdvance: null }, nextStage, nowMs);
+    }
     return {
       ...runner,
-      state: applyInstant(runner.state, patch),
+      state: patch ? applyInstant(runner.state, patch) : runner.state,
       activeRamp: null,
       pendingAutoAdvance: null,
       events: [...runner.events, { at: `custom-decline:${label || 'outcome'}`, nowMs }],
@@ -228,21 +238,34 @@ export function getAutoAdvanceCountdown(runner, nowMs) {
  * point in any part (mid-discussion, before a scripted ramp even exists in
  * that part, etc.) - independent of partIndex/stepIndex entirely, same
  * "independent of the scripted timeline" spirit as applyFacilitatorOverride().
- * If both `autoAdvanceAfterMinutes` and `outcomePatch` are given, schedules a
- * 'custom' pendingAutoAdvance that applies `outcomePatch` (any partial state
- * patch - e.g. an arrest-like flatline, a loss-of-capture flag) once the
- * ramp settles and that extra grace period elapses unaddressed. Omit either
- * one for a decline-only ramp that just settles and waits (no auto-fire) -
- * same as a scripted ramp step without autoAdvanceAfterMinutes. `label` is
- * carried through to getAutoAdvanceCountdown() for the UI to display (e.g.
- * "cardiac arrest") - purely cosmetic, no engine meaning.
+ * If `autoAdvanceAfterMinutes` is given together with EITHER `outcomePatch`
+ * or `nextStage`, schedules a 'custom' pendingAutoAdvance once the ramp
+ * settles and that extra grace period elapses unaddressed:
+ *   - `outcomePatch` (a partial state patch - e.g. an arrest-like flatline,
+ *     a loss-of-capture flag) applies once, instantly, via applyInstant.
+ *   - `nextStage` (this SAME {target, durationMinutes, autoAdvanceAfterMinutes,
+ *     outcomePatch, nextStage, label} shape, one level deeper) chains into
+ *     ANOTHER startFacilitatorRamp() call instead - a facilitator-authored
+ *     multi-stage clinical change (e.g. subtle change -> decompensation ->
+ *     arrest), recursing to whatever depth was actually configured. If both
+ *     are given, `nextStage` wins (checkAutoAdvance() never applies a flat
+ *     patch AND starts a further stage in the same fire).
+ * Omit both for a decline-only ramp that just settles and waits (no auto-
+ * fire) - same as a scripted ramp step without autoAdvanceAfterMinutes.
+ * `label` is carried through to getAutoAdvanceCountdown() for the UI to
+ * display (e.g. "cardiac arrest") - purely cosmetic, no engine meaning.
  */
-export function startFacilitatorRamp(runner, { target, durationMinutes, autoAdvanceAfterMinutes, outcomePatch, label }, nowMs) {
+export function startFacilitatorRamp(runner, { target, durationMinutes, autoAdvanceAfterMinutes, outcomePatch, nextStage, label }, nowMs) {
   const durationMs = (durationMinutes || 0) * 60000;
   const activeRamp = { fromState: runner.state, target, startedAtMs: nowMs, durationMs };
   let pendingAutoAdvance = null;
-  if (typeof autoAdvanceAfterMinutes === 'number' && outcomePatch) {
+  if (typeof autoAdvanceAfterMinutes === 'number' && (outcomePatch || nextStage)) {
     pendingAutoAdvance = { fireAtMs: nowMs + durationMs + autoAdvanceAfterMinutes * 60000, kind: 'custom', patch: outcomePatch, label };
+    // Only added when actually used - keeps the shape backward-compatible
+    // with every pre-existing single-stage caller/test that checks this
+    // object's exact fields (a present-but-undefined key is NOT the same
+    // thing as an absent one under deepStrictEqual).
+    if (nextStage) pendingAutoAdvance.nextStage = nextStage;
   }
   return {
     ...runner,
@@ -338,12 +361,25 @@ export function advanceSimClock(runner, minutesToAdvance) {
  * is 'hold' (default - persists until explicitly released) or 'duration'
  * (also schedules an automatic, immediate release after `opts.releaseMinutes`,
  * fired by checkOverrideReleases() - same "scheduled up front, fired by a
- * check function every tick" pattern as pendingAutoAdvance). Setting a new
- * override on a path cancels any gradual release already in flight there.
+ * check function every tick" pattern as pendingAutoAdvance). Calling this
+ * again on a path that's ALREADY overridden (e.g. every 'input' event fired
+ * during one continuous slider drag, or a manual-entry commit right after a
+ * drag) updates the value/releaseMode in place but does NOT re-snapshot
+ * priorValue - it keeps the one taken the first time this path became
+ * overridden. Real bug this fixes: the console's slider handler calls this
+ * on every drag tick, and the old code read `priorValue` fresh from
+ * runner.state each time - which by the second tick was already the
+ * previous tick's OVERRIDE value, not the original pre-override/scripted
+ * one. So "Release Now"/"Release Over N min" only ever reverted by one drag
+ * frame instead of back to where the field actually started - reported by a
+ * user as the release buttons "don't seem to work or make sense." Only
+ * re-snapshot when the path isn't already in runner.overrides; releasing
+ * (releaseOverrideNow/startGradualRelease) always clears that entry first,
+ * so the next genuinely-new override on that path snapshots fresh again.
  */
 export function setOverrideWithRelease(runner, path, value, opts = {}, nowMs) {
   const { releaseMode = 'hold', releaseMinutes } = opts;
-  const priorValue = getPath(runner.state, path);
+  const priorValue = runner.overrides[path] ? runner.overrides[path].priorValue : getPath(runner.state, path);
   const patch = setPathImmutable({}, path, value);
   const state = applyInstant(runner.state, patch);
   const activeRamp = runner.activeRamp

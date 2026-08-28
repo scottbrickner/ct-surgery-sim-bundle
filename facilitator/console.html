@@ -295,48 +295,59 @@
         <div class="hint" id="assess_rhythm_notes" style="margin-top:0"></div>
 
         <div class="gl">Cardiac / Hemodynamics</div>
-        <label class="row">HR <input type="range" id="ov_hr" min="20" max="300" value="80"><span class="val" id="ov_hr_v">80</span></label>
+        <!-- Direct user request: "there should also not be limits on any
+             vital sign or parameter... if I wanted a heart rate to be
+             zero, it should be able to be zero, like would be asystole."
+             Every slider below widened to its true physiological floor
+             (0 for anything that can genuinely read zero: HR/BP/MAP/CO/
+             SpO2, etc.) rather than an arbitrary "reasonable minimum" -
+             a facilitator authoring an extreme teaching case shouldn't
+             fight the UI to get there. Temp's floor in particular is
+             lowered enough to cover profound hypothermic circulatory
+             arrest (~18-20°C), a real CT surgery technique this
+             simulator is specifically built around. -->
+        <label class="row">HR <input type="range" id="ov_hr" min="0" max="300" value="80"><span class="val" id="ov_hr_v">80</span></label>
         <div class="ov-status" id="ov_hr_status" hidden></div>
         <div class="checkrow"><label><input type="checkbox" id="bp_linked"> Link sys/dia (maintain a normal ~40 mmHg pulse pressure)</label></div>
-        <label class="row">BP sys <input type="range" id="ov_sbp" min="40" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
+        <label class="row">BP sys <input type="range" id="ov_sbp" min="0" max="260" value="120"><span class="val" id="ov_sbp_v">120</span></label>
         <div class="ov-status" id="ov_sbp_status" hidden></div>
-        <label class="row">BP dia <input type="range" id="ov_dbp" min="20" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
+        <label class="row">BP dia <input type="range" id="ov_dbp" min="0" max="160" value="70"><span class="val" id="ov_dbp_v">70</span></label>
         <div class="ov-status" id="ov_dbp_status" hidden></div>
         <div class="row"><label>MAP source</label></div>
         <div class="mode-pair">
           <button class="act on" id="map_mode_manual" type="button">Manual</button>
           <button class="act" id="map_mode_calc" type="button">Calculated</button>
         </div>
-        <label class="row">MAP <input type="range" id="ov_map" min="30" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
+        <label class="row">MAP <input type="range" id="ov_map" min="0" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
         <div class="ov-status" id="ov_map_status" hidden></div>
         <div class="hint" id="mapModeHint" style="margin-top:0">Manual - MAP is its own independently-settable value, matching how this project's scenario data is authored (a real arterial-line MAP reflects waveform/damping, not a clean calculation from sys/dia).</div>
-        <label class="row">PA sys <input type="range" id="ov_pasys" min="10" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
+        <label class="row">PA sys <input type="range" id="ov_pasys" min="0" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
         <div class="ov-status" id="ov_pasys_status" hidden></div>
-        <label class="row">PA dia <input type="range" id="ov_padia" min="2" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
+        <label class="row">PA dia <input type="range" id="ov_padia" min="0" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
         <div class="ov-status" id="ov_padia_status" hidden></div>
         <label class="row">CVP <input type="range" id="ov_cvp" min="0" max="30" value="8"><span class="val" id="ov_cvp_v">8</span></label>
         <div class="ov-status" id="ov_cvp_status" hidden></div>
-        <label class="row">CO <input type="range" id="ov_co" min="1.5" max="12" step="0.1" value="5.0"><span class="val" id="ov_co_v">5.0</span></label>
+        <label class="row">CO <input type="range" id="ov_co" min="0" max="12" step="0.1" value="5.0"><span class="val" id="ov_co_v">5.0</span></label>
         <div class="ov-status" id="ov_co_status" hidden></div>
 
         <div class="gl">Perfusion / Respiratory</div>
-        <label class="row">SVV <input type="range" id="ov_svv" min="2" max="35" value="10"><span class="val" id="ov_svv_v">10</span></label>
+        <label class="row">SVV <input type="range" id="ov_svv" min="0" max="35" value="10"><span class="val" id="ov_svv_v">10</span></label>
         <div class="ov-status" id="ov_svv_status" hidden></div>
-        <label class="row">PPV <input type="range" id="ov_ppv" min="2" max="35" value="10"><span class="val" id="ov_ppv_v">10</span></label>
+        <label class="row">PPV <input type="range" id="ov_ppv" min="0" max="35" value="10"><span class="val" id="ov_ppv_v">10</span></label>
         <div class="ov-status" id="ov_ppv_status" hidden></div>
-        <label class="row">ScvO₂ <input type="range" id="ov_scvo2" min="30" max="90" value="65"><span class="val" id="ov_scvo2_v">65</span></label>
+        <label class="row">ScvO₂ <input type="range" id="ov_scvo2" min="0" max="90" value="65"><span class="val" id="ov_scvo2_v">65</span></label>
         <div class="ov-status" id="ov_scvo2_status" hidden></div>
         <label class="row">HPI <input type="range" id="ov_hpi" min="0" max="100" value="0"><span class="val" id="ov_hpi_v">0</span></label>
         <div class="ov-status" id="ov_hpi_status" hidden></div>
-        <label class="row">SpO₂ <input type="range" id="ov_spo2" min="50" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
+        <label class="row">SpO₂ <input type="range" id="ov_spo2" min="0" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
         <div class="ov-status" id="ov_spo2_status" hidden></div>
         <label class="row">RR <input type="range" id="ov_rr" min="0" max="50" value="14"><span class="val" id="ov_rr_v">14</span></label>
         <div class="ov-status" id="ov_rr_status" hidden></div>
-        <label class="row">Temp <input type="range" id="ov_temp" min="32" max="42" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
+        <label class="row">Temp <input type="range" id="ov_temp" min="15" max="44" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
         <div class="ov-status" id="ov_temp_status" hidden></div>
 
         <div class="gl">Neuro</div>
-        <label class="row">ICP <input type="range" id="ov_icp" min="0" max="60" value="10"><span class="val" id="ov_icp_v">10</span></label>
+        <label class="row">ICP <input type="range" id="ov_icp" min="0" max="80" value="10"><span class="val" id="ov_icp_v">10</span></label>
         <div class="ov-status" id="ov_icp_status" hidden></div>
         <div class="row wide-label"><label>CPP (calculated)</label><span class="val" id="assess_cpp_v" style="width:auto;font-size:var(--text-xs)">—</span></div>
         <div class="hint" style="margin-top:0">CPP = MAP − ICP, computed live from the readout's current MAP - not itself settable. Overriding ICP or MAP updates it immediately.</div>
@@ -369,10 +380,13 @@
              Full mode/rate/output/sensitivity programming, newly exposed in
              console.html for the first time (previously only the real
              hardware pacemaker page had these) - see setPacerMode()/the
-             pacer.* OVERRIDE_MAP entries and renderPacerConnectionState()
-             for the connected-device read-only behavior below. -->
+             pacer.* OVERRIDE_MAP entries. Always its own independent
+             simulated pacer - never gated by, or deferring to, a real
+             connected Pacemaker device (direct user correction of an
+             earlier design here - the real device has its own "Pull from
+             Console" button for the opposite direction instead). -->
         <div class="gl">Pacer</div>
-        <div class="hint" id="pacerConnHint" style="margin-top:0"></div>
+        <div class="hint" style="margin-top:0">Independent of any real Pacemaker device connected elsewhere - that device has its own "Pull from Console" button to grab a starting rhythm/rate from here, it never needs this panel to defer to it.</div>
         <div class="row"><label>Mode</label></div>
         <select id="pacer_mode"></select>
         <label class="row">Rate (ppm) <input type="range" id="ov_pacer_rate" min="30" max="180" value="0"><span class="val" id="ov_pacer_rate_v">0</span></label>
@@ -1070,7 +1084,6 @@ function commitOverride(id,rawVal,{log}={}){
   const priorValue=getPath(runner.state,path);
   runner=srSetOverride(runner,path,val,currentReleaseChoice(),performance.now());
   stampInfusionOnsetIfRateChanged(path,priorValue,val);
-  if(path.startsWith("pacer."))stampConsolePacerIntent(); // see the pacer-connection-detection docblock below
   renderReadout();
   renderAllOverrideStatuses(performance.now());
   if(log&&priorValue!==val)logChange(`${OVERRIDE_LABELS[id]||id}: ${fmtVal(el,priorValue)} → ${fmtVal(el,val)}`);
@@ -1086,8 +1099,7 @@ for(const id in OVERRIDE_MAP){
     const priorValue=getPath(runner.state,path);
     runner=srSetOverride(runner,path,val,currentReleaseChoice(),performance.now());
     stampInfusionOnsetIfRateChanged(path,priorValue,val);
-    if(path.startsWith("pacer."))stampConsolePacerIntent(); // see the pacer-connection-detection docblock below
-    renderReadout();
+      renderReadout();
     renderOverrideStatus(id,OVERRIDE_MAP[id]);
     // Real user report: "I think I broke the calculation by changing
     // different parameters fast." Root cause wasn't wrong math - reproduced
@@ -1321,7 +1333,6 @@ function togglePacerCapture(){
   if(!runner)return;
   const next=!runner.state.pacer.captured;
   runner=srOverride(runner,{pacer:{captured:next}});
-  stampConsolePacerIntent();
   renderReadout();
   logChange(`Pacer capture ${next?"ON":"OFF"}`);
 }
@@ -1342,60 +1353,26 @@ byId("pacer_mode").innerHTML=PACER_MODES.map(m=>`<option value="${m}">${m==="off
 function setPacerMode(mode){
   if(!runner)return;
   runner=srOverride(runner,{pacer:{mode}});
-  stampConsolePacerIntent();
   renderReadout();
   logChange(`Pacer mode set to ${mode==="off"?"Off":mode}`);
 }
 byId("pacer_mode").addEventListener("change",()=>setPacerMode(byId("pacer_mode").value));
 
 /**
- * Real architecture finding, direct user report ("the pacemaker...doesn't
- * communicate with what the console has programmed"): the pacemaker device
- * page is an OVERLAY CONTRIBUTOR (see its own script comment) - it always
- * pushes ITS OWN real hardware pacer.* state onto the shared session, never
- * the other way around. So whenever a real Pacemaker window is connected,
- * anything this panel sets gets silently overwritten on the next sync tick -
- * confirmed directly, not assumed. Confirmed with the user: rather than
- * making the sync bidirectional (a bigger, riskier change to a device
- * deliberately built for a learner to operate its own physical-feeling
- * dials), this panel detects a live contributor and switches to a clearly-
- * labeled READ-ONLY status view of the real device's actual settings -
- * never silently discards a facilitator's input by pretending to accept it.
- *
- * Detection: there's no per-peer device-type tag on the base sync bus (only
- * Cloud Session's roster has that, and only for cloud-joined sessions) - so
- * this uses the best signal actually available: if state.pacer arrives via
- * onRemoteSnapshot looking different from what THIS panel itself most
- * recently commanded, something else on the bus is actively asserting pacer
- * state, which can only be the pacemaker bridge (the only other pacer.*
- * writer on the bus - see console/IntelliVue/HemoSphere, none of which ever
- * touch pacer.*). Treated as "live" for a short grace window after the most
- * recent such assertion (~3s, comfortably longer than the bridge's own
- * ~140ms push interval), so it reads as continuously live while the real
- * device keeps pushing and reverts to editable soon after it's closed.
+ * Round 3, direct user correction of the earlier design here: this panel
+ * used to auto-detect a real connected Pacemaker device and switch to a
+ * read-only view of its live settings, on the theory that the two would
+ * otherwise fight (the pacemaker bridge always overlays its own real
+ * pacer.* state onto the bus). Confirmed with the user this was solving
+ * the wrong problem: the real device already has its OWN "Pull from
+ * Console" button (a one-time, facilitator-initiated import - see that
+ * device's own script comment) for getting a rhythm/rate starting point
+ * FROM here TO it - it does not need this panel to defer to it, and this
+ * panel does not need to know or care whether a real pacemaker happens to
+ * be open. This panel is simply always its own independent simulated
+ * pacer, exactly like every other override slider in this section - never
+ * gated, never silently deferring to another device.
  */
-let consoleOwnPacerIntent=null; // last {mode,rate,outputMa,sensitivityMv,captured} THIS panel itself set
-let pacerRemoteLiveAt=0;
-function stampConsolePacerIntent(){ if(runner)consoleOwnPacerIntent={...runner.state.pacer}; }
-function notePacerRemoteAssertion(pacer){
-  if(!pacer)return;
-  const matchesOwnIntent=consoleOwnPacerIntent
-    &&pacer.mode===consoleOwnPacerIntent.mode&&pacer.rate===consoleOwnPacerIntent.rate
-    &&pacer.outputMa===consoleOwnPacerIntent.outputMa&&pacer.sensitivityMv===consoleOwnPacerIntent.sensitivityMv;
-  if(!matchesOwnIntent)pacerRemoteLiveAt=performance.now();
-}
-function isPacerRemoteLive(nowMs){ return (nowMs-pacerRemoteLiveAt)<3000; }
-function renderPacerConnectionState(nowMs){
-  if(!runner)return;
-  const live=isPacerRemoteLive(nowMs!=null?nowMs:performance.now());
-  ["pacer_mode","ov_pacer_rate","ov_pacer_output","ov_pacer_sensitivity","assess_pacer_captured"].forEach(id=>{
-    const el=byId(id); if(el)el.disabled=live;
-  });
-  byId("pacerConnHint").textContent=live
-    ?"● A real Pacemaker device is connected - showing its live settings (read-only here). Program the pacer from that device."
-    :"No pacemaker device connected - these fields simulate the pacer directly.";
-  byId("pacerConnHint").classList.toggle("warn-text",live);
-}
 [["ev_arrest","arrestActive","Arrest"],["ev_sternotomy","sternotomyPerformed","Sternotomy"],["ev_ecmo","ecmoCannulated","ECMO cannulated"]].forEach(([id,flag,label])=>{
   byId(id).addEventListener("click",()=>{
     if(!runner)return;
@@ -1560,13 +1537,13 @@ function consoleTick(ts){
     if(runner.pendingAutoAdvance&&ts-lastDecompRenderMs>=1000){lastDecompRenderMs=ts;renderDecompTimer(ts);}
   }
   // Same throttled-independent-redraw pattern as the decomp timer just above,
-  // and for the identical reason: pacer connection liveness needs to EXPIRE
-  // (flip the panel back to editable) even when nothing else changes tick to
-  // tick, so it can't only be driven off `runner!==before`.
-  if(ts-lastPacerConnRenderMs>=1000){lastPacerConnRenderMs=ts;renderPacerConnectionState(ts);renderLauncherConnections(ts);}
+  // and for the identical reason: launcher connection liveness needs to
+  // EXPIRE even when nothing else changes tick to tick, so it can't only be
+  // driven off `runner!==before`.
+  if(ts-lastLauncherConnRenderMs>=1000){lastLauncherConnRenderMs=ts;renderLauncherConnections(ts);}
   requestAnimationFrame(consoleTick);
 }
-let lastPacerConnRenderMs=0;
+let lastLauncherConnRenderMs=0;
 requestAnimationFrame(consoleTick);
 
 /* ---------------- Sync with the monitors ---------------- */
@@ -1618,12 +1595,6 @@ function onRemoteSnapshot(snapshot){
   // whatever IntelliVue's idle local baseline happened to be, a few hundred
   // ms after every console-side change - not visible from a single snapshot
   // read, only from watching it drift back down over repeated samples.
-  // Pacer-connection detection (see the pacer panel's own docblock near
-  // setPacerMode) - noted regardless of engineMode, since the pacemaker
-  // bridge always sends v1-shaped snapshots whether the console itself is
-  // running a v1 or v2 scenario; only full-state ADOPTION stays gated to v1
-  // below, unchanged from the existing v2-in-console fix.
-  if(isValidSnapshot(snapshot)&&snapshot.state)notePacerRemoteAssertion(snapshot.state.pacer);
   if(isValidSnapshot(snapshot)&&runner&&engineMode==="v1"){
     const navChanged=runner.partIndex!==snapshot.partIndex||runner.stepIndex!==snapshot.stepIndex;
     runner={...runner,partIndex:snapshot.partIndex,stepIndex:snapshot.stepIndex,state:snapshot.state,activeRamp:null};
@@ -1946,13 +1917,11 @@ window.ctSharedEngine={
   advanceToStageNow:(stageId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.advanceToStage(runner,stageId,ts);syncControlsFromRunner();render();return runner.state;},
   chooseBranchNow:(destinationId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.chooseBranch(runner,destinationId,ts);syncControlsFromRunner();render();return runner.state;},
   cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
-  // Testing hooks, same rationale as every rAF/setInterval-gated redraw in
-  // this file (see tickNow's own precedent): renderPacerConnectionState's
-  // liveness check and renderRhythmNotes are both normally only re-run from
-  // consoleTick's throttled ~1Hz redraw, which this environment's suspended
-  // requestAnimationFrame never fires under automated testing.
-  renderPacerConnectionStateNow:(ts)=>{renderPacerConnectionState(ts);return{live:isPacerRemoteLive(ts!=null?ts:performance.now())};},
-  noteRemotePacerNow:(pacer)=>notePacerRemoteAssertion(pacer),
+  // Testing hook, same rationale as every rAF/setInterval-gated redraw in
+  // this file (see tickNow's own precedent): renderRhythmNotes is normally
+  // only re-run from consoleTick's throttled ~1Hz redraw, which this
+  // environment's suspended requestAnimationFrame never fires under
+  // automated testing.
   renderRhythmNotesNow:()=>{renderRhythmNotes();return byId("ov_rhythm_notes").textContent;},
   noteDeviceSeenNow:(deviceLabel)=>{noteDeviceSeen({deviceLabel});renderLauncherConnections(performance.now());},
   getLauncherConnections:()=>({...deviceLastSeenAt}),

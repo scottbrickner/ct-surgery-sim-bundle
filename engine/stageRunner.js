@@ -137,10 +137,19 @@ export function checkAutoAdvance(runner, nowMs) {
   if (!runner.pendingAutoAdvance) return runner;
   if (nowMs < runner.pendingAutoAdvance.fireAtMs) return runner;
   if (runner.pendingAutoAdvance.kind === 'custom') {
-    const { patch, label } = runner.pendingAutoAdvance;
+    const { patch, nextStage, label } = runner.pendingAutoAdvance;
+    // Same chaining as scenarioRunner.js's checkAutoAdvance() - kept in sync
+    // by hand since this 'custom' branch is its own copy here (v2's
+    // 'scripted'-equivalent branch below advances the stage graph instead
+    // of calling next(), so this function isn't a pure re-export), but a
+    // facilitator-timed multi-stage clinical change must behave identically
+    // regardless of which engine mode is running.
+    if (nextStage) {
+      return startFacilitatorRamp({ ...runner, pendingAutoAdvance: null }, nextStage, nowMs);
+    }
     return {
       ...runner,
-      state: applyInstant(runner.state, patch),
+      state: patch ? applyInstant(runner.state, patch) : runner.state,
       activeRamp: null,
       pendingAutoAdvance: null,
       events: [...runner.events, { at: `custom-decline:${label || 'outcome'}`, nowMs }],

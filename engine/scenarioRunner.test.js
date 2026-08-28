@@ -354,6 +354,68 @@ test('checkAutoAdvance() applies the custom outcome patch on fire, WITHOUT touch
   assert.equal(r.pendingAutoAdvance, null);
 });
 
+/* ---------------- chained stages (multi-stage clinical change, direct user request) ---------------- */
+
+test('checkAutoAdvance() chains into nextStage instead of applying a flat patch, when both would otherwise apply', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 100 }, durationMinutes: 1, autoAdvanceAfterMinutes: 1,
+    outcomePatch: { rhythm: 'SHOULD_NOT_APPLY' }, // present but must be ignored - nextStage wins
+    nextStage: { target: { hr: 40 }, durationMinutes: 2, label: 'stage 2' },
+    label: 'stage 1',
+  }, 0);
+  r = tick(r, 60000); // stage 1 ramp settles at hr:100
+  assert.equal(r.state.hr, 100);
+  r = checkAutoAdvance(r, 120000); // stage 1's grace elapses - should chain, not apply outcomePatch
+  assert.notEqual(r.state.rhythm, 'SHOULD_NOT_APPLY');
+  assert.ok(r.activeRamp); // stage 2's own ramp is now active...
+  assert.equal(r.activeRamp.target.hr, 40);
+  assert.equal(r.activeRamp.fromState.hr, 100); // ...ramping FROM stage 1's settled value, not from scratch
+  assert.equal(r.pendingAutoAdvance, null); // stage 2 had no autoAdvanceAfterMinutes/outcome of its own - decline-only
+});
+
+test('a fully chained 3-stage decline: stage 1 -> stage 2 -> stage 3\'s final outcome patch, each stage ramping from the previous one\'s settled state', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 100 }, durationMinutes: 1, autoAdvanceAfterMinutes: 1,
+    nextStage: {
+      target: { hr: 60 }, durationMinutes: 1, autoAdvanceAfterMinutes: 1,
+      nextStage: {
+        target: { hr: 30 }, durationMinutes: 1, autoAdvanceAfterMinutes: 1,
+        outcomePatch: { rhythm: 'PEA', flags: { arrestActive: true } }, label: 'final arrest',
+      },
+      label: 'stage 2',
+    },
+    label: 'stage 1',
+  }, 0);
+  r = tick(r, 60000); r = checkAutoAdvance(r, 120000); // stage 1 settles + fires -> stage 2 starts
+  assert.equal(r.activeRamp.target.hr, 60);
+  r = tick(r, 180000); r = checkAutoAdvance(r, 240000); // stage 2 settles + fires -> stage 3 starts
+  assert.equal(r.activeRamp.target.hr, 30);
+  assert.equal(r.state.hr, 60); // stage 2's own settled value, carried forward as stage 3's starting point
+  r = tick(r, 300000); r = checkAutoAdvance(r, 360000); // stage 3 settles + fires -> final outcome patch applies
+  assert.equal(r.state.hr, 30);
+  assert.equal(r.state.rhythm, 'PEA');
+  assert.equal(r.state.flags.arrestActive, true);
+  assert.equal(r.activeRamp, null);
+  assert.equal(r.pendingAutoAdvance, null); // chain ends - no further stage, no further auto-advance
+});
+
+test('cancelAutoAdvance() stops the chain from ever reaching a configured nextStage', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 100 }, durationMinutes: 1, autoAdvanceAfterMinutes: 1,
+    nextStage: { target: { hr: 20 }, durationMinutes: 1, outcomePatch: { rhythm: 'PEA' }, label: 'stage 2' },
+    label: 'stage 1',
+  }, 0);
+  r = tick(r, 60000);
+  r = cancelAutoAdvance(r);
+  r = checkAutoAdvance(r, 999 * 60000);
+  assert.equal(r.pendingAutoAdvance, null);
+  assert.equal(r.state.hr, 100); // stuck at stage 1's settled value - never chained into stage 2
+  assert.notEqual(r.state.rhythm, 'PEA');
+});
+
 test('checkAutoAdvance() for a custom decline is a no-op before the deadline', () => {
   let r = createRunner(fixtureScenario());
   r = startFacilitatorRamp(r, {
@@ -495,6 +557,25 @@ test('startGradualRelease + tick ramps the overridden value back toward the pre-
   assert.equal(r.state.hr, 90);
   assert.equal(isOverridden(r, 'hr'), false);
   assert.equal(r.releaseRamps.hr, undefined);
+});
+
+test('setOverrideWithRelease called repeatedly on an already-overridden path (one continuous slider drag) keeps the ORIGINAL priorValue, not the last drag frame', () => {
+  // Regression test for a real bug: the console's slider fires setOverrideWithRelease
+  // on every 'input' event during a single drag. The old implementation re-read
+  // priorValue from runner.state each call - by the second call that was already
+  // the FIRST call's override value, not the true pre-override baseline. So
+  // "Release Now" only ever snapped back by one drag frame instead of to where
+  // the field actually started, which is what a user reported as the release
+  // buttons "don't seem to work or make sense."
+  let r = createRunner(fixtureScenario());
+  r = setOverrideWithRelease(r, 'hr', 100, {}, 0); // drag frame 1: 90 -> 100
+  r = setOverrideWithRelease(r, 'hr', 110, {}, 0); // drag frame 2: 100 -> 110
+  r = setOverrideWithRelease(r, 'hr', 120, {}, 0); // drag frame 3 (drag released here): 110 -> 120
+  assert.equal(r.state.hr, 120);
+  assert.equal(r.overrides.hr.priorValue, 90); // still the ORIGINAL value, not 110
+
+  r = releaseOverrideNow(r, 'hr');
+  assert.equal(r.state.hr, 90); // back to the true starting value, not 110
 });
 
 test('starting a fresh override on a path cancels an in-flight gradual release for that same path', () => {
