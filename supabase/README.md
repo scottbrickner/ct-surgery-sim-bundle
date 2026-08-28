@@ -193,12 +193,17 @@ redirect" design decision (see the top of this file) doubly correct: the
 link was never just unreliable inside an iframe, it was actively
 self-defeating outside one too.
 
-**Still pending as of this note**: end-to-end confirmation that a code
-from the link-free template actually verifies - blocked on the built-in
-sender's ~2-sends/hour rate limit from the two attempts already made
-today. Update this note once confirmed either way.
+**CONFIRMED working, same day.** After the rate limit reset, the user
+applied the link-free template and signed in successfully on the first
+try - screen showed "Signed in as scott.brickner2@med.usc.edu." **Builder
+sign-in is fully functional end-to-end as of this note** - the whole saga
+(custom SMTP silently not delivering → built-in sender missing `{{
+.Token }}` → the 6-digit field truncating a real 8-digit code → the magic
+link's own auto-scanned token starving the code before it could be used)
+is closed. Nothing left to troubleshoot here unless a new symptom shows up.
 
-Things worth trying if you pick this back up:
+~~Things worth trying if you pick this back up:~~ *(left below for
+reference/history now that the issue is closed, not as an active TODO)*
 - Send the drafted Resend support request (see above) and act on their
   answer - this is the most likely fastest path to a real diagnosis at
   this point, now that credential/port/rate-limit/template have all been
