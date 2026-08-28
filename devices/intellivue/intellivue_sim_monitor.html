@@ -797,7 +797,17 @@ function flushVal(line){const rt=tAbs-state.flush.t0;const p=artPressure(line);c
 function sampleChannel(b){const t=b.cfg.type;
   if(t==="ecg")return b.cy-ecgValue()*b.h*0.42;
   if(t==="resp"){const v=Math.sin(2*Math.PI*respPhase);return b.cy-(state.rr<1?0:v)*b.h*0.34;}
-  if(t==="pleth"){if(!perfusing())return b.cy-(Math.random()-0.5)*0.04*b.h;const{pe}=pulseInfo();
+  // Real pre-existing gap fixed alongside the new pulseSignal override
+  // (direct user request - see engine/clinical/pulsatility.js's isPulsatile
+  // docblock): this trace only ever checked !perfusing() - even Phase 6's
+  // OWN perfusing-but-nonpulsatile ECMO case still rendered a full
+  // pulsatile pleth waveform, which a real pulse oximeter never would (no
+  // pulse to detect = no pulsatile trace, regardless of why). Now also
+  // flat-with-noise (same visual as true arrest - from the SENSOR's
+  // perspective both look identical: "no pulsatile signal detected") for
+  // ANY non-pulsatile case, whether that's ECMO or a facilitator-forced
+  // "poor peripheral perfusion" teaching scenario via pulseSignal.
+  if(t==="pleth"){if(!perfusing()||!pulsatile())return b.cy-(Math.random()-0.5)*0.04*b.h;const{pe}=pulseInfo();
     const rm=1-0.08*Math.sin(2*Math.PI*respPhase);return b.top+b.h*0.88-plethN(pe)*rm*b.h*0.72;}
   if(t==="co2"){if(state.rr<1)return b.top+b.h*0.9;return mapPress(b,capno(respPhase,state.etco2));}
   if(["art","art2","pap","cvp","icp"].includes(t)){
@@ -892,7 +902,13 @@ function updateNumerics(){tickDisp(performance.now());if(state.trans){syncContro
   const spo2NC=engineMonitored&&engineMonitored.spo2===false;
   const rrNC=engineMonitored&&engineMonitored.rr===false;
   byId("v_hr").textContent=hrNC?"--":((state.rhythm==="vfib"||state.rhythm==="asystole")?"--":R(disp.hr));
-  byId("v_spo2").textContent=spo2NC?"--":(perf?R(disp.spo2):"--");byId("s_perf").textContent=(!spo2NC&&perf)?clamp((disp.spo2-80)/8,0.3,9).toFixed(1):"0.0";
+  // Perfusion index (s_perf) is itself a measure of the PULSATILE signal
+  // strength (a real pulse ox's Perf% is derived from the AC/DC pleth
+  // ratio) - correctly reads ~0 whenever pulsatile() is false, same as the
+  // pleth waveform itself, independent of whether the SpO2 NUMBER above is
+  // still showing a real facilitator-set value (see pulsatile()'s own
+  // "poor peripheral perfusion" use case in the pleth waveform code).
+  byId("v_spo2").textContent=spo2NC?"--":(perf?R(disp.spo2):"--");byId("s_perf").textContent=(!spo2NC&&perf&&pulsatile())?clamp((disp.spo2-80)/8,0.3,9).toFixed(1):"0.0";
   byId("v_rr").textContent=rrNC?"--":(state.rr<1?"0":R(disp.rr));
   byId("v_nbp").textContent=state.nbpSys+"/"+state.nbpDia;byId("v_nbpmap").textContent=R((state.nbpSys+2*state.nbpDia)/3);byId("nbp_time").textContent=state.nbpTime;
   // Phase 6: !perfusing() replaces the direct vfib/asystole check here too -

@@ -374,6 +374,21 @@
         <div class="ov-status" id="ov_hpi_status" hidden></div>
         <label class="row">SpO₂ <input type="range" id="ov_spo2" min="0" max="100" value="98"><span class="val" id="ov_spo2_v">98</span></label>
         <div class="ov-status" id="ov_spo2_status" hidden></div>
+        <!-- Direct user request: "if I wanted someone to have a pulse ox
+             that is non pulsatile, I should be able to show that... while
+             at the same time generating whatever physical number I want to
+             show up." Independent of the SpO2 number above (unrestricted
+             already) AND independent of Monitored (connected vs not) - see
+             engine/clinical/pulsatility.js's isPulsatile()/pulseSignal
+             docblock for the full reasoning. Auto = matches actual flow
+             state (native/CPR/ECMO), unchanged default behavior. -->
+        <div class="row" style="margin-top:0"><label>Pulse signal</label></div>
+        <div class="mode-pair">
+          <button class="act on" id="pulse_auto" type="button">Auto</button>
+          <button class="act" id="pulse_pulsatile" type="button">Pulsatile</button>
+          <button class="act" id="pulse_nonpulsatile" type="button">Non-pulsatile</button>
+        </div>
+        <div class="hint" id="pulseSignalHint" style="margin-top:0">Auto - pulsatile whenever there's real native or CPR flow, matching actual physiology.</div>
         <label class="row">RR <input type="range" id="ov_rr" min="0" max="50" value="14"><span class="val" id="ov_rr_v">14</span></label>
         <div class="ov-status" id="ov_rr_status" hidden></div>
         <label class="row">Temp <input type="range" id="ov_temp" min="15" max="44" step="0.1" value="37.0"><span class="val" id="ov_temp_v">37.0</span></label>
@@ -971,7 +986,12 @@ function renderReadout(){
   const statusEl=byId("perfusionStatus");
   if(statusEl){
     statusEl.className="pill "+(!perf?"critical":puls?"good":"warn");
-    statusEl.textContent=!perf?"Not perfusing (arrest)":puls?"Perfusing · pulsatile":"Perfusing · nonpulsatile (ECMO)";
+    // "(ECMO)" only when that's actually why - the new pulseSignal override
+    // (direct user request, see pulsatility.js's isPulsatile docblock) can
+    // ALSO produce perfusing-but-nonpulsatile with no ECMO involved at all
+    // (e.g. a facilitator-authored "poor peripheral perfusion" teaching
+    // case), and labeling that "(ECMO)" would be actively wrong.
+    statusEl.textContent=!perf?"Not perfusing (arrest)":puls?"Perfusing · pulsatile":`Perfusing · nonpulsatile${s.flags.ecmoCannulated?" (ECMO)":""}`;
   }
   const cprEl=byId("cprStatus");
   if(cprEl)cprEl.textContent=s.circulation.cpr.active?("CPR active — "+s.circulation.cpr.quality+" quality"):"CPR not active";
@@ -1226,6 +1246,9 @@ function syncControlsFromRunner(){
   // a stage that unplugs a sensor) and on a remote snapshot arriving from
   // another facilitator tab, not just this tab's own clicks.
   for(const group in MONITOR_ANCHOR_ID)byId(`mon_${group}`).checked=isMonitored(s,group);
+  const pulseMode=s.pulseSignal||"auto";
+  ["auto","pulsatile","nonpulsatile"].forEach(m=>byId(`pulse_${m}`).classList.toggle("on",m===pulseMode));
+  byId("pulseSignalHint").textContent=PULSE_SIGNAL_HINTS[pulseMode];
   renderAllOverrideStatuses(performance.now());
 }
 
@@ -1297,6 +1320,30 @@ function setMapMode(mode){
 }
 byId("map_mode_manual").addEventListener("click",()=>setMapMode("manual"));
 byId("map_mode_calc").addEventListener("click",()=>setMapMode("calculated"));
+
+/**
+ * Pulse signal (Auto/Pulsatile/Non-pulsatile), direct user request - see
+ * engine/clinical/pulsatility.js's isPulsatile()/pulseSignal docblock for
+ * the full reasoning. A discrete field like rhythm/pacer-mode/MAP-source -
+ * srOverride() (applyFacilitatorOverride), not srSetOverride() - "which
+ * mode" has no hold/release semantics of its own.
+ */
+const PULSE_SIGNAL_HINTS={
+  auto:"Auto - pulsatile whenever there's real native or CPR flow, matching actual physiology.",
+  pulsatile:"Forced Pulsatile - the pleth/ART waveform shows a real pulse regardless of underlying flow (e.g. an unusual teaching case). Perfusion status itself is untouched.",
+  nonpulsatile:"Forced Non-pulsatile - the pleth/ART waveform shows a flat/searching signal (poor peripheral perfusion, motion, a bad probe site) while the SpO2/BP NUMBER stays exactly what you've set. Does not mean the patient has arrested - perfusion status itself is untouched.",
+};
+function setPulseSignal(mode){
+  if(!runner)return;
+  runner=srOverride(runner,{pulseSignal:mode});
+  ["auto","pulsatile","nonpulsatile"].forEach(m=>byId(`pulse_${m}`).classList.toggle("on",m===mode));
+  byId("pulseSignalHint").textContent=PULSE_SIGNAL_HINTS[mode];
+  renderReadout();
+  logChange(`Pulse signal set to ${mode==="auto"?"Auto":mode==="pulsatile"?"Forced Pulsatile":"Forced Non-pulsatile"}`);
+}
+byId("pulse_auto").addEventListener("click",()=>setPulseSignal("auto"));
+byId("pulse_pulsatile").addEventListener("click",()=>setPulseSignal("pulsatile"));
+byId("pulse_nonpulsatile").addEventListener("click",()=>setPulseSignal("nonpulsatile"));
 
 /**
  * Renders the small passive dot+text badge beneath one slider - a glance-only

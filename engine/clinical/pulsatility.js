@@ -55,8 +55,34 @@ export function isPerfusing(state) {
   return isNativeFlowPresent(state) || isCPRFlowPresent(state) || isSupportFlowPresent(state);
 }
 
-/** Pulsatile flow specifically (a palpable pulse) - deliberately excludes support-only flow. Full ECMO support perfuses without producing a pulse; that's the entire clinical point of the perfusing/pulsatile split. */
+/**
+ * Pulsatile flow specifically (a palpable pulse / a valid pleth waveform at
+ * the sensor) - deliberately excludes support-only flow. Full ECMO support
+ * perfuses without producing a pulse; that's the entire clinical point of
+ * the perfusing/pulsatile split.
+ *
+ * `state.pulseSignal` (default `'auto'`) is a direct facilitator override,
+ * a THIRD independent axis on top of perfusing/pulsatile - separate from
+ * both. Direct user request: "if I wanted someone to have a pulse ox that
+ * is non pulsatile, I should be able to show that... while at the same
+ * time generating whatever physical number I want to show up, which would
+ * be indicative of someone with poor perfusion." A real pulse ox can lose
+ * its pulsatile signal (severe peripheral vasoconstriction, motion, a poor
+ * probe site) while the patient is genuinely still perfusing centrally -
+ * a case this file's existing four-flow-source model has no way to
+ * represent, since every non-pulsatile case it derives (arrest, PEA, VF)
+ * also isn't perfusing, and the one perfusing-but-nonpulsatile case it DOES
+ * derive (ECMO) requires actually cannulating the patient. `'auto'`
+ * preserves the exact pre-existing derivation below unchanged; `'pulsatile'`/
+ * `'nonpulsatile'` force the answer regardless of flow source, for
+ * authoring this exact teaching scenario without needing a matching
+ * (and possibly unwanted) change to rhythm/CPR/ECMO state. Deliberately
+ * does NOT touch isPerfusing() - "poor perfusion" here is a pulsatility/
+ * signal-quality story, not a claim the patient has actually arrested.
+ */
 export function isPulsatile(state) {
+  if (state.pulseSignal === 'pulsatile') return true;
+  if (state.pulseSignal === 'nonpulsatile') return false;
   return isNativeFlowPresent(state) || isCPRFlowPresent(state);
 }
 

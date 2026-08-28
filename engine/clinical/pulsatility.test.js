@@ -122,6 +122,32 @@ test('CPR flow requires BOTH active:true and a quality set - active alone (quali
   assert.equal(isPerfusing(s), false);
 });
 
+/* ---------------- pulseSignal override: a facilitator-forced pulsatile/nonpulsatile signal, independent of flow source ---------------- */
+
+test('pulseSignal defaults to "auto" and does not change isPulsatile\'s existing flow-derived answer', () => {
+  assert.equal(organizedState().pulseSignal, 'auto');
+  assert.equal(isPulsatile(organizedState()), true);
+  assert.equal(isPulsatile(arrestState()), false);
+});
+
+test('pulseSignal:"nonpulsatile" forces isPulsatile false on an organized, perfusing patient - the exact "poor peripheral perfusion" teaching case with no ECMO/CPR/rhythm change needed', () => {
+  const s = { ...organizedState(), pulseSignal: 'nonpulsatile' };
+  assert.equal(isPerfusing(s), true); // NOT touched - this is a signal-quality story, not an arrest
+  assert.equal(isPulsatile(s), false);
+});
+
+test('pulseSignal:"pulsatile" forces isPulsatile true even during a true arrest (PEA) - an unusual authoring choice, but the override is unconditional by design, matching every other facilitator override in this project', () => {
+  const s = { ...arrestState(), pulseSignal: 'pulsatile' };
+  assert.equal(isPulsatile(s), true);
+  assert.equal(isPerfusing(s), false); // still correctly not perfusing - the override only touches isPulsatile()
+});
+
+test('pulseSignal override composes correctly with the existing ECMO-perfusing-nonpulsatile case: forcing "pulsatile" during ECMO support flips it to pulsatile', () => {
+  const s = { ...withECMO(arrestState(), true), pulseSignal: 'pulsatile' };
+  assert.equal(isPerfusing(s), true);
+  assert.equal(isPulsatile(s), true); // without the override this would be false (ECMO's whole point)
+});
+
 /* ---------------- tickCirculation: edge detection + snapshot bookkeeping ---------------- */
 
 test('tickCirculation: transitioning from perfusing to not-perfusing snapshots bp+etco2+co+scvo2 and stamps the minute', () => {

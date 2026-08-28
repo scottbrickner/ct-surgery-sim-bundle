@@ -120,6 +120,14 @@ const BASE_STATE = Object.freeze({
     hr: true, bp: true, pa: true, cvp: true, co: true, svv: true, ppv: true,
     scvo2: true, spo2: true, rr: true, temp: true, icp: true,
   },
+  // Direct user request: "if I wanted someone to have a pulse ox that is
+  // non pulsatile, I should be able to show that... while at the same time
+  // generating whatever physical number I want to show up." A facilitator
+  // override on top of engine/clinical/pulsatility.js's isPulsatile() -
+  // see that function's own docblock for the full reasoning. 'auto'
+  // (default) preserves the existing flow-source-derived answer exactly,
+  // so every pre-existing scenario is unaffected.
+  pulseSignal: 'auto', // 'auto' | 'pulsatile' | 'nonpulsatile'
 });
 
 // Which state paths each togglable monitoring group covers - e.g. the "bp"
