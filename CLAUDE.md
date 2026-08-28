@@ -342,6 +342,16 @@ Linked from the homepage's Documentation section (a new third card alongside the
 
 254 tests passing, unchanged - this is a new documentation artifact with no application code touched.
 
+### Round 3 continued: a real `stageRunner.js` engine bug found by actually dogfooding the authoring prompt
+
+**Direct follow-up: "try it out with a real scenario."** Rather than re-describing the prompt, actually ran it: authored a full, clinically real scenario (`postcabg-progressive-avblock` - a CABG patient developing progressive AV block over 1st-degree → Mobitz I → complete heart block, with a facilitator-judged branch on whether temporary pacing was initiated in time) and drove it through the REAL engine, not just `validateScenarioV2()`.
+
+**Found and fixed a genuine `engine/stageRunner.js` bug this way, invisible to schema validation and never caught by the existing test suite**: a stage combining `target` (a ramp) with `set` (an instant patch on a field NOT also in `target` - here, a rhythm change alongside an HR ramp) displayed correctly for exactly one instant after `advanceToStage()`, then silently reverted the `set`-only field the moment the first `tick()` ran, and every tick after. Root cause: `advanceToStage()` captured `activeRamp.fromState` (the value `tick()`'s `rampState()` reconstructs the ENTIRE state from, every call) *before* `set` was merged in, not after - so `rampState()` kept faithfully rebuilding from the pre-`set` snapshot, discarding anything `set` touched outside the ramped fields. **This exact combination had no prior coverage anywhere in this project** - every existing v2 test/scenario used `target` and `set` on separate, non-overlapping stages, so the bug had been sitting there since `stageRunner.js` was built without ever firing.
+
+Fixed by applying `set` before capturing `activeRamp.fromState`, not after (`engine/stageRunner.js`). Verified two ways before calling it done: (1) drove the fixed scenario through the real engine end-to-end by hand (`createGraphRunner`/`advanceToStage`/`tick`/`checkAutoAdvance`/`chooseBranch`) confirming the rhythm string now survives every tick through all 3 deterioration stages and both branch endpoints; (2) added a real regression test (`engine/stageRunner.test.js`) and confirmed it actually fails against the pre-fix code via `git stash` (not just that it passes post-fix, which alone wouldn't prove the test catches anything).
+
+255 tests passing (was 254) - 1 new regression test for this exact bug shape. The worked scenario itself (`postcabg-progressive-avblock`) is fully valid and engine-tested but not yet added to `scenarios/` as a shipped asset - that's a separate, later decision from fixing the engine bug it surfaced.
+
 ## Gotchas carried over from source projects
 
 - The pacemaker-sim's original references folder had a literal trailing `: ` in its name (a shell-unfriendly artifact) — not reproduced here; this repo's `docs/references/` is a clean name.

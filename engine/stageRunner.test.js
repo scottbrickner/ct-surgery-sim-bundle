@@ -31,6 +31,13 @@ function fixtureScenario() {
       { id: 'stabilized', type: 'intervention-response', set: { hr: 85, bp: { sbp: 105, dbp: 68 } } },
       { id: 'arrest', type: 'arrest', set: { rhythm: 'PEA', flags: { arrestActive: true } } },
       { id: 'debrief', type: 'discussion', prompt: 'What did you notice?' },
+      // A stage combining `target` (a ramp) with `set` (an instant patch on
+      // a DIFFERENT field than what's ramping) - found via a real worked
+      // scenario (a post-CABG AV-block case) where `set`'s rhythm change
+      // was silently discarded the moment the first tick() ran, because
+      // activeRamp.fromState was captured BEFORE `set` merged in, and
+      // rampState() reconstructs state fresh from fromState every call.
+      { id: 'declineWithRhythmChange', type: 'deterioration', target: { hr: 70 }, transitionDuration: 5, set: { rhythm: 'First-Degree AV Block' } },
     ],
   };
 }
@@ -215,4 +222,16 @@ test('getRampProgress/getAutoAdvanceCountdown report correctly on a graph runner
   assert.deepEqual(getRampProgress(r, 150000), { elapsedMs: 150000, durationMs: 300000, fraction: 0.5, remainingMs: 150000 });
   r = tick(r, 300000);
   assert.deepEqual(getAutoAdvanceCountdown(r, 300000), { remainingMs: 2 * 60000, label: null });
+});
+
+test('a stage combining target (ramp) and set (instant patch on a different field) keeps the set field through tick(), not just for the instant between advanceToStage and the first tick', () => {
+  let r = createGraphRunner(fixtureScenario());
+  r = advanceToStage(r, 'declineWithRhythmChange', 0);
+  assert.equal(r.state.rhythm, 'First-Degree AV Block'); // applied immediately, as documented
+  r = tick(r, 150000); // halfway through the 5-minute ramp
+  assert.equal(r.state.rhythm, 'First-Degree AV Block'); // must NOT have reverted mid-ramp
+  assert.equal(r.state.hr, 90 - (90 - 70) * 0.5); // hr is genuinely mid-ramp
+  r = tick(r, 300000); // ramp fully settled
+  assert.equal(r.state.rhythm, 'First-Degree AV Block'); // still correct after settling
+  assert.equal(r.state.hr, 70);
 });

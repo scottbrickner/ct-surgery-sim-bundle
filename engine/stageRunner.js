@@ -76,9 +76,25 @@ export function advanceToStage(runner, stageId, nowMs) {
 
   if (stage.target) {
     const durationMs = (stage.transitionDuration || 0) * 60000;
-    activeRamp = { fromState: settledState, target: stage.target, startedAtMs: nowMs, durationMs };
-    // state stays at settledState until tick() progresses it, same as v1.
-    if (stage.set) state = applyInstant(settledState, stage.set); // a ramp stage may ALSO carry a `set` applied immediately (e.g. a flag flip alongside the ramp)
+    // Real bug found and fixed via a live worked-example scenario (a
+    // post-CABG progressive-AV-block case combining a `set` rhythm change
+    // with a `target` HR ramp on the same stage - exactly the documented
+    // "a ramp stage may ALSO carry a `set`" case just below): `set` MUST be
+    // applied BEFORE activeRamp.fromState is captured, not after. tick()'s
+    // ramp math (rampState(), see physiology.js) reconstructs the ENTIRE
+    // state fresh from `fromState` every call, only overwriting whatever
+    // fields are actually listed in `target` - any field `set` touched that
+    // ISN'T also in `target` (rhythm, in this case) was silently discarded
+    // the instant the very first tick() ran, even though it displayed
+    // correctly for the one instant between advanceToStage() and the next
+    // tick(). Confirmed by directly driving the scenario through the real
+    // engine: rhythm showed the correct blocked rhythm immediately, then
+    // reverted to the stage's OWN starting rhythm every time the ramp
+    // settled - never caught before because no prior stage in this project
+    // combined a rhythm `set` with a numeric `target` ramp on one stage.
+    if (stage.set) state = applyInstant(settledState, stage.set); // a ramp stage may ALSO carry a `set` applied immediately (e.g. a flag flip, or a rhythm change, alongside the ramp)
+    activeRamp = { fromState: state, target: stage.target, startedAtMs: nowMs, durationMs };
+    // state stays at this (post-set) value until tick() progresses the ramp fields on top of it.
     if (typeof stage.holdDuration === 'number' && stage.destinationIfUnaddressed) {
       pendingAutoAdvance = { fireAtMs: nowMs + durationMs + stage.holdDuration * 60000, kind: 'stage', destinationId: stage.destinationIfUnaddressed };
     }
