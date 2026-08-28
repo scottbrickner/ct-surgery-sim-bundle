@@ -352,6 +352,8 @@ Fixed by applying `set` before capturing `activeRamp.fromState`, not after (`eng
 
 255 tests passing (was 254) - 1 new regression test for this exact bug shape. The worked scenario itself (`postcabg-progressive-avblock`) is fully valid and engine-tested but not yet added to `scenarios/` as a shipped asset - that's a separate, later decision from fixing the engine bug it surfaced.
 
+**Shipped as a real asset, direct follow-up ("yes, add it to scenarios/")**: `scenarios/postcabg-progressive-avblock.json` is now the **first real v2 scenario in the repo** (everything else that ships is still v1 - the flagship - or the Builder's own in-memory drafts). `scenarios/postcabg-progressive-avblock.test.js` mirrors `ct-surgery-flagship.test.js`'s own established convention (end-to-end, against the real specific numbers this JSON authors, not just abstract runner mechanics) - re-validates against the real `validateScenarioV2()`, and specifically re-asserts the exact bug this scenario found stays fixed (rhythm surviving a ramp settling), plus both branch endpoints. 7 new tests, 262 passing total (was 255). No new UI wiring needed or expected - this system has no "browse local scenario files" mechanism for any scenario (the flagship is hardcoded, Cloud-published scenarios come from Supabase, everything else is Import JSON) - this file is discoverable/usable exactly the same way any Builder-authored scenario already is.
+
 ## Gotchas carried over from source projects
 
 - The pacemaker-sim's original references folder had a literal trailing `: ` in its name (a shell-unfriendly artifact) — not reproduced here; this repo's `docs/references/` is a clean name.

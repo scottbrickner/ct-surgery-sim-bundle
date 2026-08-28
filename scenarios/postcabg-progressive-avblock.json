@@ -1,0 +1,103 @@
+{
+  "schemaVersion": "2.0.0",
+  "id": "postcabg-progressive-avblock",
+  "title": "Post-CABG Progressive AV Block — Temporary Pacing Recognition",
+  "population": "cardiothoracic-surgery",
+  "patient": {
+    "name": "John Alvarez",
+    "age": 68,
+    "sex": "M",
+    "history": ["Coronary artery disease", "Hypertension", "Prior inferior MI"],
+    "procedure": "POD1 s/p CABGx3 (LIMA-LAD, SVG-OM, SVG-PDA) — epicardial pacing wires placed intraoperatively, atrial and ventricular"
+  },
+  "baseline": {
+    "hr": 82,
+    "bp": { "sbp": 118, "dbp": 68, "map": 82 },
+    "rhythm": "Sinus Rhythm",
+    "spo2": 97,
+    "rr": 16,
+    "temp": 36.8,
+    "chestTubes": { "rMediastinal": 20 },
+    "pacer": { "mode": "off", "rate": 0, "outputMa": 0, "sensitivityMv": 0, "captured": false }
+  },
+  "startStageId": "stage1-baseline",
+  "stages": [
+    {
+      "id": "stage1-baseline",
+      "label": "Baseline — POD1, stable sinus rhythm",
+      "type": "baseline",
+      "facilitatorNotes": "Epicardial wires are in place but not connected to a pacer. Nothing abnormal yet — this is the pre-deterioration baseline a learner should compare everything against."
+    },
+    {
+      "id": "stage2-first-degree",
+      "label": "Stage II — Emerging 1° AV Block",
+      "type": "deterioration",
+      "target": { "hr": 74 },
+      "transitionDuration": 10,
+      "set": { "rhythm": "First-Degree AV Block" },
+      "holdDuration": 5,
+      "destinationIfUnaddressed": "stage3-mobitz1",
+      "advanceMode": "auto",
+      "debriefMarkers": ["noted-pr-prolongation"],
+      "facilitatorNotes": "PR prolongation on the strip. Usually asymptomatic and easy to miss if the learner isn't measuring intervals — a good early prompt: 'has anyone looked at the PR interval today?'"
+    },
+    {
+      "id": "stage3-mobitz1",
+      "label": "Stage III — Progression to Mobitz I (Wenckebach)",
+      "type": "deterioration",
+      "target": { "hr": 65 },
+      "transitionDuration": 10,
+      "set": { "rhythm": "Second-Degree AV Block (Type I)" },
+      "holdDuration": 5,
+      "destinationIfUnaddressed": "stage4-complete-heart-block",
+      "advanceMode": "auto",
+      "debriefMarkers": ["recognized-wenckebach-pattern"],
+      "facilitatorNotes": "Progressively lengthening PR then a dropped beat. This is the point a learner should be escalating — notifying the surgical team and confirming the epicardial wires are readily connectable, not waiting for it to worsen further."
+    },
+    {
+      "id": "stage4-complete-heart-block",
+      "label": "Stage IV — Complete Heart Block",
+      "type": "critical",
+      "target": { "hr": 38, "bp": { "sbp": 88, "dbp": 50, "map": 63 } },
+      "transitionDuration": 5,
+      "set": { "rhythm": "Third-Degree AV Block" },
+      "advanceMode": "manual",
+      "debriefMarkers": ["recognized-complete-heart-block", "called-for-pacing"],
+      "successCriteria": [
+        { "id": "recognized-chb", "label": "Correctly identified complete heart block (AV dissociation) on the strip" },
+        { "id": "initiated-pacing", "label": "Connected epicardial wires to the temporary pacer and initiated pacing" }
+      ],
+      "facilitatorNotes": "Symptomatic bradycardia with a real hemodynamic hit (MAP 63). Watch what the learner actually does here — this stage doesn't auto-advance; move to the branch stage once you've seen enough to judge the response, whether that's fast or slow."
+    },
+    {
+      "id": "stage5-branch",
+      "label": "Facilitator checkpoint — was pacing initiated appropriately?",
+      "type": "branch",
+      "branches": [
+        { "label": "Learner initiated pacing promptly, capture confirmed", "destinationId": "stage6a-paced-stable" },
+        { "label": "Pacing delayed or capture not achieved", "destinationId": "stage6b-decompensation" }
+      ],
+      "facilitatorNotes": "Pick based on what actually happened at the bedside — this isn't timed, it's your call as the facilitator."
+    },
+    {
+      "id": "stage6a-paced-stable",
+      "label": "Paced rhythm — capture confirmed, hemodynamics restored",
+      "type": "intervention-response",
+      "set": {
+        "bp": { "sbp": 110, "dbp": 65, "map": 80 },
+        "pacer": { "mode": "VVI", "rate": 70, "outputMa": 10, "sensitivityMv": 2, "captured": true }
+      },
+      "debriefMarkers": ["achieved-capture", "restored-perfusion"],
+      "facilitatorNotes": "Effective rhythm now reads 'Paced (VVI)' automatically once captured — the underlying intrinsic conduction problem hasn't gone away, pacing is just overriding it. Good debrief point: what would happen if the learner turned the pacer off right now?"
+    },
+    {
+      "id": "stage6b-decompensation",
+      "label": "Unaddressed — symptomatic bradycardia progressing",
+      "type": "deterioration",
+      "target": { "bp": { "sbp": 70, "dbp": 40, "map": 50 } },
+      "transitionDuration": 4,
+      "debriefMarkers": ["missed-pacing-window"],
+      "facilitatorNotes": "Debrief on recognizing the AV block progression EARLY (stages II-III) and having the pacer at bedside ready, rather than reacting only once complete heart block is symptomatic."
+    }
+  ]
+}
