@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import { createState } from '../physiology.js';
 import { createRunner, advanceSimClock } from '../scenarioRunner.js';
 import {
-  administerPush, canAdministerPush, getPushTotalDoseMg, getPushDoseCount,
+  administerPush, canAdministerPush, getPushTotalDoseMg, getPushTotalDoseAmount, getPushDoseCount,
   getPushEffectMultiplier, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
+  getMedicatedPASys, getMedicatedPADia,
   setInfusionRate, getInfusionOnsetMultiplier, getMedicationDelta,
 } from './pharmacology.js';
 import { PUSH_DRUGS, INFUSIONS } from './formulary.js';
@@ -217,4 +218,79 @@ test('getMedicatedSVR gates its medication delta on isPerfusing, same reasoning 
 test('getMedicatedCO (Phase 7: now composes on getEffectiveCO) correctly reads 0 during true arrest, not the stale raw authored value - this is the exact gap Phase 7 closed, was still returning 4 (the raw state.co) before that fix', () => {
   let s = setInfusionRate(createState({ rhythm: 'PEA', co: 4 }), 'milrinone', INFUSIONS.milrinone.maxRateMcgPerKgPerMin, 0);
   assert.equal(getMedicatedCO(s, INFUSIONS.milrinone.onsetMinutes), 0);
+});
+
+/* ---------------- Round 4: fluids/blood products/electrolytes (mL/units-dosed push items) ---------------- */
+
+test('administerPush records an mL-dosed item (fluid bolus) under doseMl, not doseMg - and getPushTotalDoseAmount sums it correctly', () => {
+  const s = administerPush(createState(), 'ns_bolus', 0);
+  assert.equal(s.medications.pushes[0].doseMl, 500);
+  assert.equal(s.medications.pushes[0].doseMg, undefined);
+  assert.equal(getPushTotalDoseAmount(s, 'ns_bolus'), 500);
+});
+
+test('administerPush records a units-dosed item (blood product) under doseUnits, including the pooled cryoprecipitate dose (10)', () => {
+  const s1 = administerPush(createState(), 'prbc', 0);
+  assert.equal(s1.medications.pushes[0].doseUnits, 1);
+  const s2 = administerPush(createState(), 'cryo', 0);
+  assert.equal(s2.medications.pushes[0].doseUnits, 10);
+});
+
+test('getPushTotalDoseAmount still works correctly for existing mg-dosed drugs, matching getPushTotalDoseMg exactly', () => {
+  const s = administerPush(administerPush(createState(), 'atropine', 0), 'atropine', 4);
+  assert.equal(getPushTotalDoseAmount(s, 'atropine'), getPushTotalDoseMg(s, 'atropine'));
+  assert.equal(getPushTotalDoseAmount(s, 'atropine'), 2);
+});
+
+test('a fluid bolus (NS) has no maxDoses/maxTotalDose/repeatInterval guard - unrestricted, can be given repeatedly back to back, matching this project\'s "no limits" decision for a massive-transfusion/resuscitation teaching case', () => {
+  let s = createState();
+  for (let i = 0; i < 5; i++) {
+    const guard = canAdministerPush(s, 'ns_bolus', i);
+    assert.equal(guard.allowed, true);
+    s = administerPush(s, 'ns_bolus', i);
+  }
+  assert.equal(getPushTotalDoseAmount(s, 'ns_bolus'), 2500);
+});
+
+test('real bug fixed: amiodarone (bolusDoseMg, not doseMg/firstDoseMg) now correctly records its dose instead of doseMg:undefined', () => {
+  const s = administerPush(createState(), 'amiodarone', 0);
+  assert.equal(s.medications.pushes[0].doseMg, 150);
+});
+
+test('calcium chloride raises both MAP and CO at peak (a real, transient inotropic/pressor bump), same rise-then-decay shape as every other push drug', () => {
+  const s = administerPush(createState({ bp: { map: 65 }, co: 4 }), 'calcium_chloride', 0);
+  const atPeak = 5; // calcium_chloride.peakMinutes
+  assert.equal(getMedicatedMAP(s, atPeak), 65 + 5);
+  assert.equal(getMedicatedCO(s, atPeak), 4 + 0.3);
+});
+
+/* ---------------- Round 4: antiarrhythmic infusions + inhaled pulmonary vasodilators ---------------- */
+
+test('lidocaine and procainamide infusions each lower MAP at max rate/full onset (their real listed adverse effect) - closes the "remaining antiarrhythmics not modeled" gap', () => {
+  let s = setInfusionRate(createState({ bp: { map: 80 } }), 'lidocaine', INFUSIONS.lidocaine.maxRateMgPerMin, 0);
+  assert.equal(getMedicatedMAP(s, INFUSIONS.lidocaine.onsetMinutes), 80 - 5);
+  s = setInfusionRate(createState({ bp: { map: 80 } }), 'procainamide', INFUSIONS.procainamide.maxRateMgPerMin, 0);
+  assert.equal(getMedicatedMAP(s, INFUSIONS.procainamide.onsetMinutes), 80 - 6);
+});
+
+test('getMedicatedPASys/getMedicatedPADia compose a medication delta on top of the raw authored PA pressures, same pattern as getMedicatedRR', () => {
+  const s = createState({ pa: { systolic: 30, diastolic: 12 } });
+  assert.equal(getMedicatedPASys(s, 0), 30);
+  assert.equal(getMedicatedPADia(s, 0), 12);
+});
+
+test('inhaled nitric oxide at max rate/full onset lowers PA pressures specifically, with NO systemic MAP effect at all - the entire clinical point of an inhaled (vs IV) pulmonary vasodilator', () => {
+  const s = setInfusionRate(createState({ pa: { systolic: 45, diastolic: 22 }, bp: { map: 70 } }), 'inhaledNO', INFUSIONS.inhaledNO.maxRatePpm, 0);
+  const t = INFUSIONS.inhaledNO.onsetMinutes;
+  assert.equal(getMedicatedPASys(s, t), 45 - 12);
+  assert.equal(getMedicatedPADia(s, t), 22 - 6);
+  assert.equal(getMedicatedMAP(s, t), 70); // unchanged - selective pulmonary action, not systemic
+});
+
+test('inhaled epoprostenol behaves the same way (PA-selective, no MAP effect), a distinct agent from inhaled NO', () => {
+  const s = setInfusionRate(createState({ pa: { systolic: 45, diastolic: 22 }, bp: { map: 70 } }), 'epoprostenol', INFUSIONS.epoprostenol.maxRateMcgPerKgPerMin, 0);
+  const t = INFUSIONS.epoprostenol.onsetMinutes;
+  assert.equal(getMedicatedPASys(s, t), 45 - 10);
+  assert.equal(getMedicatedPADia(s, t), 22 - 5);
+  assert.equal(getMedicatedMAP(s, t), 70);
 });

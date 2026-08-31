@@ -15,6 +15,10 @@ export const NUMERIC_PATHS = [
   'pa.systolic', 'pa.diastolic',
   'cvp', 'co', 'ci', 'svr', 'svri', 'svv', 'ppv', 'scvo2', 'hpi', 'spo2', 'rr', 'temp', 'etco2', 'icp',
   'drips.epi', 'drips.levo', 'drips.milrinone', 'drips.propofol', 'drips.fentanyl', 'drips.vasopressin', 'drips.insulin',
+  // Round 4: antiarrhythmic infusions + inhaled pulmonary vasodilators (see
+  // engine/clinical/formulary.js's INFUSIONS.lidocaine/procainamide/
+  // inhaledNO/epoprostenol for sourcing).
+  'drips.lidocaine', 'drips.procainamide', 'drips.inhaledNO', 'drips.epoprostenol',
   'chestTubes.rPleural', 'chestTubes.rMediastinal', 'chestTubes.blake', 'chestTubes.lPleural', 'chestTubes.lMediastinal',
   'urineOutput.volumeMl',
   'pacer.rate', 'pacer.outputMa', 'pacer.sensitivityMv',
@@ -56,7 +60,13 @@ const BASE_STATE = Object.freeze({
   // own local-practice-mode-only feature; the shared engine only needs the
   // mean ICP number for CPP = MAP - ICP (see computeCPP() below).
   icp: 10,
-  drips: { epi: 0, levo: 0, milrinone: 0, propofol: 0, fentanyl: 0, vasopressin: 0, insulin: 0 },
+  drips: {
+    epi: 0, levo: 0, milrinone: 0, propofol: 0, fentanyl: 0, vasopressin: 0, insulin: 0,
+    // Round 4, direct user request: "we need to include more
+    // interventions... antiarrhythmics... inhaled nitric oxide/inhaled
+    // epoprostonolol" - see engine/clinical/formulary.js for dosing/sourcing.
+    lidocaine: 0, procainamide: 0, inhaledNO: 0, epoprostenol: 0,
+  },
   ivpb: null, // e.g. 'vancomycin' - an intermittent piggyback, not a continuous rate
   chestTubes: { rPleural: 0, rMediastinal: 0, blake: 0, lPleural: 0, lMediastinal: 0 },
   // Console UX overhaul: new. `deviceType` is discrete (facilitator-selected,

@@ -453,6 +453,19 @@
     <details class="rail-group" id="grp_interventions" open>
       <summary><span>Interventions</span><span class="chev">▸</span></summary>
       <div class="body">
+        <!-- Round 4, direct user request: "we need to include more
+             interventions including more meds; fluid boluses blood
+             products albumin; antiarrhythmics; calcium chloride; inhaled
+             nitric oxide/inhaled epoprostonolol." Fluids/blood products/
+             calcium are one-time administrations (same PUSH_DRUGS
+             mechanism the BLS/ACLS meds below already use, tagged with
+             their own `category` so they render in this SEPARATE list
+             instead of mixing into the ACLS-specific one - see
+             engine/clinical/formulary.js) rather than a continuous rate. -->
+        <div class="gl">Fluids, Blood Products &amp; Electrolytes</div>
+        <div id="fluidsProductsList"></div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">One-time administrations, not continuous rates - unrestricted (no max-dose/repeat-interval guard), matching this project's "no limits" decision elsewhere: a massive-transfusion/resuscitation teaching case needs to give many units/boluses back to back. See engine/clinical/formulary.js for what IS and ISN'T independently cited for each.</div>
+
         <div class="gl">Vasoactive Infusions</div>
         <label class="row">Epi (mcg/min) <input type="range" id="ov_epi" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_epi_v">0</span></label>
         <div class="ov-status" id="ov_epi_status" hidden></div>
@@ -462,6 +475,27 @@
         <div class="ov-status" id="ov_vasopressin_status" hidden></div>
         <label class="row">Milrinone (mcg/kg/min) <input type="range" id="ov_milrinone" min="0" max="0.75" step="0.01" value="0"><span class="val" id="ov_milrinone_v">0</span></label>
         <div class="ov-status" id="ov_milrinone_status" hidden></div>
+
+        <!-- Round 4: closes the "remaining antiarrhythmics are still not
+             modeled" gap the phase-note below used to flag - both ARE real
+             CP4-156 continuous infusions (see formulary.js), not reasoned
+             substitutes. -->
+        <div class="gl">Antiarrhythmic Infusions</div>
+        <label class="row">Lidocaine (mg/min) <input type="range" id="ov_lidocaine" min="0" max="4" step="0.5" value="0"><span class="val" id="ov_lidocaine_v">0</span></label>
+        <div class="ov-status" id="ov_lidocaine_status" hidden></div>
+        <label class="row">Procainamide (mg/min) <input type="range" id="ov_procainamide" min="0" max="6" step="0.5" value="0"><span class="val" id="ov_procainamide_v">0</span></label>
+        <div class="ov-status" id="ov_procainamide_status" hidden></div>
+
+        <!-- Round 4, direct user request: "inhaled nitric oxide/inhaled
+             epoprostonolol." Ventilator-circuit-delivered pulmonary-
+             selective vasodilators - see getMedicatedPASys/PADia
+             (pharmacology.js) for the PA-pressure-specific effect these
+             drive, deliberately with NO systemic MAP effect. -->
+        <div class="gl">Inhaled Pulmonary Vasodilators</div>
+        <label class="row">Inhaled NO (ppm) <input type="range" id="ov_ino" min="0" max="40" step="5" value="0"><span class="val" id="ov_ino_v">0</span></label>
+        <div class="ov-status" id="ov_ino_status" hidden></div>
+        <label class="row">Inhaled Epoprostenol (mcg/kg/min) <input type="range" id="ov_epo" min="0" max="0.05" step="0.005" value="0"><span class="val" id="ov_epo_v">0</span></label>
+        <div class="ov-status" id="ov_epo_status" hidden></div>
 
         <div class="gl">Pain &amp; Sedation</div>
         <label class="row">Propofol (mcg/kg/min) <input type="range" id="ov_propofol" min="0" max="200" step="5" value="0"><span class="val" id="ov_propofol_v">0</span></label>
@@ -473,7 +507,7 @@
         <label class="row">Insulin (u/hr) <input type="range" id="ov_insulin" min="0" max="20" step="0.5" value="0"><span class="val" id="ov_insulin_v">0</span></label>
         <div class="ov-status" id="ov_insulin_status" hidden></div>
 
-        <div class="phase-note">Every slider above now has real dose/onset/duration modeling (engine/clinical/pharmacology.js, sourced from CP4-156 Attachment B) — the readout's HR/CO/RR/MAP reflect the formulary's onset lag as you titrate, not just the raw rate. IV push drugs (atropine, adenosine, metoprolol, amiodarone) are under BLS/ACLS below. IV piggybacks and remaining antiarrhythmics are still not modeled.</div>
+        <div class="phase-note">Every slider above now has real dose/onset/duration modeling (engine/clinical/pharmacology.js, sourced from CP4-156 Attachment B where cited - see the fluids/products/electrolytes hint above and each inhaled drug's own formulary entry for what isn't) — the readout's HR/CO/RR/MAP/PA reflect the formulary's onset lag as you titrate, not just the raw rate. IV push drugs (atropine, adenosine, metoprolol, amiodarone) are under BLS/ACLS below. IV piggybacks are still not modeled.</div>
       </div>
     </details>
 
@@ -681,8 +715,9 @@
 <script type="module">
 import { getEffectiveRhythm, getEffectiveHR, applyInstant, computeCPP, RHYTHM_LIBRARY, jitterHR, PACER_MODES, isMonitored, MONITOR_GROUPS } from '../engine/physiology.js';
 import {
-  administerPush, canAdministerPush, getPushDoseCount, getPushTotalDoseMg,
+  administerPush, canAdministerPush, getPushDoseCount, getPushTotalDoseAmount,
   setInfusionRate, getMedicatedHR, getMedicatedMAP, getMedicatedSVR, getMedicatedCO, getMedicatedRR,
+  getMedicatedPASys, getMedicatedPADia,
 } from '../engine/clinical/pharmacology.js';
 import { PUSH_DRUGS, INFUSIONS } from '../engine/clinical/formulary.js';
 import {
@@ -974,7 +1009,10 @@ function renderReadout(){
   const bpOn=isMonitored(s,"bp"),paOn=isMonitored(s,"pa");
   rows.push(`<div class="rd"><div class="rl">BP</div><div class="rv${bpOn?"":" rv-unmonitored"}" style="font-size:26px">${bpOn?`${Math.round(getEffectiveSBP(s))}/${Math.round(getEffectiveDBP(s))}`:"— / —"}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">MAP</div><div class="rv${bpOn?"":" rv-unmonitored"}">${bpOn?Math.round(getMedicatedMAP(s,minute)):"—"}</div></div>`);
-  rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv${paOn?"":" rv-unmonitored"}" style="font-size:22px">${paOn?`${Math.round(s.pa.systolic)}/${Math.round(s.pa.diastolic)}`:"— / —"}</div></div>`);
+  // Round 4: reflects inhaled NO/epoprostenol's PA-specific effect (see
+  // getMedicatedPASys/PADia) - previously always the raw authored value,
+  // since PA pressures had no medication-effect layer at all before this.
+  rows.push(`<div class="rd"><div class="rl">PA</div><div class="rv${paOn?"":" rv-unmonitored"}" style="font-size:22px">${paOn?`${Math.round(getMedicatedPASys(s,minute))}/${Math.round(getMedicatedPADia(s,minute))}`:"— / —"}</div></div>`);
   rows.push(`<div class="rd"><div class="rl">Rhythm</div><div class="rv" style="font-size:18px">${getEffectiveRhythm(s)}</div></div>`);
   byId("readout").innerHTML=rows.join("");
   // Phase 6: perfusion status, at a glance - this is the exact distinction
@@ -1030,19 +1068,47 @@ function renderReadout(){
  * clears purely as a function of simulated time passing, with no other
  * state change to hook.
  */
-function renderPushDrugs(){
+/** Display unit for one formulary push entry's recorded amount - see getPushTotalDoseAmount (pharmacology.js) for the matching generic total. */
+function pushDoseUnitLabel(drug){
+  if(typeof drug.doseMl==="number")return "mL";
+  if(typeof drug.doseUnits==="number")return drug.doseUnits===1?"unit":"units";
+  return "mg";
+}
+/**
+ * Renders one button-list container from a filtered subset of PUSH_DRUGS -
+ * shared by the BLS/ACLS "Medications (IV Push)" list (category:'acls',
+ * unchanged behavior) and the new Interventions "Fluids, Blood Products &
+ * Electrolytes" list (category in fluid/blood-product/electrolyte, Round 4).
+ * One list per category rather than one shared list, so a facilitator
+ * scanning Interventions isn't hunting through arrest drugs for a blood
+ * product, and vice versa in BLS/ACLS - see formulary.js's own `category`
+ * field docblock.
+ *
+ * Real bug fixed while generalizing this for the new mL/units-dosed drugs:
+ * the click handler referenced `drug`, a variable only ever defined inside
+ * the .map() callback that builds the button HTML, not in this .forEach()
+ * callback's own scope - clicking ANY push button (existing ACLS drugs
+ * included) threw a ReferenceError on the logChange() line, right after
+ * administerPush() had already succeeded (so the drug WAS given, just with
+ * no change-log entry and an uncaught console error every time). Fixed by
+ * looking the drug up fresh inside the click handler, same as every other
+ * handler in this file already does.
+ */
+function renderPushDrugList(containerId,categories){
   const s=runner.state,minute=s.minute;
-  byId("pushDrugList").innerHTML=Object.keys(PUSH_DRUGS).map((key)=>{
+  const keys=Object.keys(PUSH_DRUGS).filter((key)=>categories.includes(PUSH_DRUGS[key].category));
+  byId(containerId).innerHTML=keys.map((key)=>{
     const drug=PUSH_DRUGS[key];
-    const count=getPushDoseCount(s,key),totalMg=getPushTotalDoseMg(s,key);
+    const count=getPushDoseCount(s,key),total=getPushTotalDoseAmount(s,key);
     const guard=canAdministerPush(s,key,minute);
-    const given=count>0?` — ${count} given (${totalMg} mg)`:"";
+    const given=count>0?` — ${count} given (${total} ${pushDoseUnitLabel(drug)})`:"";
     return `<button class="act" id="push_${key}" ${guard.allowed?"":"disabled"} title="${guard.reason?guard.reason.replace(/"/g,"&quot;"):drug.indication.replace(/"/g,"&quot;")}">${drug.label}${given}</button>`;
   }).join("");
-  Object.keys(PUSH_DRUGS).forEach((key)=>{
+  keys.forEach((key)=>{
     const btn=byId("push_"+key);
     if(btn)btn.addEventListener("click",()=>{
       if(!runner)return;
+      const drug=PUSH_DRUGS[key]; // real bug fix - see this function's own docblock above
       const guard=canAdministerPush(runner.state,key,runner.state.minute);
       if(!guard.allowed){alert(guard.reason);return;}
       runner={...runner,state:administerPush(runner.state,key,runner.state.minute)};
@@ -1050,6 +1116,10 @@ function renderPushDrugs(){
       logChange(`${drug.label} administered`);
     });
   });
+}
+function renderPushDrugs(){
+  renderPushDrugList("pushDrugList",["acls"]);
+  renderPushDrugList("fluidsProductsList",["fluid","blood-product","electrolyte"]);
 }
 
 /* ---------------- Override sliders (release-capable) ---------------- */
@@ -1062,6 +1132,8 @@ const OVERRIDE_MAP={
   ov_hr:"hr",ov_sbp:"bp.sbp",ov_dbp:"bp.dbp",ov_map:"bp.map",ov_pasys:"pa.systolic",ov_padia:"pa.diastolic",ov_cvp:"cvp",ov_co:"co",
   ov_svv:"svv",ov_ppv:"ppv",ov_scvo2:"scvo2",ov_hpi:"hpi",ov_spo2:"spo2",ov_rr:"rr",ov_temp:"temp",ov_icp:"icp",
   ov_epi:"drips.epi",ov_levo:"drips.levo",ov_vasopressin:"drips.vasopressin",ov_milrinone:"drips.milrinone",
+  ov_lidocaine:"drips.lidocaine",ov_procainamide:"drips.procainamide",
+  ov_ino:"drips.inhaledNO",ov_epo:"drips.epoprostenol",
   ov_propofol:"drips.propofol",ov_fentanyl:"drips.fentanyl",ov_insulin:"drips.insulin",
   ov_rpleural:"chestTubes.rPleural",ov_rmediastinal:"chestTubes.rMediastinal",ov_blake:"chestTubes.blake",
   ov_lpleural:"chestTubes.lPleural",ov_lmediastinal:"chestTubes.lMediastinal",

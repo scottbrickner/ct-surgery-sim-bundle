@@ -47,6 +47,18 @@ export function getPushTotalDoseMg(state, drugKey) {
   return getPushes(state, drugKey).reduce((sum, p) => sum + p.doseMg, 0);
 }
 
+/**
+ * Generalized version of getPushTotalDoseMg, for the Round 4 fluids/blood-
+ * products/electrolyte entries that are naturally dosed in mL or units
+ * instead of mg (see formulary.js's own docblock on ns_bolus/prbc/etc.) -
+ * sums whichever dose-amount field each recorded push entry actually has.
+ * getPushTotalDoseMg above is kept exactly as-is (unchanged, still mg-only)
+ * for existing callers/tests that only ever exercise mg-dosed drugs.
+ */
+export function getPushTotalDoseAmount(state, drugKey) {
+  return getPushes(state, drugKey).reduce((sum, p) => sum + (p.doseMg ?? p.doseMl ?? p.doseUnits ?? 0), 0);
+}
+
 export function getPushDoseCount(state, drugKey) {
   return getPushes(state, drugKey).length;
 }
@@ -86,22 +98,44 @@ export function canAdministerPush(state, drugKey, currentMinute) {
 
 /**
  * Record one push dose of `drugKey` at `currentMinute` (state.minute, the
- * simulated case clock - NOT nowMs). Dose amount comes from the formulary
- * (doseMg, or for adenosine's two-tier dosing, firstDoseMg/secondDoseMg
- * based on how many doses already given) - a caller can't pick an arbitrary
- * amount, matching how the real drug is actually dosed. Throws if
- * canAdministerPush() would return allowed:false - see that function's
- * docstring for why this is a caller-bug signal, not a normal runtime path.
+ * simulated case clock - NOT nowMs). Dose amount comes from the formulary -
+ * a caller can't pick an arbitrary amount, matching how the real drug/
+ * product is actually dosed. Throws if canAdministerPush() would return
+ * allowed:false - see that function's docstring for why this is a
+ * caller-bug signal, not a normal runtime path.
+ *
+ * Most drugs record their amount as `doseMg` (or the two-tier first/second
+ * variant, e.g. adenosine); Round 4's fluids/blood-products/electrolyte
+ * entries are naturally dosed in `doseMl` or `doseUnits` instead (see
+ * formulary.js). Each drug defines exactly one of these fields, resolved in
+ * this fixed priority order. `bolusDoseMg` (amiodarone) is a real,
+ * previously-unresolved gap fixed here too: amiodarone has neither `doseMg`
+ * nor `firstDoseMg`, so the OLD code recorded `doseMg: undefined` for every
+ * amiodarone push - harmless in practice (amiodarone sets neither
+ * maxTotalDoseMg nor anything else that reads it back), but still a real
+ * bug now closed as a side effect of generalizing this resolution anyway.
  */
 export function administerPush(state, drugKey, currentMinute) {
   const guard = canAdministerPush(state, drugKey, currentMinute);
   if (!guard.allowed) throw new Error(`administerPush: ${guard.reason}`);
   const drug = PUSH_DRUGS[drugKey];
-  const doseMg = typeof drug.doseMg === 'number'
-    ? drug.doseMg
-    : (getPushDoseCount(state, drugKey) === 0 ? drug.firstDoseMg : drug.secondDoseMg);
+  let entry;
+  if (typeof drug.doseMg === 'number' || typeof drug.firstDoseMg === 'number' || typeof drug.bolusDoseMg === 'number') {
+    const doseMg = typeof drug.doseMg === 'number'
+      ? drug.doseMg
+      : typeof drug.firstDoseMg === 'number'
+        ? (getPushDoseCount(state, drugKey) === 0 ? drug.firstDoseMg : drug.secondDoseMg)
+        : drug.bolusDoseMg;
+    entry = { doseMg };
+  } else if (typeof drug.doseMl === 'number') {
+    entry = { doseMl: drug.doseMl };
+  } else if (typeof drug.doseUnits === 'number') {
+    entry = { doseUnits: drug.doseUnits };
+  } else {
+    entry = {};
+  }
   return applyInstant(state, {
-    medications: { pushes: [...state.medications.pushes, { drug: drugKey, atMinute: currentMinute, doseMg }] },
+    medications: { pushes: [...state.medications.pushes, { drug: drugKey, atMinute: currentMinute, ...entry }] },
   });
 }
 
@@ -177,7 +211,11 @@ export function getInfusionOnsetMultiplier(state, drugKey, currentMinute) {
 }
 
 function getInfusionMaxRate(drug) {
-  return drug.maxRateMcgPerMin ?? drug.maxRateMcgPerKgPerMin ?? drug.maxRateMcgPerHr ?? drug.maxRateUnitsPerMin ?? null;
+  // maxRateMgPerMin (lidocaine/procainamide) and maxRatePpm (inhaled nitric
+  // oxide) added for the Round 4 antiarrhythmic/inhaled-vasodilator
+  // expansion - see formulary.js.
+  return drug.maxRateMcgPerMin ?? drug.maxRateMcgPerKgPerMin ?? drug.maxRateMcgPerHr ?? drug.maxRateUnitsPerMin
+    ?? drug.maxRateMgPerMin ?? drug.maxRatePpm ?? null;
 }
 
 /** This infusion's current contribution to `field`, scaled by both (currentRate/maxRate) and onset progress. */
@@ -258,4 +296,27 @@ export function getMedicatedCO(state, currentMinute) {
 
 export function getMedicatedRR(state, currentMinute) {
   return state.rr + getMedicationDelta(state, 'rr', currentMinute);
+}
+
+/**
+ * Round 4, direct user request: "inhaled nitric oxide/inhaled
+ * epoprostonolol" - both are pulmonary-selective vasodilators whose entire
+ * clinical point is lowering PA pressures specifically (without the
+ * systemic MAP drop an IV pulmonary vasodilator would cause - see
+ * formulary.js's own docblock on inhaledNO/epoprostenol). Composing this
+ * effect required a real, new gap: unlike hr/map/svr/co/rr, PA pressures
+ * had NO getMedicated*() wrapper at all before this - console.html and
+ * IntelliVue both read raw state.pa.systolic/diastolic directly. Added
+ * these two, layered on the raw authored value exactly like getMedicatedRR
+ * does (no isPerfusing() gate - PA pressures aren't gated on flow anywhere
+ * else in this engine either, so this doesn't newly introduce or remove
+ * that behavior, just adds the medication layer on top of whatever was
+ * already shown).
+ */
+export function getMedicatedPASys(state, currentMinute) {
+  return state.pa.systolic + getMedicationDelta(state, 'paSys', currentMinute);
+}
+
+export function getMedicatedPADia(state, currentMinute) {
+  return state.pa.diastolic + getMedicationDelta(state, 'paDia', currentMinute);
 }
