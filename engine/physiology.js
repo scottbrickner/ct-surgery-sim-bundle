@@ -79,6 +79,18 @@ const BASE_STATE = Object.freeze({
   urineOutput: { deviceType: 'foley', volumeMl: 0 },
   pacer: { mode: 'off', rate: 0, outputMa: 0, sensitivityMv: 0, captured: false },
   flags: { arrestActive: false, sternotomyPerformed: false, ecmoCannulated: false },
+  // Direct user request: "there should be defib artifact on ECG tracing to
+  // show the electrical energy applied." A plain monotonic counter, not a
+  // timestamp - deliberately safe to put on the sync wire (unlike
+  // activeRamp.startedAtMs, a performance.now() value with a clock origin
+  // local to one page load, which is why that field is NEVER synced - see
+  // sync/deviceSync.js's payload-shape docs). A receiving device detects a
+  // new shock purely by comparing this number to what it last saw, with no
+  // dependency on either device's clock. Incremented once per Deliver
+  // Shock/Synchronized Cardioversion click regardless of whether the rhythm
+  // actually converts - the electrical energy was genuinely delivered either
+  // way, which is the whole point of the artifact.
+  defibEventCount: 0,
   // Phase 5 (engine/clinical/pharmacology.js) - deliberately NOT in NUMERIC_PATHS
   // (arrays/maps, not a single ramp-able number) and never read directly by
   // getEffective*() overlays here; pharmacology.js reads it and composes its

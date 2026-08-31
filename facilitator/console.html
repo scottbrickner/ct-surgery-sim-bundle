@@ -1752,7 +1752,15 @@ byId("shock_outcome_success").addEventListener("click",()=>setShockOutcome("succ
 byId("shock_outcome_fail").addEventListener("click",()=>setShockOutcome("fail"));
 function achieveROSC(actionLabel){
   if(!runner)return;
+  // Direct user request: "there should be defib artifact on ECG tracing to
+  // show the electrical energy applied." Bumped unconditionally, BEFORE the
+  // success/fail branch - the energy is genuinely delivered either way, so
+  // every connected device's ECG artifact fires regardless of outcome (see
+  // engine/physiology.js's defibEventCount docblock and
+  // devices/intellivue/intellivue_sim_monitor.html's applyEngineValuesLight).
+  runner=srOverride(runner,{defibEventCount:(getPath(runner.state,"defibEventCount")||0)+1});
   if(shockOutcomeMode==="fail"){
+    syncControlsFromRunner();renderReadout();
     logChange(`${actionLabel} → failed to convert (no change)`);
     return;
   }

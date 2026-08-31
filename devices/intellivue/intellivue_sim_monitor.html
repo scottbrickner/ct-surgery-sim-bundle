@@ -545,6 +545,13 @@ const gauss=(t,c,w,a)=>a*Math.exp(-0.5*Math.pow((t-c)/w,2));
 // applyEngineValuesLight, further down) because loadScenario("baseline") is
 // called at module-boot time, before that point in the file would execute.
 let sharedPerfusing=null,sharedPulsatileArterial=null,sharedPulsatilePleth=null;
+// sharedDefibEventCount: same boot-order/reset reasoning as the shared* vars
+// above - see defibArtifactValue()/ecgValue() further down for what this
+// drives. defibArtifactStartTAbs (the internal animation clock, NOT a
+// synced/wall-clock value - see engine/physiology.js's defibEventCount
+// docblock for why a raw timestamp is never put on the sync wire) is null
+// when no artifact is currently playing.
+let sharedDefibEventCount=null,defibArtifactStartTAbs=null;
 // engineMonitored: same boot-order reasoning as sharedPerfusing/sharedPulsatileArterial/sharedPulsatilePleth
 // above - refreshToggleUI() (used by the Parameters On Screen toggles, further
 // down) reads this, and loadScenario("baseline") calls refreshToggleUI() at
@@ -604,6 +611,7 @@ function loadScenario(k){const s=SCN[k];if(!s)return;
   state.icpComp=s.icpComp||"normal";state.artSite={abp:"radial",abp2:"femoral"};state.zero={};
   state.trans=null;state.scn=k;
   sharedPerfusing=null;sharedPulsatileArterial=null;sharedPulsatilePleth=null; // Phase 6: switching to a local practice scenario re-engages the native-rhythm-string-only perfusing()/pulsatile() fallback
+  sharedDefibEventCount=null;defibArtifactStartTAbs=null;
   byId("bed").textContent=s.bed;byId("ptname").textContent=s.name;byId("f_name").value=s.name;
   initDisp();syncControls();refreshToggleUI();refreshClinicalUI();layout();updateCO();
 }
@@ -699,7 +707,32 @@ function ecgComplex(tb,type){const ms=tb*1000;let v=0;
   else if(type==="paced"){v+=gauss(ms,182,3,1.25);v+=gauss(ms,235,30,0.9)-gauss(ms,280,28,0.5);v+=gauss(ms,470,80,-0.35);}
   else{v+=-gauss(ms,205+pr,8,0.09);v+=gauss(ms,222+pr,9,1.0);v+=-gauss(ms,240+pr,9,0.22);v+=gauss(ms,400+pr,55,0.26);}
   return v;}
-function ecgValue(){if(state.rhythm==="vfib")return 0.5*Math.sin(2*Math.PI*7.5*tAbs+Math.sin(tAbs*13))+0.32*Math.sin(2*Math.PI*11.3*tAbs)+0.16*(Math.random()-0.5);
+// Direct user request: "there should be defib artifact on ECG tracing to
+// show the electrical energy applied." Real monitors show a large, briefly
+// off-scale deflection (amplifier saturation from the actual electrical
+// discharge) followed by a short flat/blanked segment (many monitors
+// deliberately blank the trace for a moment to protect against displaying
+// saturated garbage) before the rhythm resumes - fires regardless of
+// whether the shock/cardioversion actually converted, since the energy was
+// genuinely delivered either way (see engine/physiology.js's
+// defibEventCount docblock and applyEngineValuesLight below, which starts
+// defibArtifactStartTAbs on a detected new shock).
+const DEFIB_ARTIFACT_SPIKE_S=0.08,DEFIB_ARTIFACT_TOTAL_S=0.32;
+function defibArtifactValue(t){
+  if(t<DEFIB_ARTIFACT_SPIKE_S){
+    const p=t/DEFIB_ARTIFACT_SPIKE_S; // 0..1 across the spike itself
+    return p<0.5?(p/0.5)*3.4:(1-(p-0.5)/0.5)*3.4; // sharp triangular up-then-down, well off a normal QRS's own scale
+  }
+  if(t<DEFIB_ARTIFACT_TOTAL_S)return 0; // blanking - amplifier recovery
+  return null; // window elapsed - caller resumes normal rhythm rendering
+}
+function ecgValue(){
+  if(defibArtifactStartTAbs!==null){
+    const artifact=defibArtifactValue(tAbs-defibArtifactStartTAbs);
+    if(artifact!==null)return artifact;
+    defibArtifactStartTAbs=null; // one-shot - done playing, fall through to normal rhythm below
+  }
+  if(state.rhythm==="vfib")return 0.5*Math.sin(2*Math.PI*7.5*tAbs+Math.sin(tAbs*13))+0.32*Math.sin(2*Math.PI*11.3*tAbs)+0.16*(Math.random()-0.5);
   if(state.rhythm==="asystole")return 0.015*Math.sin(tAbs*1.7)+(Math.random()-0.5)*0.008;
   if(state.rhythm==="vtach"){const f=Math.max(2.3,state.hr/60);return 0.8*Math.sin(2*Math.PI*f*tAbs)-0.16*Math.sin(4*Math.PI*f*tAbs);}
   if(state.rhythm==="torsades"){const f=Math.max(2.6,state.hr/60);const e=0.55+0.45*Math.sin(2*Math.PI*0.18*tAbs);return e*Math.sin(2*Math.PI*f*tAbs);}
@@ -1344,6 +1377,13 @@ function applyMonitoredToShow(es){
 }
 function applyEngineValuesLight(es){
   sharedPerfusing=isPerfusing(es);sharedPulsatileArterial=isPulsatileArterial(es);sharedPulsatilePleth=isPulsatilePleth(es);
+  // Detect a NEW shock/cardioversion purely by comparing the counter to what
+  // was last seen - guarded on sharedDefibEventCount!==null so the very
+  // first snapshot after a fresh page load (which could already carry a
+  // nonzero count from earlier in the session) doesn't falsely fire an
+  // artifact nobody just triggered.
+  if(sharedDefibEventCount!==null&&es.defibEventCount!==sharedDefibEventCount)defibArtifactStartTAbs=tAbs;
+  sharedDefibEventCount=es.defibEventCount;
   engineMonitored=es.monitored||null;
   const showChanged=applyMonitoredToShow(es);
   state.hr=getMedicatedHR(es,es.minute);state.sys=getEffectiveSBP(es);state.dia=getEffectiveDBP(es);state.cvp=es.cvp;
@@ -1469,6 +1509,8 @@ window.ctSharedEngine={
   // and forces one numerics repaint, so automated verification isn't
   // blocked on a real animation frame ever firing.
   getPerfusionNow:()=>({perfusing:perfusing(),pulsatileArterial:pulsatileArterial(),pulsatilePleth:pulsatilePleth(),sharedPerfusing,sharedPulsatileArterial,sharedPulsatilePleth}),
+  getDefibArtifactStateNow:()=>({sharedDefibEventCount,defibArtifactStartTAbs,tAbs,ecgValueNow:ecgValue()}),
+  triggerDefibArtifactNow:()=>{defibArtifactStartTAbs=tAbs;},
   forceNumericsRepaint:()=>{updateNumerics();},
   // Same rationale as every other hook above: frame() (the canvas waveform
   // draw loop) only ever runs via requestAnimationFrame, suspended in this
