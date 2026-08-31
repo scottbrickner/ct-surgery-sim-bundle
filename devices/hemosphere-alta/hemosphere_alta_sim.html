@@ -229,8 +229,8 @@
     <div class="grp"><div class="gl">Connected Sensors</div>
       <div class="toggrid"><div class="tog on" data-sensor="cco">Swan CCO</div><div class="tog on" data-sensor="acumen">Acumen IQ Art</div><div class="tog on" data-sensor="oximetry">Oximetry</div></div>
       <label class="row" style="margin-top:6px">SQI <input type="range" id="f_sqi" min="1" max="4" value="2"><span class="val" id="f_sqi_v">2</span></label>
-      <button class="scn" id="f_oxi" style="text-align:center;margin-top:4px">Open SvO₂ Calibration…</button>
-      <div class="hint">HPI &amp; advanced hemodynamics require Swan CCO + Acumen IQ. SvO₂ requires Oximetry + calibration.</div></div>
+      <button class="scn" id="f_oxi" style="text-align:center;margin-top:4px">Open ScvO₂ Calibration…</button>
+      <div class="hint">HPI &amp; advanced hemodynamics require Swan CCO + Acumen IQ. ScvO₂ requires Oximetry + calibration.</div></div>
     <div class="grp"><div class="gl">Load Scenario</div>
       <button class="scn" data-scn="postop"><b>Stable Post-op</b><span>Normal CO/CI, in target.</span></button>
       <button class="scn" data-scn="hypov"><b>Hypovolemia</b><span>↑SVV/PPV, ↓CO/CI, rising HPI.</span></button>
@@ -306,13 +306,13 @@
     <div style="display:flex;gap:8px;margin-top:12px"><button id="cfg_apply" style="background:#15502f;border-color:#1d6e40;color:#d6ffe4">Apply</button><button id="cfg_cancel">Cancel</button></div></div></div></div>
 
 <div id="oxiModal" class="amodal"><div class="awin">
-  <div class="ah">Venous Oximetry — In Vivo Calibration <span id="oxi_x">×</span></div>
+  <div class="ah">Venous Oximetry (ScvO₂) — In Vivo Calibration <span id="oxi_x">×</span></div>
   <div class="acw">
     <div class="ostep">Signal Quality (SQI) <span id="oxi_sqi">▮▮▯▯</span> — calibrate when SQI is 1–2 bars. Recommended every 24 h.</div>
     <ol class="osteps">
       <li><b>Baseline</b> — establish reference signal. <button id="oxi_base">Establish Baseline</button> <span id="oxi_baseSt" style="color:#7ad17a"></span></li>
       <li><b>Draw</b> — withdraw 2 mL waste + sample over 30 s; send to lab. <button id="oxi_draw" disabled>Mark Drawn</button> <span id="oxi_drawSt" style="color:#7ad17a"></span></li>
-      <li><b>Lab values</b> — enter co-oximeter result: &nbsp; ScvO₂/SvO₂ <input type="number" id="oxi_lab" value="70" style="width:64px"> % &nbsp; HGB <input type="number" id="oxi_hgb" value="11.5" step="0.1" style="width:64px"> g/dL</li>
+      <li><b>Lab values</b> — enter co-oximeter result: &nbsp; ScvO₂ <input type="number" id="oxi_lab" value="70" style="width:64px"> % &nbsp; HGB <input type="number" id="oxi_hgb" value="11.5" step="0.1" style="width:64px"> g/dL</li>
     </ol>
     <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><button id="oxi_cal" class="go" disabled>Calibrate</button><button id="oxi_recat">New Catheter (uncalibrate)</button><button id="oxi_close2">Close</button></div>
     <div id="oxi_msg" class="omsg"></div>
@@ -394,6 +394,26 @@ const P={
   scvo2:{lab:"ScvO₂",u:"%",c:"--scvo2",lo:65,hi:75,dec:0,gmin:0,gmax:99,need:"oximetry",group:"scvo2",val:()=>drv.scvo2},
   hpi:{lab:"HPI",u:"",c:"--hpi",lo:0,hi:85,dec:0,gmin:0,gmax:100,lowGood:1,need:"adv",val:()=>drv.hpi},
 };
+// Real audit finding: every tile/globe/alarm string hardcoded "IQ Sensor" or
+// "Acumen IQ sensor", regardless of which sensor a parameter actually needs
+// (P[k].need, already correct and driving paramAvailable()'s own gating
+// above) - a CVP tile (need:"cco", PA-catheter-only) claimed "IQ Sensor" just
+// like an SVV tile (need:"acumen", arterial-line-only) even though neither
+// sensor can produce the other's parameter. sourceLabel() reads the SAME
+// P[k].need field instead of a second, independent copy of "what provides
+// this parameter" - drv.mode disambiguates the "flow"/"acumen" needs (either
+// sensor can satisfy "flow"; MAP/SVV/PPV's "acumen" need is provided by
+// ClearSight's cuff instead when that's the active mode), matching the real
+// HemoSphere Alta's own sensor-agnostic hemodynamic-source model.
+function sourceLabel(k){
+  const t=P[k].need;
+  if(t==="cco")return "Swan CCO";
+  if(t==="oximetry")return "Oximetry Cath";
+  if(t==="adv")return "Swan CCO + Acumen IQ";
+  if(t==="acumen")return drv.mode==="ClearSight"?"ClearSight":"Acumen IQ";
+  if(t==="flow")return drv.mode==="Swan"?"Swan CCO":drv.mode==="ClearSight"?"ClearSight":"Acumen IQ";
+  return "IQ Sensor";
+}
 let keyParams=["ci","sco","scvo2","svv"];
 const ALLKEYS=["co","ci","sco","sci","sv","svi","svv","ppv","svr","svri","map","pr","cvp","scvo2","hpi"];
 function statusClass(k){const p=P[k],v=p.val();
@@ -448,12 +468,13 @@ function fmtClock(t){const d=new Date(Date.now()-(tAbs-t)*1000);return String(d.
 
 /* tiles */
 function buildTiles(){const c=byId("tiles");c.innerHTML=keyParams.map(k=>{const p=P[k];
-  return `<div class="tile" data-k="${k}"><span class="src">IQ Sensor</span><span class="tval" id="tv_${k}">--</span><div class="tname"><span id="tl_${k}">${p.lab}</span><span class="tu">${p.u}</span></div></div>`;}).join("")+'<div id="addTile">+</div>';
+  return `<div class="tile" data-k="${k}"><span class="src" id="src_${k}">${sourceLabel(k)}</span><span class="tval" id="tv_${k}">--</span><div class="tname"><span id="tl_${k}">${p.lab}</span><span class="tu">${p.u}</span></div></div>`;}).join("")+'<div id="addTile">+</div>';
   c.querySelectorAll(".tile").forEach(t=>{t.addEventListener("click",()=>openTileOrOxi(t.dataset.k));});
   byId("addTile").addEventListener("click",()=>{byId("fac").classList.add("open");});}
 function openTileOrOxi(k){selTile=k;if(k==="scvo2"&&drv.sensors.oximetry){openOxi();}else openCfg(k);}
 let selTile="ci";
 function updateTiles(){keyParams.forEach(k=>{const p=P[k],tv=byId("tv_"+k),tl=byId("tl_"+k);if(!tv)return;const av=paramAvailable(k);
+  const sl=byId("src_"+k);if(sl)sl.textContent=sourceLabel(k);
   if(!av.ok){tv.textContent="– –";tv.className="tval neutral";tv.style.fontSize="20px";if(tl)tl.textContent=av.msg;}
   else{tv.style.fontSize="";tv.textContent=p.val().toFixed(p.dec);tv.className="tval "+statusClass(k);if(tl)tl.textContent=p.lab;}
   const tile=tv.closest(".tile");if(tile){tile.classList.toggle("alarm",av.ok&&statusClass(k)==="bad");tile.classList.toggle("sel",k===selTile);}});}
@@ -463,10 +484,10 @@ function zones(k){const p=P[k],z=[],push=(a,b,c)=>{if(b>a)z.push([a,b,c]);};
   if(p.lowGood){const y=p.hi+(p.gmax-p.hi)*0.4;push(p.gmin,p.hi,"good");push(p.hi,y,"warn");push(y,p.gmax,"bad");}
   else{const c=(p.hi-p.lo)*0.6;push(p.gmin,Math.max(p.gmin,p.lo-c),"bad");push(Math.max(p.gmin,p.lo-c),p.lo,"warn");push(p.lo,p.hi,"good");push(p.hi,Math.min(p.gmax,p.hi+c),"warn");push(Math.min(p.gmax,p.hi+c),p.gmax,"bad");}
   return z;}
-function buildCockpit(){const c=byId("cockpitView");c.innerHTML=keyParams.map(k=>`<div class="globe" data-k="${k}"><span class="gtag">IQ Sensor</span><canvas id="gc_${k}"></canvas></div>`).join("");
+function buildCockpit(){const c=byId("cockpitView");c.innerHTML=keyParams.map(k=>`<div class="globe" data-k="${k}"><span class="gtag" id="gtag_${k}">${sourceLabel(k)}</span><canvas id="gc_${k}"></canvas></div>`).join("");
   c.querySelectorAll(".globe").forEach(g=>g.addEventListener("click",()=>openTileOrOxi(g.dataset.k)));sizeGlobes();}
 function sizeGlobes(){keyParams.forEach(k=>{const cv=byId("gc_"+k);if(!cv||!cv.parentElement)return;const r=cv.parentElement.getBoundingClientRect();cv.width=Math.max(1,r.width*DPR);cv.height=Math.max(1,r.height*DPR);cv.getContext("2d").setTransform(DPR,0,0,DPR,0,0);});}
-function drawCockpit(){keyParams.forEach(k=>{const cv=byId("gc_"+k);if(!cv)return;const g=cv.getContext("2d");const w=cv.width/DPR,h=cv.height/DPR;g.clearRect(0,0,w,h);
+function drawCockpit(){keyParams.forEach(k=>{const cv=byId("gc_"+k);if(!cv)return;const gt=byId("gtag_"+k);if(gt)gt.textContent=sourceLabel(k);const g=cv.getContext("2d");const w=cv.width/DPR,h=cv.height/DPR;g.clearRect(0,0,w,h);
   const cx=w/2,cy=h*0.55,r=Math.min(w*0.42,h*0.40),a0=Math.PI*0.7,a1=Math.PI*2.3,sweep=a1-a0,p=P[k],v=p.val();
   const fr=x=>clamp((x-p.gmin)/(p.gmax-p.gmin),0,1);
   g.lineWidth=Math.max(10,r*0.20);g.lineCap="butt";
@@ -523,7 +544,7 @@ const SCREENS=["mon","cockpit","tabular"];
 byId("nb_screen").addEventListener("click",()=>{let i=SCREENS.indexOf(view);i=(i<0?0:(i+1)%SCREENS.length);setView(SCREENS[i]);});
 
 /* alarms / status */
-function activeAlarms(){const out=[];keyParams.forEach(k=>{if(!paramAvailable(k).ok)return;if(statusClass(k)==="bad"){const p=P[k],v=p.val();const dir=(p.lowGood||v>p.hi)?"above high":"below low";out.push("Acumen IQ sensor "+p.lab+" is "+dir+" limit");}});return out;}
+function activeAlarms(){const out=[];keyParams.forEach(k=>{if(!paramAvailable(k).ok)return;if(statusClass(k)==="bad"){const p=P[k],v=p.val();const dir=(p.lowGood||v>p.hi)?"above high":"below low";out.push(sourceLabel(k)+" "+p.lab+" is "+dir+" limit");}});return out;}
 let silenced=false;
 // Phase 7: this used to always show "connect oximetry cable" whenever
 // mode==="Swan", regardless of whether oximetry was ACTUALLY connected or
@@ -563,13 +584,13 @@ byId("cfg_cancel").addEventListener("click",()=>byId("cfgModal").style.display="
 /* oximetry in-vivo calibration */
 function sqiBars(){const n=clamp(Math.round(drv.sqi),1,4);return "▮".repeat(n)+"▯".repeat(4-n);}
 let oxiBaseOK=false,oxiDrawn=false;
-function openOxi(){oxiBaseOK=false;oxiDrawn=false;byId("oxi_baseSt").textContent="";byId("oxi_drawSt").textContent="";byId("oxi_draw").disabled=true;byId("oxi_cal").disabled=true;byId("oxi_sqi").textContent=sqiBars();byId("oxi_hgb").value=drv.hgb;byId("oxi_lab").value=Math.round(drv.scvo2);byId("oxi_msg").className="omsg";byId("oxi_msg").textContent=drv.oxiCal?"Currently calibrated. Recalibrate as needed (q24h).":"Not calibrated — complete steps to display SvO₂.";byId("oxiModal").classList.add("open");}
+function openOxi(){oxiBaseOK=false;oxiDrawn=false;byId("oxi_baseSt").textContent="";byId("oxi_drawSt").textContent="";byId("oxi_draw").disabled=true;byId("oxi_cal").disabled=true;byId("oxi_sqi").textContent=sqiBars();byId("oxi_hgb").value=drv.hgb;byId("oxi_lab").value=Math.round(drv.scvo2);byId("oxi_msg").className="omsg";byId("oxi_msg").textContent=drv.oxiCal?"Currently calibrated. Recalibrate as needed (q24h).":"Not calibrated — complete steps to display ScvO₂.";byId("oxiModal").classList.add("open");}
 byId("oxi_x").addEventListener("click",()=>byId("oxiModal").classList.remove("open"));
 byId("oxi_close2").addEventListener("click",()=>byId("oxiModal").classList.remove("open"));
 byId("oxi_base").addEventListener("click",()=>{if(drv.sqi>2){byId("oxi_msg").className="omsg warn";byId("oxi_msg").textContent="Unstable signal (SQI "+Math.round(drv.sqi)+"). Reposition catheter; calibrate at SQI 1–2.";return;}oxiBaseOK=true;byId("oxi_baseSt").textContent="✓ baseline OK";byId("oxi_draw").disabled=false;byId("oxi_msg").className="omsg";byId("oxi_msg").textContent="Baseline established. Proceed to draw.";});
 byId("oxi_draw").addEventListener("click",()=>{if(!oxiBaseOK)return;oxiDrawn=true;byId("oxi_drawSt").textContent="✓ 2 mL sample sent to lab";byId("oxi_cal").disabled=false;byId("oxi_msg").textContent="Enter co-oximeter lab values, then Calibrate.";});
 byId("oxi_cal").addEventListener("click",()=>{if(!oxiDrawn)return;drv.scvo2=clamp(+byId("oxi_lab").value,30,99);drv.hgb=clamp(+byId("oxi_hgb").value,4,20);drv.oxiCal=true;drv.lastCalMin=0;byId("oxi_msg").className="omsg";byId("oxi_msg").textContent="✓ Calibrated. ScvO₂ "+Math.round(drv.scvo2)+"% now displayed.";syncFac();});
-byId("oxi_recat").addEventListener("click",()=>{drv.oxiCal=false;oxiBaseOK=false;oxiDrawn=false;byId("oxi_baseSt").textContent="";byId("oxi_drawSt").textContent="";byId("oxi_draw").disabled=true;byId("oxi_cal").disabled=true;byId("oxi_msg").className="omsg warn";byId("oxi_msg").textContent="New catheter — SvO₂ requires calibration.";});
+byId("oxi_recat").addEventListener("click",()=>{drv.oxiCal=false;oxiBaseOK=false;oxiDrawn=false;byId("oxi_baseSt").textContent="";byId("oxi_drawSt").textContent="";byId("oxi_draw").disabled=true;byId("oxi_cal").disabled=true;byId("oxi_msg").className="omsg warn";byId("oxi_msg").textContent="New catheter — ScvO₂ requires calibration.";});
 
 /* patient data */
 function openPatient(){byId("pat_name").value=drv.patName;byId("pat_id").value=drv.patId;byId("pat_age").value=drv.age;byId("pat_sex").value=drv.sex;byId("pat_ht").value=drv.ht;byId("pat_wt").value=drv.wt;byId("pat_hgb").value=drv.hgb;byId("pat_bsa").textContent=bsa().toFixed(2);byId("patientModal").classList.add("open");}
