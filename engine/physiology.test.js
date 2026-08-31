@@ -51,8 +51,9 @@ test('MONITOR_GROUPS groups BP as one sys+dia+map toggle and PA as one sys+dia t
   assert.deepEqual(MONITOR_GROUPS.pa, ['pa.systolic', 'pa.diastolic']);
 });
 
-test('createState defaults pulseSignal to "auto" (see pulsatility.js\'s isPulsatile for what this drives)', () => {
-  assert.equal(createState().pulseSignal, 'auto');
+test('createState defaults pulseSignalArterial/pulseSignalPleth to "auto" (see pulsatility.js\'s isPulsatileArterial/isPulsatilePleth for what these drive)', () => {
+  assert.equal(createState().pulseSignalArterial, 'auto');
+  assert.equal(createState().pulseSignalPleth, 'auto');
 });
 
 test('createState deep-merges partial overrides without dropping sibling fields', () => {

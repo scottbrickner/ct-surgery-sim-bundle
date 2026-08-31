@@ -56,34 +56,72 @@ export function isPerfusing(state) {
 }
 
 /**
- * Pulsatile flow specifically (a palpable pulse / a valid pleth waveform at
- * the sensor) - deliberately excludes support-only flow. Full ECMO support
- * perfuses without producing a pulse; that's the entire clinical point of
- * the perfusing/pulsatile split.
- *
- * `state.pulseSignal` (default `'auto'`) is a direct facilitator override,
- * a THIRD independent axis on top of perfusing/pulsatile - separate from
- * both. Direct user request: "if I wanted someone to have a pulse ox that
- * is non pulsatile, I should be able to show that... while at the same
- * time generating whatever physical number I want to show up, which would
- * be indicative of someone with poor perfusion." A real pulse ox can lose
- * its pulsatile signal (severe peripheral vasoconstriction, motion, a poor
- * probe site) while the patient is genuinely still perfusing centrally -
- * a case this file's existing four-flow-source model has no way to
- * represent, since every non-pulsatile case it derives (arrest, PEA, VF)
- * also isn't perfusing, and the one perfusing-but-nonpulsatile case it DOES
- * derive (ECMO) requires actually cannulating the patient. `'auto'`
- * preserves the exact pre-existing derivation below unchanged; `'pulsatile'`/
- * `'nonpulsatile'` force the answer regardless of flow source, for
- * authoring this exact teaching scenario without needing a matching
- * (and possibly unwanted) change to rhythm/CPR/ECMO state. Deliberately
- * does NOT touch isPerfusing() - "poor perfusion" here is a pulsatility/
- * signal-quality story, not a claim the patient has actually arrested.
+ * Pulsatile flow specifically (a palpable pulse / a valid arterial or pleth
+ * waveform at the sensor) - deliberately excludes support-only flow. Full
+ * ECMO support perfuses without producing a pulse; that's the entire
+ * clinical point of the perfusing/pulsatile split. This is the PATIENT'S
+ * actual physiology, unaffected by either per-signal override below -
+ * exported (not just an internal helper) for exactly one reason: a caller
+ * summarizing overall patient status (e.g. the console readout's perfusion
+ * pill) should reflect the patient, not one line's equipment/signal-quality
+ * override - a dampened arterial line or a bad pulse-ox probe doesn't mean
+ * the patient themselves isn't pulsatile. Shared derivation for both
+ * isPulsatileArterial()/isPulsatilePleth() below - identical unless one has
+ * been individually overridden.
  */
-export function isPulsatile(state) {
-  if (state.pulseSignal === 'pulsatile') return true;
-  if (state.pulseSignal === 'nonpulsatile') return false;
+export function isPulsatileFromFlow(state) {
   return isNativeFlowPresent(state) || isCPRFlowPresent(state);
+}
+
+/**
+ * `'pulsatile'`/`'nonpulsatile'` force the answer regardless of flow source;
+ * `'auto'` (or unset) means "no override, use the flow-derived default" -
+ * returns null so the caller falls through.
+ */
+function forcedPulsatility(mode) {
+  if (mode === 'pulsatile') return true;
+  if (mode === 'nonpulsatile') return false;
+  return null;
+}
+
+/**
+ * `state.pulseSignalArterial` / `state.pulseSignalPleth` (both default
+ * `'auto'`) are direct facilitator overrides, a THIRD independent axis on
+ * top of perfusing/pulsatile - separate from both, and deliberately separate
+ * from EACH OTHER too. Originally one shared `pulseSignal` field; split on
+ * direct user request: poor pulsatility on the pulse ox can be a probe
+ * contact issue or genuine poor PERIPHERAL circulation with no bearing on
+ * the actual arterial line, and a dampened/poorly-transduced arterial
+ * waveform doesn't imply anything about peripheral perfusion either - two
+ * different signal paths in real monitoring (a photoplethysmography probe
+ * vs. a direct intra-arterial transducer), and conflating them into one
+ * toggle couldn't represent either case alone.
+ *
+ * The original motivating case (still fully supported): "if I wanted
+ * someone to have a pulse ox that is non pulsatile, I should be able to
+ * show that... while at the same time generating whatever physical number I
+ * want to show up, which would be indicative of someone with poor
+ * perfusion." A real pulse ox can lose its pulsatile signal (severe
+ * peripheral vasoconstriction, motion, a poor probe site) while the patient
+ * is genuinely still perfusing centrally - a case the four-flow-source model
+ * has no way to represent on its own, since every non-pulsatile case it
+ * derives (arrest, PEA, VF) also isn't perfusing, and the one
+ * perfusing-but-nonpulsatile case it DOES derive (ECMO) requires actually
+ * cannulating the patient. `'auto'` preserves the pre-existing flow-derived
+ * answer unchanged; forcing either field authors this exact teaching
+ * scenario without needing a matching (and possibly unwanted) change to
+ * rhythm/CPR/ECMO state, or to the OTHER signal. Deliberately does NOT touch
+ * isPerfusing() - "poor signal" here is a pulsatility/signal-quality story,
+ * not a claim the patient has actually arrested.
+ */
+export function isPulsatileArterial(state) {
+  const forced = forcedPulsatility(state.pulseSignalArterial);
+  return forced !== null ? forced : isPulsatileFromFlow(state);
+}
+
+export function isPulsatilePleth(state) {
+  const forced = forcedPulsatility(state.pulseSignalPleth);
+  return forced !== null ? forced : isPulsatileFromFlow(state);
 }
 
 const CPR_MAP_FRACTION = { good: 0.45, poor: 0.20 }; // midpoints of the design doc's 40-50%/15-25%-of-baseline bands

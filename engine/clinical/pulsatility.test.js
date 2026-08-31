@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createState } from '../physiology.js';
 import {
   mechanicalActivity, isNativeFlowPresent, isCPRFlowPresent, isSupportFlowPresent,
-  isPerfusing, isPulsatile, tickCirculation, getEffectiveMAP, getEffectiveSBP, getEffectiveDBP,
+  isPerfusing, isPulsatileArterial, isPulsatilePleth, tickCirculation, getEffectiveMAP, getEffectiveSBP, getEffectiveDBP,
   getEffectiveETCO2, getEffectiveCO, getEffectiveSVV, getEffectivePPV, getEffectiveScvO2,
 } from './pulsatility.js';
 
@@ -55,58 +55,73 @@ function organizedState() {
   return createState({ rhythm: 'Sinus Rhythm' });
 }
 
-test('matrix: organized rhythm, no CPR, no ECMO -> perfusing AND pulsatile', () => {
+// Both isPulsatileArterial/isPulsatilePleth share the same flow-derived
+// default when neither override is set (pulseSignalArterial/pulseSignalPleth
+// both 'auto') - the matrix below asserts BOTH agree with the historic
+// shared isPulsatile() answer, not just one, since the whole point of the
+// split is that they're independently overridable while still sharing this
+// identical physiological baseline.
+test('matrix: organized rhythm, no CPR, no ECMO -> perfusing AND pulsatile (both arterial and pleth)', () => {
   const s = organizedState();
   assert.equal(isPerfusing(s), true);
-  assert.equal(isPulsatile(s), true);
+  assert.equal(isPulsatileArterial(s), true);
+  assert.equal(isPulsatilePleth(s), true);
 });
 
 test('matrix: Ventricular Fibrillation, no CPR, no ECMO -> NOT perfusing, NOT pulsatile (genuine arrest)', () => {
   const s = createState({ rhythm: 'Ventricular Fibrillation' });
   assert.equal(isPerfusing(s), false);
-  assert.equal(isPulsatile(s), false);
+  assert.equal(isPulsatileArterial(s), false);
+  assert.equal(isPulsatilePleth(s), false);
 });
 
 test('matrix: PEA, no CPR, no ECMO -> NOT perfusing, NOT pulsatile (genuine arrest, the exact bug this phase fixes - old perfusing() logic treated PEA as perfusing)', () => {
   const s = arrestState();
   assert.equal(isPerfusing(s), false);
-  assert.equal(isPulsatile(s), false);
+  assert.equal(isPulsatileArterial(s), false);
+  assert.equal(isPulsatilePleth(s), false);
 });
 
 test('matrix: pulseless VT (VT + arrestActive), no CPR, no ECMO -> NOT perfusing, NOT pulsatile', () => {
   const s = createState({ rhythm: 'Ventricular Tachycardia', flags: { arrestActive: true } });
   assert.equal(isPerfusing(s), false);
-  assert.equal(isPulsatile(s), false);
+  assert.equal(isPulsatileArterial(s), false);
+  assert.equal(isPulsatilePleth(s), false);
 });
 
 test('matrix: any non-organized rhythm + good CPR, no ECMO -> perfusing AND pulsatile (compressions)', () => {
   const s = withCPR(arrestState(), 'good');
   assert.equal(isPerfusing(s), true);
-  assert.equal(isPulsatile(s), true);
+  assert.equal(isPulsatileArterial(s), true);
+  assert.equal(isPulsatilePleth(s), true);
 });
 
 test('matrix: any non-organized rhythm + poor CPR, no ECMO -> still perfusing AND pulsatile (weaker, but still real compressions)', () => {
   const s = withCPR(arrestState(), 'poor');
   assert.equal(isPerfusing(s), true);
-  assert.equal(isPulsatile(s), true);
+  assert.equal(isPulsatileArterial(s), true);
+  assert.equal(isPulsatilePleth(s), true);
 });
 
 test('matrix: any non-organized rhythm, no CPR, ECMO ON -> perfusing but NOT pulsatile (the core acceptance criterion: nonpulsatile-but-ECMO-perfused must never read as arrest)', () => {
   const s = withECMO(arrestState(), true);
   assert.equal(isPerfusing(s), true);
-  assert.equal(isPulsatile(s), false);
+  assert.equal(isPulsatileArterial(s), false);
+  assert.equal(isPulsatilePleth(s), false);
 });
 
 test('matrix: organized rhythm, no CPR, ECMO ON -> perfusing AND pulsatile (native pulse dominates, ECMO incidental)', () => {
   const s = withECMO(organizedState(), true);
   assert.equal(isPerfusing(s), true);
-  assert.equal(isPulsatile(s), true);
+  assert.equal(isPulsatileArterial(s), true);
+  assert.equal(isPulsatilePleth(s), true);
 });
 
 test('matrix: any non-organized rhythm + good CPR + ECMO ON -> perfusing AND pulsatile (CPR contributes the pulse)', () => {
   const s = withECMO(withCPR(arrestState(), 'good'), true);
   assert.equal(isPerfusing(s), true);
-  assert.equal(isPulsatile(s), true);
+  assert.equal(isPulsatileArterial(s), true);
+  assert.equal(isPulsatilePleth(s), true);
 });
 
 test('isNativeFlowPresent/isCPRFlowPresent/isSupportFlowPresent are independent flags, not derived from each other', () => {
@@ -122,30 +137,51 @@ test('CPR flow requires BOTH active:true and a quality set - active alone (quali
   assert.equal(isPerfusing(s), false);
 });
 
-/* ---------------- pulseSignal override: a facilitator-forced pulsatile/nonpulsatile signal, independent of flow source ---------------- */
+/* ---------------- pulseSignalArterial/pulseSignalPleth overrides: two INDEPENDENT facilitator-forced pulsatile/nonpulsatile signals ---------------- */
 
-test('pulseSignal defaults to "auto" and does not change isPulsatile\'s existing flow-derived answer', () => {
-  assert.equal(organizedState().pulseSignal, 'auto');
-  assert.equal(isPulsatile(organizedState()), true);
-  assert.equal(isPulsatile(arrestState()), false);
+test('pulseSignalArterial and pulseSignalPleth both default to "auto" and do not change the flow-derived answer', () => {
+  assert.equal(organizedState().pulseSignalArterial, 'auto');
+  assert.equal(organizedState().pulseSignalPleth, 'auto');
+  assert.equal(isPulsatileArterial(organizedState()), true);
+  assert.equal(isPulsatilePleth(organizedState()), true);
+  assert.equal(isPulsatileArterial(arrestState()), false);
+  assert.equal(isPulsatilePleth(arrestState()), false);
 });
 
-test('pulseSignal:"nonpulsatile" forces isPulsatile false on an organized, perfusing patient - the exact "poor peripheral perfusion" teaching case with no ECMO/CPR/rhythm change needed', () => {
-  const s = { ...organizedState(), pulseSignal: 'nonpulsatile' };
+test('pulseSignalPleth:"nonpulsatile" forces the pleth signal false on an organized, perfusing patient - the exact "poor peripheral perfusion" teaching case with no ECMO/CPR/rhythm change needed - and does NOT touch the arterial line', () => {
+  const s = { ...organizedState(), pulseSignalPleth: 'nonpulsatile' };
   assert.equal(isPerfusing(s), true); // NOT touched - this is a signal-quality story, not an arrest
-  assert.equal(isPulsatile(s), false);
+  assert.equal(isPulsatilePleth(s), false);
+  assert.equal(isPulsatileArterial(s), true); // the actual arterial waveform is unaffected - a dampened pleth is a probe/peripheral story, not an arterial-line story
 });
 
-test('pulseSignal:"pulsatile" forces isPulsatile true even during a true arrest (PEA) - an unusual authoring choice, but the override is unconditional by design, matching every other facilitator override in this project', () => {
-  const s = { ...arrestState(), pulseSignal: 'pulsatile' };
-  assert.equal(isPulsatile(s), true);
-  assert.equal(isPerfusing(s), false); // still correctly not perfusing - the override only touches isPulsatile()
-});
-
-test('pulseSignal override composes correctly with the existing ECMO-perfusing-nonpulsatile case: forcing "pulsatile" during ECMO support flips it to pulsatile', () => {
-  const s = { ...withECMO(arrestState(), true), pulseSignal: 'pulsatile' };
+test('pulseSignalArterial:"nonpulsatile" forces the arterial line false (a dampened/poorly-transduced line) and does NOT touch the pleth signal', () => {
+  const s = { ...organizedState(), pulseSignalArterial: 'nonpulsatile' };
   assert.equal(isPerfusing(s), true);
-  assert.equal(isPulsatile(s), true); // without the override this would be false (ECMO's whole point)
+  assert.equal(isPulsatileArterial(s), false);
+  assert.equal(isPulsatilePleth(s), true); // the pulse ox is unaffected by an arterial-line-specific problem
+});
+
+test('both fields can be forced independently and simultaneously to opposite answers on the same state', () => {
+  const s = { ...organizedState(), pulseSignalArterial: 'nonpulsatile', pulseSignalPleth: 'pulsatile' };
+  assert.equal(isPulsatileArterial(s), false);
+  assert.equal(isPulsatilePleth(s), true);
+});
+
+test('pulseSignalArterial/pulseSignalPleth:"pulsatile" forces pulsatile true even during a true arrest (PEA) - an unusual authoring choice, but the override is unconditional by design, matching every other facilitator override in this project', () => {
+  const sArt = { ...arrestState(), pulseSignalArterial: 'pulsatile' };
+  assert.equal(isPulsatileArterial(sArt), true);
+  assert.equal(isPerfusing(sArt), false); // still correctly not perfusing - the override only touches pulsatility
+  const sPleth = { ...arrestState(), pulseSignalPleth: 'pulsatile' };
+  assert.equal(isPulsatilePleth(sPleth), true);
+  assert.equal(isPerfusing(sPleth), false);
+});
+
+test('pulseSignal overrides compose correctly with the existing ECMO-perfusing-nonpulsatile case: forcing "pulsatile" during ECMO support flips it to pulsatile', () => {
+  const s = { ...withECMO(arrestState(), true), pulseSignalArterial: 'pulsatile', pulseSignalPleth: 'pulsatile' };
+  assert.equal(isPerfusing(s), true);
+  assert.equal(isPulsatileArterial(s), true); // without the override this would be false (ECMO's whole point)
+  assert.equal(isPulsatilePleth(s), true);
 });
 
 /* ---------------- tickCirculation: edge detection + snapshot bookkeeping ---------------- */
@@ -331,14 +367,14 @@ test('getEffectiveScvO2: no flow at all decays from the pre-loss value toward th
 // functions rather than each maintaining their own rhythm-string logic
 // (see CLAUDE.md's Phase 6 notes on IntelliVue's perfusing()/pulsatile()
 // wiring and HemoSphere's applyEngineValuesLight). This test is the
-// structural guarantee that makes that true: isPerfusing/isPulsatile are
-// pure functions of `state` alone, so any two callers - a facilitator
-// console, IntelliVue, HemoSphere, or a test - looking at the identical
-// state object are mathematically guaranteed to get the identical answer.
-// There is no way for the two devices to disagree without one of them
-// having its own separate, un-reviewed copy of this logic, which neither
-// does.
-test('cross-device consistency: isPerfusing/isPulsatile are pure functions of state alone - any two callers looking at the same state get the same answer, by construction', () => {
+// structural guarantee that makes that true: isPerfusing/isPulsatileArterial/
+// isPulsatilePleth are pure functions of `state` alone, so any two callers -
+// a facilitator console, IntelliVue, HemoSphere, or a test - looking at the
+// identical state object are mathematically guaranteed to get the identical
+// answer. There is no way for the two devices to disagree without one of
+// them having its own separate, un-reviewed copy of this logic, which
+// neither does.
+test('cross-device consistency: isPerfusing/isPulsatileArterial/isPulsatilePleth are pure functions of state alone - any two callers looking at the same state get the same answer, by construction', () => {
   const scenarios = [
     createState({ rhythm: 'Sinus Rhythm' }),
     createState({ rhythm: 'Ventricular Fibrillation' }),
@@ -353,8 +389,8 @@ test('cross-device consistency: isPerfusing/isPulsatile are pure functions of st
     // Simulate two independent "devices" reading the same state - neither
     // passes anything device-specific into these functions, so there is no
     // parameter through which they COULD diverge.
-    const deviceA = { perfusing: isPerfusing(s), pulsatile: isPulsatile(s) };
-    const deviceB = { perfusing: isPerfusing(s), pulsatile: isPulsatile(s) };
+    const deviceA = { perfusing: isPerfusing(s), arterial: isPulsatileArterial(s), pleth: isPulsatilePleth(s) };
+    const deviceB = { perfusing: isPerfusing(s), arterial: isPulsatileArterial(s), pleth: isPulsatilePleth(s) };
     assert.deepEqual(deviceA, deviceB);
   }
 });

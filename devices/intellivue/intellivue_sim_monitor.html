@@ -520,7 +520,7 @@
 <script type="module">
 import { getEffectiveRhythm } from '../../engine/physiology.js';
 import { getMedicatedHR, getMedicatedPASys, getMedicatedPADia } from '../../engine/clinical/pharmacology.js';
-import { isPerfusing, isPulsatile, getEffectiveSBP, getEffectiveDBP, getEffectiveETCO2 } from '../../engine/clinical/pulsatility.js';
+import { isPerfusing, isPulsatileArterial, isPulsatilePleth, getEffectiveSBP, getEffectiveDBP, getEffectiveETCO2 } from '../../engine/clinical/pulsatility.js';
 import {
   createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart,
   tick as srTick, applyFacilitatorOverride as srOverride,
@@ -544,8 +544,8 @@ const gauss=(t,c,w,a)=>a*Math.exp(-0.5*Math.pow((t-c)/w,2));
 // correctly re-engages the native-only fallback. Declared here (not nearer
 // applyEngineValuesLight, further down) because loadScenario("baseline") is
 // called at module-boot time, before that point in the file would execute.
-let sharedPerfusing=null,sharedPulsatile=null;
-// engineMonitored: same boot-order reasoning as sharedPerfusing/sharedPulsatile
+let sharedPerfusing=null,sharedPulsatileArterial=null,sharedPulsatilePleth=null;
+// engineMonitored: same boot-order reasoning as sharedPerfusing/sharedPulsatileArterial/sharedPulsatilePleth
 // above - refreshToggleUI() (used by the Parameters On Screen toggles, further
 // down) reads this, and loadScenario("baseline") calls refreshToggleUI() at
 // module-boot time too.
@@ -603,7 +603,7 @@ function loadScenario(k){const s=SCN[k];if(!s)return;
   state.paCath="PA";state.rvIrrit=false;state.wedge=false;state.wedgeVol=0;state.flush=null;state.flushHold=false;
   state.icpComp=s.icpComp||"normal";state.artSite={abp:"radial",abp2:"femoral"};state.zero={};
   state.trans=null;state.scn=k;
-  sharedPerfusing=null;sharedPulsatile=null; // Phase 6: switching to a local practice scenario re-engages the native-rhythm-string-only perfusing()/pulsatile() fallback
+  sharedPerfusing=null;sharedPulsatileArterial=null;sharedPulsatilePleth=null; // Phase 6: switching to a local practice scenario re-engages the native-rhythm-string-only perfusing()/pulsatile() fallback
   byId("bed").textContent=s.bed;byId("ptname").textContent=s.name;byId("f_name").value=s.name;
   initDisp();syncControls();refreshToggleUI();refreshClinicalUI();layout();updateCO();
 }
@@ -799,7 +799,13 @@ function perfusing(){return sharedPerfusing===null?!(state.rhythm==="vfib"||stat
 // flow from ECMO's nonpulsatile-but-adequate flow - see pulsatility-design.md.
 // Native-only fallback (shared engine not driving) has no such distinction,
 // so pulsatile === perfusing there, matching the pre-Phase-6 behavior exactly.
-function pulsatile(){return sharedPulsatile===null?perfusing():sharedPulsatile;}
+// Split from a single shared pulsatile() into two independent signals -
+// direct user request: a dampened/poorly-transduced arterial line and a
+// poor pulse-ox signal are two different real-world problems (catheter/
+// transducer vs. probe/peripheral-circulation), so they need to be toggle-
+// able independently rather than one flag driving both waveforms at once.
+function pulsatileArterial(){return sharedPulsatileArterial===null?perfusing():sharedPulsatileArterial;}
+function pulsatilePleth(){return sharedPulsatilePleth===null?perfusing():sharedPulsatilePleth;}
 function mapPress(b,val){const[lo,hi]=chScale(b);return b.top+b.h*0.92-clamp((val-lo)/(hi-lo),0,1)*b.h*0.84;}
 function zeroing(line){return state.zero[line]!==undefined;}
 function zeroFlatY(b){const[lo,hi]=chScale(b);return b.top+b.h*0.92-((0-lo)/(hi-lo))*b.h*0.84;}
@@ -821,7 +827,7 @@ function sampleChannel(b){const t=b.cfg.type;
   // perspective both look identical: "no pulsatile signal detected") for
   // ANY non-pulsatile case, whether that's ECMO or a facilitator-forced
   // "poor peripheral perfusion" teaching scenario via pulseSignal.
-  if(t==="pleth"){if(!perfusing()||!pulsatile())return b.cy-(Math.random()-0.5)*0.04*b.h;const{pe}=pulseInfo();
+  if(t==="pleth"){if(!perfusing()||!pulsatilePleth())return b.cy-(Math.random()-0.5)*0.04*b.h;const{pe}=pulseInfo();
     const rm=1-0.08*Math.sin(2*Math.PI*respPhase);return b.top+b.h*0.88-plethN(pe)*rm*b.h*0.72;}
   if(t==="co2"){if(state.rr<1)return b.top+b.h*0.9;return mapPress(b,capno(respPhase,state.etco2));}
   if(["art","art2","pap","cvp","icp"].includes(t)){
@@ -839,7 +845,7 @@ function sampleChannel(b){const t=b.cfg.type;
       // Perfusing but NOT pulsatile (ECMO full support, no native/CPR pulse)
       // - the exact acceptance criterion this phase is built on: flat-but-
       // elevated at the derived MAP level, never the arrest-style noise above.
-      if(!pulsatile())return mapPress(b,(state.sys+2*state.dia)/3);
+      if(!pulsatileArterial())return mapPress(b,(state.sys+2*state.dia)/3);
       return mapPress(b,artPressure(b.cfg.line));
     }
     if(t==="pap"){const pi=pulseInfo();
@@ -922,7 +928,7 @@ function updateNumerics(){tickDisp(performance.now());if(state.trans){syncContro
   // pleth waveform itself, independent of whether the SpO2 NUMBER above is
   // still showing a real facilitator-set value (see pulsatile()'s own
   // "poor peripheral perfusion" use case in the pleth waveform code).
-  byId("v_spo2").textContent=spo2NC?"--":(perf?R(disp.spo2):"--");byId("s_perf").textContent=(!spo2NC&&perf&&pulsatile())?clamp((disp.spo2-80)/8,0.3,9).toFixed(1):"0.0";
+  byId("v_spo2").textContent=spo2NC?"--":(perf?R(disp.spo2):"--");byId("s_perf").textContent=(!spo2NC&&perf&&pulsatilePleth())?clamp((disp.spo2-80)/8,0.3,9).toFixed(1):"0.0";
   byId("v_rr").textContent=rrNC?"--":(state.rr<1?"0":R(disp.rr));
   byId("v_nbp").textContent=state.nbpSys+"/"+state.nbpDia;byId("v_nbpmap").textContent=R((state.nbpSys+2*state.nbpDia)/3);byId("nbp_time").textContent=state.nbpTime;
   // Phase 6: !perfusing() replaces the direct vfib/asystole check here too -
@@ -1337,7 +1343,7 @@ function applyMonitoredToShow(es){
   return changed;
 }
 function applyEngineValuesLight(es){
-  sharedPerfusing=isPerfusing(es);sharedPulsatile=isPulsatile(es);
+  sharedPerfusing=isPerfusing(es);sharedPulsatileArterial=isPulsatileArterial(es);sharedPulsatilePleth=isPulsatilePleth(es);
   engineMonitored=es.monitored||null;
   const showChanged=applyMonitoredToShow(es);
   state.hr=getMedicatedHR(es,es.minute);state.sys=getEffectiveSBP(es);state.dia=getEffectiveDBP(es);state.cvp=es.cvp;
@@ -1462,7 +1468,7 @@ window.ctSharedEngine={
   // document.hidden is true. This exposes perfusing()/pulsatile() directly
   // and forces one numerics repaint, so automated verification isn't
   // blocked on a real animation frame ever firing.
-  getPerfusionNow:()=>({perfusing:perfusing(),pulsatile:pulsatile(),sharedPerfusing,sharedPulsatile}),
+  getPerfusionNow:()=>({perfusing:perfusing(),pulsatileArterial:pulsatileArterial(),pulsatilePleth:pulsatilePleth(),sharedPerfusing,sharedPulsatileArterial,sharedPulsatilePleth}),
   forceNumericsRepaint:()=>{updateNumerics();},
   // Same rationale as every other hook above: frame() (the canvas waveform
   // draw loop) only ever runs via requestAnimationFrame, suspended in this

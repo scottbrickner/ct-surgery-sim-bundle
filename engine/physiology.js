@@ -137,7 +137,16 @@ const BASE_STATE = Object.freeze({
   // see that function's own docblock for the full reasoning. 'auto'
   // (default) preserves the existing flow-source-derived answer exactly,
   // so every pre-existing scenario is unaffected.
-  pulseSignal: 'auto', // 'auto' | 'pulsatile' | 'nonpulsatile'
+  // Split from a single shared `pulseSignal` field into two independent
+  // overrides, direct user request: poor pulsatility on the pulse ox can be
+  // a probe/peripheral-circulation issue with no bearing on the actual
+  // arterial waveform, and vice versa (a dampened/poorly-transduced arterial
+  // line doesn't mean the patient's peripheral perfusion is bad). See
+  // engine/clinical/pulsatility.js's isPulsatileArterial()/isPulsatilePleth()
+  // docblocks for the full override semantics - both default to 'auto' and
+  // are otherwise identical in shape to the field this replaces.
+  pulseSignalArterial: 'auto', // 'auto' | 'pulsatile' | 'nonpulsatile' - the arterial line (ART/other IBP) waveform
+  pulseSignalPleth: 'auto', // 'auto' | 'pulsatile' | 'nonpulsatile' - the pulse ox (SpO2/Pleth) signal
 });
 
 // Which state paths each togglable monitoring group covers - e.g. the "bp"

@@ -354,6 +354,21 @@
         <label class="row">MAP <input type="range" id="ov_map" min="0" max="150" value="87"><span class="val" id="ov_map_v">87</span></label>
         <div class="ov-status" id="ov_map_status" hidden></div>
         <div class="hint" id="mapModeHint" style="margin-top:0">Manual - MAP is its own independently-settable value, matching how this project's scenario data is authored (a real arterial-line MAP reflects waveform/damping, not a clean calculation from sys/dia).</div>
+        <!-- Split from the pulse ox's own pulse-signal toggle, direct user
+             request: a dampened/poorly-transduced arterial line and poor
+             peripheral pulse-ox signal are two different real-world problems
+             (a catheter/transducer issue vs. a probe/peripheral-circulation
+             issue) - see engine/clinical/pulsatility.js's
+             isPulsatileArterial()/isPulsatilePleth() docblock. Independent of
+             the ART sys/dia numbers above (unrestricted already) AND
+             independent of Monitored (connected vs not). -->
+        <div class="row" style="margin-top:0"><label>Arterial line signal</label></div>
+        <div class="mode-pair">
+          <button class="act on" id="pulse_art_auto" type="button">Auto</button>
+          <button class="act" id="pulse_art_pulsatile" type="button">Pulsatile</button>
+          <button class="act" id="pulse_art_nonpulsatile" type="button">Non-pulsatile</button>
+        </div>
+        <div class="hint" id="pulseSignalArterialHint" style="margin-top:0">Auto - pulsatile whenever there's real native or CPR flow, matching actual physiology.</div>
         <label class="row">PA sys <input type="range" id="ov_pasys" min="0" max="80" value="25"><span class="val" id="ov_pasys_v">25</span></label>
         <div class="ov-status" id="ov_pasys_status" hidden></div>
         <label class="row">PA dia <input type="range" id="ov_padia" min="0" max="50" value="10"><span class="val" id="ov_padia_v">10</span></label>
@@ -379,10 +394,14 @@
              at the same time generating whatever physical number I want to
              show up." Independent of the SpO2 number above (unrestricted
              already) AND independent of Monitored (connected vs not) - see
-             engine/clinical/pulsatility.js's isPulsatile()/pulseSignal
-             docblock for the full reasoning. Auto = matches actual flow
-             state (native/CPR/ECMO), unchanged default behavior. -->
-        <div class="row" style="margin-top:0"><label>Pulse signal</label></div>
+             engine/clinical/pulsatility.js's isPulsatilePleth() docblock for
+             the full reasoning. Auto = matches actual flow state (native/CPR/
+             ECMO), unchanged default behavior. Scoped to the pulse ox/Pleth
+             specifically - the arterial line has its own separate toggle
+             next to the BP/MAP sliders above, since a bad probe/peripheral-
+             circulation problem here says nothing about the actual arterial
+             waveform. -->
+        <div class="row" style="margin-top:0"><label>Pulse ox (Pleth) signal</label></div>
         <div class="mode-pair">
           <button class="act on" id="pulse_auto" type="button">Auto</button>
           <button class="act" id="pulse_pulsatile" type="button">Pulsatile</button>
@@ -721,7 +740,7 @@ import {
 } from '../engine/clinical/pharmacology.js';
 import { PUSH_DRUGS, INFUSIONS } from '../engine/clinical/formulary.js';
 import {
-  isPerfusing, isPulsatile, tickCirculation, getEffectiveSBP, getEffectiveDBP, getEffectiveETCO2,
+  isPerfusing, isPulsatileFromFlow, isPulsatileArterial, isPulsatilePleth, tickCirculation, getEffectiveSBP, getEffectiveDBP, getEffectiveETCO2,
 } from '../engine/clinical/pulsatility.js';
 // v1 (part/step, linear) - the module every function below was originally
 // written against. Kept as the "sr" (scenarioRunner) alias throughout, same
@@ -1020,15 +1039,22 @@ function renderReadout(){
   // built around. Neutral/perfusing-and-pulsatile (normal); warn/perfusing-
   // but-nonpulsatile (ECMO-only - NOT arrest styling, the core acceptance
   // criterion); critical/not-perfusing (genuine arrest, no flow at all).
-  const perf=isPerfusing(s),puls=isPulsatile(s);
+  // Deliberately isPulsatileFromFlow() here, NOT isPulsatileArterial/
+  // isPulsatilePleth - this pill summarizes the PATIENT's actual physiology,
+  // unconfounded by either line's own equipment/signal-quality override (a
+  // dampened arterial line or a bad pulse-ox probe doesn't mean the patient
+  // themselves isn't pulsatile). The two per-signal overrides are surfaced
+  // separately, next to their own sliders (BP/MAP and SpO2).
+  const perf=isPerfusing(s),puls=isPulsatileFromFlow(s);
   const statusEl=byId("perfusionStatus");
   if(statusEl){
     statusEl.className="pill "+(!perf?"critical":puls?"good":"warn");
-    // "(ECMO)" only when that's actually why - the new pulseSignal override
-    // (direct user request, see pulsatility.js's isPulsatile docblock) can
-    // ALSO produce perfusing-but-nonpulsatile with no ECMO involved at all
-    // (e.g. a facilitator-authored "poor peripheral perfusion" teaching
-    // case), and labeling that "(ECMO)" would be actively wrong.
+    // "(ECMO)" only when that's actually why - the pulseSignalArterial/
+    // pulseSignalPleth overrides (direct user request, see pulsatility.js's
+    // isPulsatileArterial/isPulsatilePleth docblock) can ALSO produce
+    // perfusing-but-nonpulsatile with no ECMO involved at all (e.g. a
+    // facilitator-authored "poor peripheral perfusion" teaching case), and
+    // labeling that "(ECMO)" would be actively wrong.
     statusEl.textContent=!perf?"Not perfusing (arrest)":puls?"Perfusing · pulsatile":`Perfusing · nonpulsatile${s.flags.ecmoCannulated?" (ECMO)":""}`;
   }
   const cprEl=byId("cprStatus");
@@ -1296,6 +1322,29 @@ for(const id in OVERRIDE_MAP){
     renderActiveOverridesPanel(performance.now());
     applyBPDerivedEffects(id); // no-op for every id except ov_sbp/ov_dbp - see its own docblock
   });
+  // Real reported bug: "up and down toggle arrows don't work consistently."
+  // Root cause matches this file's own already-documented gotcha for the
+  // sliders (see the "input" handler above, and applyBPDerivedEffects'
+  // docblock) - this box only committed on "change" (fires on blur, or once
+  // when a HELD spin-button/arrow-key repeat finally releases), never
+  // "input" (fires on every single tick of that repeat, and on every arrow-
+  // key press). The visible number ticks up correctly regardless (native
+  // browser behavior, independent of any listener), but the actual
+  // override/runner.state didn't commit until release - so a quick tap
+  // looked fine, but holding the spinner or using the keyboard arrows kept
+  // the displayed number and the actual applied value out of sync until
+  // release, and any periodic re-render in between (syncControlsFromRunner,
+  // from an active ramp/release elsewhere) could paint the STALE
+  // committed value back over the ticking display, looking like the
+  // arrows "didn't work." Same fix as the slider: commit on "input" too, no
+  // log spam (logged once on "change" only, matching the slider's own
+  // "no log spam on live input" convention).
+  manual.addEventListener("input",()=>{
+    const raw=parseFloat(manual.value);
+    if(Number.isNaN(raw))return;
+    commitOverride(id,raw,{log:false});
+    applyBPDerivedEffects(id);
+  });
   manual.addEventListener("change",()=>{
     const raw=parseFloat(manual.value);
     if(Number.isNaN(raw)){manual.value=vv.textContent;return;}
@@ -1318,9 +1367,11 @@ function syncControlsFromRunner(){
   // a stage that unplugs a sensor) and on a remote snapshot arriving from
   // another facilitator tab, not just this tab's own clicks.
   for(const group in MONITOR_ANCHOR_ID)byId(`mon_${group}`).checked=isMonitored(s,group);
-  const pulseMode=s.pulseSignal||"auto";
-  ["auto","pulsatile","nonpulsatile"].forEach(m=>byId(`pulse_${m}`).classList.toggle("on",m===pulseMode));
-  byId("pulseSignalHint").textContent=PULSE_SIGNAL_HINTS[pulseMode];
+  for(const which in PULSE_SIGNAL_CONFIG){
+    const cfg=PULSE_SIGNAL_CONFIG[which],mode=s[cfg.field]||"auto";
+    ["auto","pulsatile","nonpulsatile"].forEach(m=>byId(`${cfg.idPrefix}_${m}`).classList.toggle("on",m===mode));
+    byId(cfg.hintId).textContent=pulseSignalHints(cfg.waveWord)[mode];
+  }
   renderAllOverrideStatuses(performance.now());
 }
 
@@ -1395,27 +1446,41 @@ byId("map_mode_calc").addEventListener("click",()=>setMapMode("calculated"));
 
 /**
  * Pulse signal (Auto/Pulsatile/Non-pulsatile), direct user request - see
- * engine/clinical/pulsatility.js's isPulsatile()/pulseSignal docblock for
- * the full reasoning. A discrete field like rhythm/pacer-mode/MAP-source -
- * srOverride() (applyFacilitatorOverride), not srSetOverride() - "which
- * mode" has no hold/release semantics of its own.
+ * engine/clinical/pulsatility.js's isPulsatileArterial()/isPulsatilePleth()
+ * docblock for the full reasoning. A discrete field like rhythm/pacer-mode/
+ * MAP-source - srOverride() (applyFacilitatorOverride), not
+ * srSetOverride() - "which mode" has no hold/release semantics of its own.
+ * Originally one shared toggle; split into two independent ones (Pleth,
+ * Arterial line) on direct user request - generalized over a `which` param
+ * (`{field, idPrefix, hintId, wordArt}`) rather than duplicating this whole
+ * block, same "one generic implementation, not two near-identical copies"
+ * convention this file already uses for its slider/manual-entry/monitored-
+ * checkbox injection loops.
  */
-const PULSE_SIGNAL_HINTS={
-  auto:"Auto - pulsatile whenever there's real native or CPR flow, matching actual physiology.",
-  pulsatile:"Forced Pulsatile - the pleth/ART waveform shows a real pulse regardless of underlying flow (e.g. an unusual teaching case). Perfusion status itself is untouched.",
-  nonpulsatile:"Forced Non-pulsatile - the pleth/ART waveform shows a flat/searching signal (poor peripheral perfusion, motion, a bad probe site) while the SpO2/BP NUMBER stays exactly what you've set. Does not mean the patient has arrested - perfusion status itself is untouched.",
+const PULSE_SIGNAL_CONFIG={
+  pleth:{field:"pulseSignalPleth",idPrefix:"pulse",hintId:"pulseSignalHint",label:"Pulse ox (Pleth)",waveWord:"pleth"},
+  arterial:{field:"pulseSignalArterial",idPrefix:"pulse_art",hintId:"pulseSignalArterialHint",label:"Arterial line",waveWord:"ART"},
 };
-function setPulseSignal(mode){
-  if(!runner)return;
-  runner=srOverride(runner,{pulseSignal:mode});
-  ["auto","pulsatile","nonpulsatile"].forEach(m=>byId(`pulse_${m}`).classList.toggle("on",m===mode));
-  byId("pulseSignalHint").textContent=PULSE_SIGNAL_HINTS[mode];
-  renderReadout();
-  logChange(`Pulse signal set to ${mode==="auto"?"Auto":mode==="pulsatile"?"Forced Pulsatile":"Forced Non-pulsatile"}`);
+function pulseSignalHints(waveWord){
+  return {
+    auto:"Auto - pulsatile whenever there's real native or CPR flow, matching actual physiology.",
+    pulsatile:`Forced Pulsatile - the ${waveWord} waveform shows a real pulse regardless of underlying flow (e.g. an unusual teaching case). Perfusion status itself is untouched.`,
+    nonpulsatile:`Forced Non-pulsatile - the ${waveWord} waveform shows a flat/searching signal while the underlying NUMBER stays exactly what you've set. Does not mean the patient has arrested - perfusion status itself is untouched.`,
+  };
 }
-byId("pulse_auto").addEventListener("click",()=>setPulseSignal("auto"));
-byId("pulse_pulsatile").addEventListener("click",()=>setPulseSignal("pulsatile"));
-byId("pulse_nonpulsatile").addEventListener("click",()=>setPulseSignal("nonpulsatile"));
+function setPulseSignal(which,mode){
+  if(!runner)return;
+  const cfg=PULSE_SIGNAL_CONFIG[which];
+  runner=srOverride(runner,{[cfg.field]:mode});
+  ["auto","pulsatile","nonpulsatile"].forEach(m=>byId(`${cfg.idPrefix}_${m}`).classList.toggle("on",m===mode));
+  byId(cfg.hintId).textContent=pulseSignalHints(cfg.waveWord)[mode];
+  renderReadout();
+  logChange(`${cfg.label} signal set to ${mode==="auto"?"Auto":mode==="pulsatile"?"Forced Pulsatile":"Forced Non-pulsatile"}`);
+}
+for(const which in PULSE_SIGNAL_CONFIG){
+  const cfg=PULSE_SIGNAL_CONFIG[which];
+  ["auto","pulsatile","nonpulsatile"].forEach(m=>byId(`${cfg.idPrefix}_${m}`).addEventListener("click",()=>setPulseSignal(which,m)));
+}
 
 /**
  * Renders the small passive dot+text badge beneath one slider - a glance-only
@@ -2289,7 +2354,7 @@ window.ctSharedEngine={
   getMedicatedMAPNow:()=>runner&&getMedicatedMAP(runner.state,runner.state.minute),
   setCPRNow:(active,quality)=>{setCPR(active,quality);return runner&&runner.state.circulation.cpr;},
   achieveROSCNow:()=>{achieveROSC();return runner&&runner.state;},
-  getPerfusionStateNow:()=>runner&&({perfusing:isPerfusing(runner.state),pulsatile:isPulsatile(runner.state)}),
+  getPerfusionStateNow:()=>runner&&({perfusing:isPerfusing(runner.state),pulsatile:isPulsatileFromFlow(runner.state),pulsatileArterial:isPulsatileArterial(runner.state),pulsatilePleth:isPulsatilePleth(runner.state)}),
   getEffectiveETCO2Now:()=>runner&&getEffectiveETCO2(runner.state,runner.state.minute),
   getEffectiveMAPRawNow:()=>runner&&({sbp:getEffectiveSBP(runner.state),dbp:getEffectiveDBP(runner.state)}),
 };
