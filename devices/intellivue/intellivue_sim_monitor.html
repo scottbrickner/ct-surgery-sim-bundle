@@ -239,16 +239,33 @@
            numbers. Fixed by adding "mmHg" to the .sub row instead, matching
            NBP's own already-correct pattern - the .lim corner's alarm-range
            behavior is untouched. -->
-      <div class="tile" id="t_abp" data-color="abp"><div class="tlab"><span id="l_abp">ART</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_abp">mmHg</span></div><div class="big med" id="v_abp">--/--</div><div class="sub">(<span id="v_abpmap">--</span>) mmHg</div></div></div>
-      <div class="tile" id="t_abp2" data-color="abp2"><div class="tlab"><span id="l_abp2">Fem</span></div><div class="tbody"><div class="lab"><span class="lim">mmHg</span></div><div class="big med" id="v_abp2">--/--</div><div class="sub">(<span id="v_abp2map">--</span>) mmHg</div></div></div>
-      <div class="tile" id="t_pap" data-color="pap"><div class="tlab"><span id="l_pap">PAP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_pap">mmHg</span></div><div class="big sm" id="v_pap">--/--</div><div class="sub">(<span id="v_papmap">--</span>) mmHg &nbsp;PAWP <span id="v_pawp">--</span><span id="v_pawp_age" style="opacity:.75"></span></div></div></div>
+      <!-- Direct user request: MAP must render at the SAME font/size/style as
+           the primary sys/dia number, not a small number tucked in the
+           corner - the .sub row (15px, absolutely positioned, opacity .85)
+           was exactly that. Fixed by moving the MAP span INSIDE the .big
+           element itself, right after sys/dia - a nested span with no font-
+           size of its own naturally inherits its parent .big/.big.med/
+           .big.sm's computed size for free, no new CSS needed. .sub now
+           holds only the unit (and PAP's PAWP sub-reading), matching NBP's
+           layout below at every density tier. -->
+      <!-- v_abp/v_abp2/v_pap keep their EXACT existing ids on an INNER span
+           (not the wrapping .big div) specifically so updateNumerics()'s
+           existing byId("v_abp").textContent=... assignments keep working
+           unmodified - a wholesale textContent write on the wrapping div
+           would silently destroy the nested MAP span on the very next
+           render (a real bug caught live: byId("v_abpmap") started
+           returning null after one frame, once the first version of this
+           fix set .textContent directly on the shared wrapper). -->
+      <div class="tile" id="t_abp" data-color="abp"><div class="tlab"><span id="l_abp">ART</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_abp">mmHg</span></div><div class="big med"><span id="v_abp">--/--</span> (<span id="v_abpmap">--</span>)</div><div class="sub">mmHg</div></div></div>
+      <div class="tile" id="t_abp2" data-color="abp2"><div class="tlab"><span id="l_abp2">Fem</span></div><div class="tbody"><div class="lab"><span class="lim">mmHg</span></div><div class="big med"><span id="v_abp2">--/--</span> (<span id="v_abp2map">--</span>)</div><div class="sub">mmHg</div></div></div>
+      <div class="tile" id="t_pap" data-color="pap"><div class="tlab"><span id="l_pap">PAP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_pap">mmHg</span></div><div class="big sm"><span id="v_pap">--/--</span> (<span id="v_papmap">--</span>)</div><div class="sub">mmHg &nbsp;PAWP <span id="v_pawp">--</span><span id="v_pawp_age" style="opacity:.75"></span></div></div></div>
       <div class="tile" id="t_cvp" data-color="cvp"><div class="tlab"><span id="l_cvp">CVP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_cvp">mean</span></div><div class="big" id="v_cvp">--</div><div class="sub">mmHg</div></div></div>
       <div class="tile" id="t_icp" data-color="icp"><div class="tlab"><span>ICP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_icp">mean</span></div><div class="big" id="v_icp">--</div><div class="sub">mmHg</div></div></div>
       <div class="tile" id="t_cpp" data-color="cpp"><div class="tlab"><span>CPP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_cpp">≥60</span></div><div class="big" id="v_cpp">--</div><div class="sub">mmHg</div></div></div>
       <div class="tile" id="t_rr" data-color="resp"><div class="tlab"><span>RR</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_rr"></span></div><div class="big med" id="v_rr">--</div><div class="sub">/min</div></div></div>
       <div class="tile" id="t_co2" data-color="co2"><div class="tlab"><span>etCO₂</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_etco2"></span></div><div class="big" id="v_co2">--</div><div class="sub">mmHg awRR <span id="s_awrr">14</span></div></div></div>
       <div class="tile" id="t_coci" data-color="coci"><div class="tlab"><span>CO/CI</span></div><div class="tbody"><div class="lab"><span class="lim" id="co_time">td</span></div><div class="big sm" id="v_coci">--/--</div><div class="sub">L/min · /m²</div></div></div>
-      <div class="tile" id="t_nbp" data-color="nbp"><div class="tlab"><span>NBP</span></div><div class="tbody"><div class="lab"><span class="lim" id="nbp_time">--:--</span></div><div class="big sm" id="v_nbp">--/--</div><div class="sub">(<span id="v_nbpmap">--</span>) mmHg</div></div></div>
+      <div class="tile" id="t_nbp" data-color="nbp"><div class="tlab"><span>NBP</span></div><div class="tbody"><div class="lab"><span class="lim" id="nbp_time">--:--</span></div><div class="big sm"><span id="v_nbp">--/--</span> (<span id="v_nbpmap">--</span>)</div><div class="sub">mmHg</div></div></div>
       <div class="tile" id="t_temp" data-color="temp"><div class="tlab"><span>Temp</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_temp">°C</span></div><div class="big med" id="v_temp">--</div><div class="sub">core</div></div></div>
     </div>
   </div>
