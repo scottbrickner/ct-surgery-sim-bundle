@@ -653,7 +653,7 @@ function drawLabels(){lctx.clearRect(0,0,W,H);lctx.textBaseline="top";
       lctx.fillText(sc[1]+"",W-4,b.top+4);lctx.fillText(sc[0]+"",W-4,b.top+b.h-14);lctx.textAlign="left";}}}
 
 /* ---------------- Cardiac scheduler ---------------- */
-let tBeat=0,rrSec=60/78,beatType="normal",hasP=true,tAtrial=0,atrialRR=60/90,respPhase=0,tAbs=0;
+let tBeat=0,rrSec=60/78,prevRRSec=60/78,beatType="normal",hasP=true,tAtrial=0,atrialRR=60/90,respPhase=0,tAbs=0;
 // Wenckebach/Mobitz II group-beating position counters - module-scope like
 // every other cardiac-scheduler variable above (tBeat/tAtrial/etc.), reset
 // implicitly whenever the rhythm changes away and back since pickRhythmTiming
@@ -693,7 +693,7 @@ function advanceCardiac(dt){if(state.rr>0){respPhase+=(state.rr/60)*dt;if(respPh
   if(["vfib","asystole","vtach","torsades"].includes(state.rhythm)){tBeat=0;return;}
   if(state.rhythm==="avb3"){atrialRR=60/90;tAtrial+=dt;if(tAtrial>=atrialRR)tAtrial-=atrialRR;
     rrSec=60/Math.max(20,state.hr);tBeat+=dt;if(tBeat>=rrSec){tBeat-=rrSec;beatType="escape";state.beatCount++;}return;}
-  tBeat+=dt;if(tBeat>=rrSec){tBeat-=rrSec;pickRhythmTiming();}}
+  tBeat+=dt;if(tBeat>=rrSec){tBeat-=rrSec;prevRRSec=rrSec;pickRhythmTiming();}}
 function ecgComplex(tb,type){const ms=tb*1000;let v=0;
   if(hasP&&type!=="pvc"&&type!=="escape")v+=gauss(ms,90,22,0.12);
   // A "dropped" cycle (2nd-degree block, non-conducted P) is P-wave-only by
@@ -739,8 +739,28 @@ function ecgValue(){
   let v=ecgComplex(tBeat,beatType);if(state.rhythm==="avb3")v+=gauss(tAtrial*1000,90,22,0.12);return v;}
 
 /* ---------------- Pressure morphology ---------------- */
+// Real, measured bug found via direct user report ("Waveforms for IBP have
+// weird artifacts with fib and rhythm issues") and confirmed by direct
+// instrumentation, not guessed: a ~0.6-amplitude single-frame jump in the
+// ART trace at every beat transition where RR length actually changes -
+// i.e. every single beat during AFib, since the old `(tBeat-0.24+len)%len`
+// used the CURRENT (just-changed) beat's own length even during the first
+// 0.24s of a new beat, when what's actually meant to be shown is the TAIL
+// END of the PREVIOUS beat's own pressure decay (a real, correct
+// physiological idea - late diastole from the last beat, still finishing,
+// before this beat's own electromechanical delay elapses) - wrapping with
+// the wrong length stitched together two different beats' worth of
+// waveform shape at the seam. Fixed by explicitly tracking prevRRSec (the
+// length that was JUST active, updated in advanceCardiac right before
+// pickRhythmTiming() changes rrSec for the new beat) and using THAT during
+// the pre-ejection window specifically, rather than assuming consecutive
+// beats share one length - true for every regular rhythm (which is why
+// this was invisible before), false for AFib and any other rhythm with
+// real beat-to-beat RR variability.
 function pulseInfo(){if(state.rhythm==="vtach"||state.rhythm==="torsades"){const len=60/Math.max(40,state.hr);return{pe:(tAbs%len),len,amp:0.45};}
-  const len=rrSec;let pe=(tBeat-0.24+len)%len;return{pe,len,amp:1};}
+  const raw=tBeat-0.24;
+  if(raw<0)return{pe:raw+prevRRSec,len:prevRRSec,amp:1}; // still finishing the PREVIOUS beat's own decay
+  return{pe:raw,len:rrSec,amp:1};}
 const SITES={aorta:{up:.13,notch:.24,dmin:.58,dw:.05,dec:2.2,del:0,s:-8,d:4},
   brachial:{up:.12,notch:.27,dmin:.54,dw:.06,dec:2.4,del:.01,s:-2,d:1},
   radial:{up:.11,notch:.31,dmin:.50,dw:.08,dec:2.7,del:.02,s:6,d:-3},
@@ -1509,6 +1529,8 @@ window.ctSharedEngine={
   // and forces one numerics repaint, so automated verification isn't
   // blocked on a real animation frame ever firing.
   getPerfusionNow:()=>({perfusing:perfusing(),pulsatileArterial:pulsatileArterial(),pulsatilePleth:pulsatilePleth(),sharedPerfusing,sharedPulsatileArterial,sharedPulsatilePleth}),
+  __debugGetRRSeq:(nFrames,dtMs)=>{const seq=[];let last=rrSec;let ts=performance.now();for(let i=0;i<nFrames;i++){ts+=dtMs;frame(ts);if(rrSec!==last){seq.push(rrSec);last=rrSec;}}return seq;},
+  __debugSampleART:(nFrames,dtMs)=>{const samples=[];let ts=performance.now();for(let i=0;i<nFrames;i++){ts+=dtMs;frame(ts);const pi=pulseInfo();samples.push({pe:+pi.pe.toFixed(4),len:+pi.len.toFixed(4),art:+artN(pi.pe,"radial","none",pi.len).toFixed(4)});}return samples;},
   getDefibArtifactStateNow:()=>({sharedDefibEventCount,defibArtifactStartTAbs,tAbs,ecgValueNow:ecgValue()}),
   triggerDefibArtifactNow:()=>{defibArtifactStartTAbs=tAbs;},
   forceNumericsRepaint:()=>{updateNumerics();},
