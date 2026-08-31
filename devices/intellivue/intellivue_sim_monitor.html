@@ -205,18 +205,50 @@
   <div id="main">
     <div id="waveWrap"><canvas id="wave"></canvas><canvas id="labels"></canvas></div>
     <div id="nums">
+      <!-- Real audit finding: this column's order had drifted from the
+           waveform panel's own row order (WAVE_ORDER, above) - RR/Resp sat
+           3rd here (right after HR/SpO2) but 8th-of-9 in the trace panel,
+           so a learner scanning left-to-right/top-to-bottom couldn't match
+           a numeric tile to its own waveform at a glance. Reordered to
+           follow WAVE_ORDER's sequence (ecg,pleth,abp,abp2,pap,cvp,icp,
+           resp,co2) for every tile that HAS a waveform; CPP (derived,
+           canvas-free) is threaded in right after ICP, its own input.
+           NBP was FIRST placed right after SpO2 (reasoned as "same pressure
+           family as ART"), then corrected against real Philips IntelliVue
+           MX700/MX800 reference photos the user supplied: on the real
+           device NBP's row (a bar-graph trend, not a continuous trace) sits
+           at the very BOTTOM of the waveform stack, below Resp/CO2 - not
+           beside the continuously-traced pressure lines - and its numeric
+           tile sits correspondingly at the bottom of the column, directly
+           before Temp (also confirmed at the very bottom in all three
+           references, some showing dual-probe Temp + delta - single-probe
+           here is an existing, separate simplification, not something this
+           reorder changes). CO/CI (thermodilution, also intermittent - no
+           waveform of its own either) is grouped with NBP for the same
+           reason, immediately before it. -->
       <div class="tile" id="t_hr" data-color="ecg"><div class="tlab"><span id="l_hr">HR</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_hr"></span></div><div class="big" id="v_hr">--</div><div class="sub">bpm <span id="s_pvc"></span></div></div></div>
       <div class="tile" id="t_spo2" data-color="pleth"><div class="tlab"><span>SpO₂</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_spo2"></span></div><div class="big" id="v_spo2">--</div><div class="sub">% Perf <span id="s_perf">2.4</span></div></div></div>
-      <div class="tile" id="t_rr" data-color="resp"><div class="tlab"><span>RR</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_rr"></span></div><div class="big med" id="v_rr">--</div><div class="sub">/min</div></div></div>
-      <div class="tile" id="t_nbp" data-color="nbp"><div class="tlab"><span>NBP</span></div><div class="tbody"><div class="lab"><span class="lim" id="nbp_time">--:--</span></div><div class="big sm" id="v_nbp">--/--</div><div class="sub">(<span id="v_nbpmap">--</span>) mmHg</div></div></div>
-      <div class="tile" id="t_abp" data-color="abp"><div class="tlab"><span id="l_abp">ART</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_abp">mmHg</span></div><div class="big med" id="v_abp">--/--</div><div class="sub">(<span id="v_abpmap">--</span>)</div></div></div>
-      <div class="tile" id="t_abp2" data-color="abp2"><div class="tlab"><span id="l_abp2">Fem</span></div><div class="tbody"><div class="lab"><span class="lim">mmHg</span></div><div class="big med" id="v_abp2">--/--</div><div class="sub">(<span id="v_abp2map">--</span>)</div></div></div>
-      <div class="tile" id="t_pap" data-color="pap"><div class="tlab"><span id="l_pap">PAP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_pap">mmHg</span></div><div class="big sm" id="v_pap">--/--</div><div class="sub">(<span id="v_papmap">--</span>) PAWP <span id="v_pawp">--</span></div></div></div>
+      <!-- Real audit finding: NBP's own .sub row already co-locates its unit
+           ("(72) mmHg") with the value; ABP/ABP2/PAP's .lim corner span only
+           SHOWS "mmHg" as static placeholder markup before JS first runs -
+           refreshLimLabels() (see syncNumTiles(), called from layout() at
+           boot) immediately overwrites it with the real alarm-limit range
+           for that parameter, which is that corner's actual, correct,
+           real-monitor purpose (not a units display). Once that happens
+           these three tiles show NO unit anywhere near the actual pressure
+           numbers. Fixed by adding "mmHg" to the .sub row instead, matching
+           NBP's own already-correct pattern - the .lim corner's alarm-range
+           behavior is untouched. -->
+      <div class="tile" id="t_abp" data-color="abp"><div class="tlab"><span id="l_abp">ART</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_abp">mmHg</span></div><div class="big med" id="v_abp">--/--</div><div class="sub">(<span id="v_abpmap">--</span>) mmHg</div></div></div>
+      <div class="tile" id="t_abp2" data-color="abp2"><div class="tlab"><span id="l_abp2">Fem</span></div><div class="tbody"><div class="lab"><span class="lim">mmHg</span></div><div class="big med" id="v_abp2">--/--</div><div class="sub">(<span id="v_abp2map">--</span>) mmHg</div></div></div>
+      <div class="tile" id="t_pap" data-color="pap"><div class="tlab"><span id="l_pap">PAP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_pap">mmHg</span></div><div class="big sm" id="v_pap">--/--</div><div class="sub">(<span id="v_papmap">--</span>) mmHg &nbsp;PAWP <span id="v_pawp">--</span><span id="v_pawp_age" style="opacity:.75"></span></div></div></div>
       <div class="tile" id="t_cvp" data-color="cvp"><div class="tlab"><span id="l_cvp">CVP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_cvp">mean</span></div><div class="big" id="v_cvp">--</div><div class="sub">mmHg</div></div></div>
       <div class="tile" id="t_icp" data-color="icp"><div class="tlab"><span>ICP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_icp">mean</span></div><div class="big" id="v_icp">--</div><div class="sub">mmHg</div></div></div>
       <div class="tile" id="t_cpp" data-color="cpp"><div class="tlab"><span>CPP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_cpp">≥60</span></div><div class="big" id="v_cpp">--</div><div class="sub">mmHg</div></div></div>
+      <div class="tile" id="t_rr" data-color="resp"><div class="tlab"><span>RR</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_rr"></span></div><div class="big med" id="v_rr">--</div><div class="sub">/min</div></div></div>
       <div class="tile" id="t_co2" data-color="co2"><div class="tlab"><span>etCO₂</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_etco2"></span></div><div class="big" id="v_co2">--</div><div class="sub">mmHg awRR <span id="s_awrr">14</span></div></div></div>
       <div class="tile" id="t_coci" data-color="coci"><div class="tlab"><span>CO/CI</span></div><div class="tbody"><div class="lab"><span class="lim" id="co_time">td</span></div><div class="big sm" id="v_coci">--/--</div><div class="sub">L/min · /m²</div></div></div>
+      <div class="tile" id="t_nbp" data-color="nbp"><div class="tlab"><span>NBP</span></div><div class="tbody"><div class="lab"><span class="lim" id="nbp_time">--:--</span></div><div class="big sm" id="v_nbp">--/--</div><div class="sub">(<span id="v_nbpmap">--</span>) mmHg</div></div></div>
       <div class="tile" id="t_temp" data-color="temp"><div class="tlab"><span>Temp</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_temp">°C</span></div><div class="big med" id="v_temp">--</div><div class="sub">core</div></div></div>
     </div>
   </div>
@@ -567,6 +599,14 @@ const state={
   path:{av:"none",mr:false,tr:false,cannon:false,damp:"normal",paradoxus:false,alternans:false},
   paCath:"PA",rvIrrit:false,icpComp:"normal",
   wedge:false,wedgeVol:0,wedgeThreshold:1.25,flush:null,flushHold:false,
+  // Real finding from a full audit pass: PAWP was shown as a continuously-
+  // updating number in the PAP tile, every frame, even with no wedge
+  // maneuver ever performed - real monitors treat PAOP/PAWP as an
+  // intermittent, deliberately-acquired measurement, not a live trace value.
+  // pawpMeasured tracks the LAST actual reading (captured on a successful
+  // wedge->deflate cycle, see wedge_deflate below) - null until the wedge
+  // procedure has genuinely been performed at least once this case.
+  pawpMeasured:null,
   silenced:false,silenceUntil:0,frozen:false,hidden:false,zero:{},
   events:{hem:false,hemSev:2,press:false,pressBoost:0,boluses:[]},
   trans:null,scn:"baseline",
@@ -607,7 +647,7 @@ function loadScenario(k){const s=SCN[k];if(!s)return;
   for(const key in state.show)state.show[key]=false; for(const key in s.show)state.show[key]=!!s.show[key];
   state.events={hem:false,hemSev:2,press:false,pressBoost:0,boluses:[]};
   state.path={av:"none",mr:false,tr:false,cannon:false,damp:"normal",paradoxus:false,alternans:false};
-  state.paCath="PA";state.rvIrrit=false;state.wedge=false;state.wedgeVol=0;state.flush=null;state.flushHold=false;
+  state.paCath="PA";state.rvIrrit=false;state.wedge=false;state.wedgeVol=0;state.flush=null;state.flushHold=false;state.pawpMeasured=null;
   state.icpComp=s.icpComp||"normal";state.artSite={abp:"radial",abp2:"femoral"};state.zero={};
   state.trans=null;state.scn=k;
   sharedPerfusing=null;sharedPulsatileArterial=null;sharedPulsatilePleth=null; // Phase 6: switching to a local practice scenario re-engages the native-rhythm-string-only perfusing()/pulsatile() fallback
@@ -661,6 +701,17 @@ let tBeat=0,rrSec=60/78,prevRRSec=60/78,beatType="normal",hasP=true,tAtrial=0,at
 let wenckebachPos=0,wenckebachPrMs=0,mobitzPos=0;
 function pickRhythmTiming(){let hr=state.hr,rr=60/Math.max(20,hr);hasP=true;beatType="normal";
   switch(state.rhythm){case"afib":rr*=(0.55+Math.random()*0.9);hasP=false;break;case"aflutter":hasP=false;break;
+    // Real audit finding: VT used to be entirely special-cased in ecgValue()
+    // as a raw 2-harmonic sine, bypassing this whole per-beat state machine
+    // (and pickRhythmTiming/advanceCardiac's own regular tBeat/rrSec clock)
+    // completely - real monomorphic VT is textbook-described as "a fast run
+    // of PVC-like wide complexes," which this file ALREADY draws correctly
+    // for actual PVCs/escape beats (see ecgComplex's pvc/escape branch,
+    // reused below for "vtach" too) - so the fix is routing VT through the
+    // same normal beat clock everything else uses, not inventing new
+    // waveform math. RHYTHM_LIBRARY classifies VT 'regular' (unlike AFib/
+    // Torsades's 'irregular') - no rr jitter here, matching that.
+    case"vtach":hasP=false;beatType="vtach";break;
     case"svt":hasP=false;break;case"junctional":hasP=false;break;case"paced_v":beatType="paced";break;case"avb3":hasP=false;break;
     // Idioventricular (AIVR): reuses the SAME wide-QRS/no-P "escape" complex
     // avb3's ventricular-escape beats already draw (see ecgComplex's
@@ -690,7 +741,7 @@ function pickRhythmTiming(){let hr=state.hr,rr=60/Math.max(20,hr);hasP=true;beat
   if(state.paCath==="RV"&&state.rvIrrit&&Math.random()<0.14)state.pvcQueued=true;
   if(state.pvcQueued&&beatType!=="dropped"){beatType="pvc";state.pvcQueued=false;}rrSec=rr;}
 function advanceCardiac(dt){if(state.rr>0){respPhase+=(state.rr/60)*dt;if(respPhase>=1)respPhase-=1;}
-  if(["vfib","asystole","vtach","torsades"].includes(state.rhythm)){tBeat=0;return;}
+  if(["vfib","asystole","torsades"].includes(state.rhythm)){tBeat=0;return;}
   if(state.rhythm==="avb3"){atrialRR=60/90;tAtrial+=dt;if(tAtrial>=atrialRR)tAtrial-=atrialRR;
     rrSec=60/Math.max(20,state.hr);tBeat+=dt;if(tBeat>=rrSec){tBeat-=rrSec;beatType="escape";state.beatCount++;}return;}
   tBeat+=dt;if(tBeat>=rrSec){tBeat-=rrSec;prevRRSec=rrSec;pickRhythmTiming();}}
@@ -703,7 +754,7 @@ function ecgComplex(tb,type){const ms=tb*1000;let v=0;
   if(state.rhythm==="afib")v+=(Math.random()-0.5)*0.04;
   if(state.rhythm==="aflutter")v+=0.10*Math.abs(((ms%190)/190)-0.5)-0.05;
   const pr=state.rhythm==="avb1"?80:state.rhythm==="avb2i"?wenckebachPrMs:0;
-  if(type==="pvc"||type==="escape"){v+=gauss(ms,235,32,1.0)-gauss(ms,285,30,0.55);v+=gauss(ms,470,80,-0.40);}
+  if(type==="pvc"||type==="escape"||type==="vtach"){v+=gauss(ms,235,32,1.0)-gauss(ms,285,30,0.55);v+=gauss(ms,470,80,-0.40);}
   else if(type==="paced"){v+=gauss(ms,182,3,1.25);v+=gauss(ms,235,30,0.9)-gauss(ms,280,28,0.5);v+=gauss(ms,470,80,-0.35);}
   else{v+=-gauss(ms,205+pr,8,0.09);v+=gauss(ms,222+pr,9,1.0);v+=-gauss(ms,240+pr,9,0.22);v+=gauss(ms,400+pr,55,0.26);}
   return v;}
@@ -734,8 +785,34 @@ function ecgValue(){
   }
   if(state.rhythm==="vfib")return 0.5*Math.sin(2*Math.PI*7.5*tAbs+Math.sin(tAbs*13))+0.32*Math.sin(2*Math.PI*11.3*tAbs)+0.16*(Math.random()-0.5);
   if(state.rhythm==="asystole")return 0.015*Math.sin(tAbs*1.7)+(Math.random()-0.5)*0.008;
-  if(state.rhythm==="vtach"){const f=Math.max(2.3,state.hr/60);return 0.8*Math.sin(2*Math.PI*f*tAbs)-0.16*Math.sin(4*Math.PI*f*tAbs);}
-  if(state.rhythm==="torsades"){const f=Math.max(2.6,state.hr/60);const e=0.55+0.45*Math.sin(2*Math.PI*0.18*tAbs);return e*Math.sin(2*Math.PI*f*tAbs);}
+  // Real audit finding: this was a fixed-frequency single sine tone under an
+  // ALWAYS-POSITIVE amplitude envelope - it never actually crossed zero (no
+  // true axis inversion, the defining "twisting around baseline" look real
+  // torsades is named for), and both the envelope's period and the carrier
+  // rate were perfectly regular with zero beat-to-beat wander, despite
+  // RHYTHM_LIBRARY already classifying torsades 'irregular' (same tier as
+  // AFib). Rebuilt as a genuinely polarity-inverting envelope built from two
+  // incommensurate slow tones (not one clean periodic wobble, which read as
+  // too predictable) - the SAME two tones also drive the carrier rate's own
+  // wander, so the rate and the axis twist stay visually coupled, matching
+  // the real phenomenon rather than two independent random processes. A 2nd
+  // harmonic on the carrier sharpens each peak toward a pointed QRS-like
+  // shape instead of a smooth sine hump. VT is no longer special-cased here
+  // at all - see pickRhythmTiming/advanceCardiac's new "vtach" case and
+  // ecgComplex's pvc/escape/vtach branch: real monomorphic VT IS a fast,
+  // REGULAR run of PVC-like wide complexes, so it now flows through the
+  // exact same per-beat state machine and wide-QRS gaussian shape already
+  // used (and already correct) for actual PVCs/escape beats, rather than a
+  // hand-rolled sine bypassing that machinery entirely.
+  if(state.rhythm==="torsades"){
+    const baseF=Math.max(2.2,state.hr/60);
+    const slow1=Math.sin(2*Math.PI*0.13*tAbs),slow2=Math.sin(2*Math.PI*0.081*tAbs+1.7);
+    const envelope=0.75*slow1+0.35*slow2; // bipolar - genuinely swings through zero, unlike the old always-positive version
+    const fWander=1+0.22*slow2-0.12*slow1; // rate wander driven by the SAME slow tones as the envelope, not independent noise
+    const f=Math.max(1.5,baseF*fWander);
+    const carrier=Math.sin(2*Math.PI*f*tAbs)+0.30*Math.sin(4*Math.PI*f*tAbs);
+    return clamp(0.85*envelope*carrier,-1.3,1.3);
+  }
   let v=ecgComplex(tBeat,beatType);if(state.rhythm==="avb3")v+=gauss(tAtrial*1000,90,22,0.12);return v;}
 
 /* ---------------- Pressure morphology ---------------- */
@@ -757,10 +834,22 @@ function ecgValue(){
 // beats share one length - true for every regular rhythm (which is why
 // this was invisible before), false for AFib and any other rhythm with
 // real beat-to-beat RR variability.
-function pulseInfo(){if(state.rhythm==="vtach"||state.rhythm==="torsades"){const len=60/Math.max(40,state.hr);return{pe:(tAbs%len),len,amp:0.45};}
-  const raw=tBeat-0.24;
-  if(raw<0)return{pe:raw+prevRRSec,len:prevRRSec,amp:1}; // still finishing the PREVIOUS beat's own decay
-  return{pe:raw,len:rrSec,amp:1};}
+function pulseInfo(){
+  // Torsades stays on its own free-running tAbs clock (see ecgValue() -
+  // it's still a continuous parametric rhythm, not on the per-beat state
+  // machine). VT is DIFFERENT now - it flows through the normal tBeat/rrSec
+  // beat clock same as every other regular rhythm (see pickRhythmTiming's
+  // new "vtach" case), so its pressure pulse now uses the exact same
+  // beat-aligned timing path as everything else instead of a second,
+  // independent tAbs%len clock that could drift out of sync with the ECG's
+  // own beat boundaries - same class of fix as the AFib pressure-
+  // discontinuity bug documented above, just for VT. Reduced amp (0.45,
+  // unchanged) still represents VT's typically diminished/erratic stroke
+  // volume relative to a normally-conducted beat.
+  if(state.rhythm==="torsades"){const len=60/Math.max(40,state.hr);return{pe:(tAbs%len),len,amp:0.45};}
+  const raw=tBeat-0.24,amp=state.rhythm==="vtach"?0.45:1;
+  if(raw<0)return{pe:raw+prevRRSec,len:prevRRSec,amp}; // still finishing the PREVIOUS beat's own decay
+  return{pe:raw,len:rrSec,amp};}
 const SITES={aorta:{up:.13,notch:.24,dmin:.58,dw:.05,dec:2.2,del:0,s:-8,d:4},
   brachial:{up:.12,notch:.27,dmin:.54,dw:.06,dec:2.4,del:.01,s:-2,d:1},
   radial:{up:.11,notch:.31,dmin:.50,dw:.08,dec:2.7,del:.02,s:6,d:-3},
@@ -992,9 +1081,25 @@ function updateNumerics(){tickDisp(performance.now());if(state.trans){syncContro
   else{const s=R(disp.sys),d=R(disp.dia);byId("v_abp").textContent=numVal("abp",s+"/"+d);byId("v_abpmap").textContent=numVal("abp",R((s+2*d)/3));}
   const s2=R(disp.sys-6),d2=R(disp.dia-2);byId("v_abp2").textContent=numVal("abp2",s2+"/"+d2);byId("v_abp2map").textContent=numVal("abp2",R((s2+2*d2)/3));
   // PAP / RV / wedge
-  if(state.paCath==="RV"){byId("v_pap").textContent=numVal("pap",R(disp.paSys)+"/4");byId("v_papmap").textContent=numVal("pap",R((disp.paSys+8)/3));byId("v_pawp").textContent="--";}
-  else if(state.wedge||state.paCath==="wedge"){byId("v_pap").textContent="wedge";byId("v_papmap").textContent=state.pawp;byId("v_pawp").textContent=state.pawp;}
-  else{byId("v_pap").textContent=numVal("pap",R(disp.paSys)+"/"+R(disp.paDia));byId("v_papmap").textContent=numVal("pap",R((disp.paSys+2*disp.paDia)/3));byId("v_pawp").textContent=state.pawp;}
+  if(state.paCath==="RV"){byId("v_pap").textContent=numVal("pap",R(disp.paSys)+"/4");byId("v_papmap").textContent=numVal("pap",R((disp.paSys+8)/3));byId("v_pawp").textContent="--";byId("v_pawp_age").textContent="";}
+  else if(state.wedge||state.paCath==="wedge"){byId("v_pap").textContent="wedge";byId("v_papmap").textContent=state.pawp;byId("v_pawp").textContent=state.pawp;byId("v_pawp_age").textContent=" (live)";}
+  else{
+    byId("v_pap").textContent=numVal("pap",R(disp.paSys)+"/"+R(disp.paDia));byId("v_papmap").textContent=numVal("pap",R((disp.paSys+2*disp.paDia)/3));
+    // Real audit finding: this branch used to show the live, continuously-
+    // updating state.pawp every frame - a real monitor doesn't have a
+    // running PAWP number outside of an actual wedge maneuver. Show the
+    // last GENUINE reading (captured in wedge_deflate above) with its own
+    // age instead, or a plain "not yet measured" placeholder if the wedge
+    // procedure has never been performed this case.
+    if(state.pawpMeasured){
+      byId("v_pawp").textContent=Math.round(state.pawpMeasured.value);
+      const ageMin=(performance.now()-state.pawpMeasured.measuredAtMs)/60000;
+      byId("v_pawp_age").textContent=ageMin<1?" (now)":" ("+Math.round(ageMin)+"m)";
+    }else{
+      byId("v_pawp").textContent="--";
+      byId("v_pawp_age").textContent=" (never)";
+    }
+  }
   byId("v_cvp").textContent=(state.rhythm==="asystole")?"--":numVal("cvp",R(disp.cvp));
   byId("v_icp").textContent=numVal("icp",R(disp.icp));byId("v_cpp").textContent=Math.max(0,map-R(disp.icp));
   byId("v_co2").textContent=state.rr<1?"--":R(disp.etco2);byId("s_awrr").textContent=state.rr<1?"0":R(disp.rr);
@@ -1247,7 +1352,16 @@ function updateWedgeState(){const wedged=state.wedgeVol>=state.wedgeThreshold&&s
 function openWedge(){if(!state.show.pap){state.show.pap=true;refreshToggleUI();layout();}byId("wedgeModal").classList.add("open");byId("wedge_thr").value=state.wedgeThreshold;byId("wedge_thr_v").textContent=state.wedgeThreshold.toFixed(2);updateWedgeState();setTimeout(()=>{wprev.width=wprev.clientWidth;},30);}
 byId("wedge_close").addEventListener("click",()=>byId("wedgeModal").classList.remove("open"));
 byId("wedge_inflate").addEventListener("click",()=>{state.wedgeVol=clamp(state.wedgeVol+0.25,0,1.75);updateWedgeState();});
-byId("wedge_deflate").addEventListener("click",()=>{state.wedgeVol=0;updateWedgeState();byId("msgmode").textContent="Monitoring";});
+byId("wedge_deflate").addEventListener("click",()=>{
+  // Real reading captured here, not before: state.wedge is only true once
+  // wedgeVol has actually reached a genuine wedge tracing (updateWedgeState's
+  // own "wedged" definition) - deflating from that state is the real-world
+  // "read PAWP at end-expiration, then deflate" moment the modal's own
+  // status text already instructs. Deflating from a non-wedged volume
+  // (an aborted/incomplete attempt) correctly captures nothing.
+  if(state.wedge)state.pawpMeasured={value:state.pawp,measuredAtMs:performance.now()};
+  state.wedgeVol=0;updateWedgeState();byId("msgmode").textContent="Monitoring";
+});
 byId("wedge_thr").addEventListener("input",e=>{state.wedgeThreshold=+e.target.value;byId("wedge_thr_v").textContent=state.wedgeThreshold.toFixed(2);updateWedgeState();});
 // wedge preview loop
 function wedgePreview(){if(byId("wedgeModal").classList.contains("open")){const w=wprev.width,h=wprev.height;wpx.fillStyle="#000";wpx.fillRect(0,0,w,h);wpx.strokeStyle=cssv("--pap");wpx.lineWidth=1.8;wpx.beginPath();
@@ -1531,6 +1645,10 @@ window.ctSharedEngine={
   getPerfusionNow:()=>({perfusing:perfusing(),pulsatileArterial:pulsatileArterial(),pulsatilePleth:pulsatilePleth(),sharedPerfusing,sharedPulsatileArterial,sharedPulsatilePleth}),
   __debugGetRRSeq:(nFrames,dtMs)=>{const seq=[];let last=rrSec;let ts=performance.now();for(let i=0;i<nFrames;i++){ts+=dtMs;frame(ts);if(rrSec!==last){seq.push(rrSec);last=rrSec;}}return seq;},
   __debugSampleART:(nFrames,dtMs)=>{const samples=[];let ts=performance.now();for(let i=0;i<nFrames;i++){ts+=dtMs;frame(ts);const pi=pulseInfo();samples.push({pe:+pi.pe.toFixed(4),len:+pi.len.toFixed(4),art:+artN(pi.pe,"radial","none",pi.len).toFixed(4)});}return samples;},
+  // Added for the VT/Torsades morphology rework - same rationale as
+  // __debugSampleART just above (direct programmatic verification of a
+  // waveform's actual shape/timing, not just eyeballing a screenshot).
+  __debugSampleECG:(nFrames,dtMs)=>{const samples=[];let ts=performance.now();for(let i=0;i<nFrames;i++){ts+=dtMs;frame(ts);samples.push(+ecgValue().toFixed(4));}return samples;},
   getDefibArtifactStateNow:()=>({sharedDefibEventCount,defibArtifactStartTAbs,tAbs,ecgValueNow:ecgValue()}),
   triggerDefibArtifactNow:()=>{defibArtifactStartTAbs=tAbs;},
   forceNumericsRepaint:()=>{updateNumerics();},
