@@ -11,6 +11,21 @@
   *{-webkit-user-select:none;user-select:none;}
   input,select,button{font-family:inherit;-webkit-user-select:auto;user-select:auto;}
 
+  /* Real, previously-silent failure mode found during a full audit pass:
+     consoleTick() is a self-rearming requestAnimationFrame loop with no
+     error recovery - an uncaught exception anywhere in the chain it calls
+     each frame (ramp math, override releases, rendering) used to
+     permanently kill ALL ramp progression and auto-advance for the rest of
+     the page load, silently, with zero facilitator-visible sign anything
+     was wrong. Now caught and recovered every frame (see consoleTick's own
+     try/catch); this banner is the visible half of that fix - a facilitator
+     mid-class needs to know something broke, not just have it silently
+     stop working. Fixed position so it's visible regardless of scroll
+     position or which rail group is open. */
+  #tickErrorBanner{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--bg-danger,#5a1414);color:var(--text-danger,#ffd6d6);border-bottom:2px solid #7a2020;padding:10px 16px;font-size:13px;font-weight:600;text-align:center;}
+  #tickErrorBanner.show{display:block;}
+  #tickErrorBanner button{margin-left:12px;background:transparent;border:1px solid currentColor;color:inherit;border-radius:4px;padding:3px 10px;font-size:12px;cursor:pointer;}
+
   /* ---- shell: rail + hero main ---- */
   .shell{display:grid; grid-template-columns:340px minmax(0,1fr); min-height:100vh;}
   .rail{position:sticky; top:0; height:100vh; overflow-y:auto; border-right:1px solid var(--rule); padding:var(--space-5) var(--space-4) var(--space-8);}
@@ -177,6 +192,7 @@
 </style>
 </head>
 <body>
+<div id="tickErrorBanner" role="alert"><span id="tickErrorBannerText"></span><button id="tickErrorBannerDismiss" type="button">Dismiss</button></div>
 <div class="shell">
   <aside class="rail">
     <div class="rail-head">
@@ -555,7 +571,7 @@
         </div>
         <div class="hint" style="font-size:10.5px;color:var(--ink-faint)" id="cprStatus">CPR not active</div>
 
-        <div class="gl">Defibrillation / Cardioversion</div>
+        <div class="gl" id="gl_defib">Defibrillation / Cardioversion</div>
         <!-- Direct user request: "should allow for the failure to convert
              rhythm vs conversion options" - achieveROSC() previously always
              succeeded, despite this section's own hint text already implying
@@ -583,11 +599,15 @@
         <div class="grid2">
           <div class="row"><label>On success → rhythm</label></div>
         </div>
-        <select id="shock_target_rhythm">
-          <option value="Sinus Rhythm">Sinus Rhythm</option>
-          <option value="Sinus Tachycardia">Sinus Tachycardia</option>
-          <option value="Atrial Fibrillation">Atrial Fibrillation</option>
-        </select>
+        <!-- Real audit finding: this was hardcoded to 3 options while
+             RHYTHM_LIBRARY grew to 17 - a facilitator running a shock/
+             cardioversion outcome for anything outside that original 3
+             (e.g. converting VF to a paced rhythm, or to any AV block)
+             had no way to select it here. Populated from RHYTHM_LIBRARY
+             at load, same single-source-of-truth loop as ov_rhythm/
+             assess_rhythm above (see that loop, near the RHYTHM_LIBRARY
+             import) - not a fourth hand-duplicated option list. -->
+        <select id="shock_target_rhythm"></select>
         <div class="row"><label>Target HR</label><input type="number" id="shock_target_hr" value="90" min="20" max="220"></div>
         <div class="row"><label>Post-event instability (min)</label><input type="number" id="shock_unstable_minutes" value="2" min="0" max="15" step="0.5"></div>
         <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">A successful shock ramps toward the target over the instability window instead of snapping straight to it - the common, taught post-event hemodynamic instability - rather than a new tracked ROSC state (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
@@ -689,6 +709,17 @@
       <button class="act mini" id="copy_for_zoll" type="button">Copy for ZOLL</button>
       <span class="launcher-sep"></span>
       <button class="act mini" id="jump_scenario" type="button">Scenario &amp; Stage ▸</button>
+      <!-- Direct user request (remediation queue item #8): quick access to
+           Shock/Cardioversion/ROSC, same "jump-to-section" pattern as
+           jump_scenario above - not a duplicate set of action buttons here
+           (which would need its own copy of the rhythm/HR/instability
+           inputs achieveROSC() already reads from the BLS/ACLS section, a
+           real drift risk), just get a facilitator there fast during a
+           real code. ROSC has no separate control of its own to jump to -
+           it's the outcome of clicking Deliver Shock/Synchronized
+           Cardioversion with Success selected (achieveROSC() backs both),
+           so one jump target correctly covers all three. -->
+      <button class="act mini" id="jump_defib" type="button">Shock / Cardioversion / ROSC ▸</button>
       <span class="hint" id="launcherStatus" style="margin:0 0 0 4px"></span>
     </div>
 
@@ -1629,10 +1660,11 @@ function renderRhythmNotes(){
   byId("assess_rhythm_notes").textContent=text;
 }
 const REGULARITY_LABELS={regular:"Regular",irregular:"Irregular",regularly_irregular:"Regularly irregular"};
-// Both selects populated from the same RHYTHM_LIBRARY keys - was two
+// All three selects populated from the same RHYTHM_LIBRARY keys - was
 // hand-duplicated <option> lists (a real drift risk once the library grew
-// past the original 7) - see the HTML comment above each <select>.
-for(const id of["ov_rhythm","assess_rhythm"]){
+// past the original 7 - shock_target_rhythm was still stuck at its
+// original 3 until this fix) - see the HTML comment above each <select>.
+for(const id of["ov_rhythm","assess_rhythm","shock_target_rhythm"]){
   const sel=byId(id);
   sel.innerHTML=Object.keys(RHYTHM_LIBRARY).map(r=>`<option value="${r}">${r}</option>`).join("");
 }
@@ -1946,7 +1978,44 @@ byId("cd_start").addEventListener("click",()=>{
 
 /* ---------------- Live-tick an in-flight ramp + auto-advance + override releases ---------------- */
 let lastDecompRenderMs=0;
+// Real, previously-silent failure mode found during a full audit pass:
+// consoleTick was a self-rearming rAF loop with no error recovery - an
+// uncaught exception anywhere in the tick chain (ramp math, override
+// releases, rendering, the decomp timer, launcher-connection rendering)
+// permanently killed ALL ramp progression and auto-advance for the rest of
+// the page load, silently. requestAnimationFrame(consoleTick) being the
+// LAST statement in the function meant a throw anywhere above it skipped
+// re-arming itself, with no window.onerror handler anywhere in this file to
+// recover it either. This is very likely the actual explanation behind
+// "the countdown may appear, but automatic progression doesn't reliably
+// happen" - a single bad frame, anywhere, silently and permanently breaks
+// scenario progression with zero facilitator-visible sign anything is
+// wrong. Fixed by moving the real work into consoleTickInner() and wrapping
+// every call in try/catch, with re-arming moved to a `finally` so the loop
+// itself can NEVER die - and surfacing a visible banner (not just
+// console.error, invisible to a non-technical facilitator mid-class),
+// rate-limited to avoid re-showing every single frame if the same error
+// keeps recurring.
+let tickErrorCount=0,lastTickErrorBannerMs=0;
+function showTickErrorBanner(e){
+  const banner=byId("tickErrorBanner");
+  if(!banner)return;
+  byId("tickErrorBannerText").textContent=`⚠ The console hit an internal error (${tickErrorCount}×) but recovered automatically - scenario progression may have skipped a beat. If anything looks wrong, check the current state below, or reload. (${e&&e.message||e})`;
+  banner.classList.add("show");
+}
+byId("tickErrorBannerDismiss")&&byId("tickErrorBannerDismiss").addEventListener("click",()=>byId("tickErrorBanner").classList.remove("show"));
 function consoleTick(ts){
+  try{
+    consoleTickInner(ts);
+  }catch(e){
+    tickErrorCount++;
+    console.error("consoleTick error (recovered, tick loop continues):",e);
+    if(ts-lastTickErrorBannerMs>3000){lastTickErrorBannerMs=ts;showTickErrorBanner(e);}
+  }finally{
+    requestAnimationFrame(consoleTick);
+  }
+}
+function consoleTickInner(ts){
   if(runner){
     const before=runner;
     // Phase 6: reactive perfusion-loss/regain bookkeeping - cheap, idempotent,
@@ -2009,7 +2078,9 @@ function consoleTick(ts){
   // EXPIRE even when nothing else changes tick to tick, so it can't only be
   // driven off `runner!==before`.
   if(ts-lastLauncherConnRenderMs>=1000){lastLauncherConnRenderMs=ts;renderLauncherConnections(ts);}
-  requestAnimationFrame(consoleTick);
+  // re-arming moved to consoleTick's own `finally` block above - this inner
+  // function is now pure per-frame work, never responsible for scheduling
+  // the next frame itself.
 }
 let lastLauncherConnRenderMs=0;
 requestAnimationFrame(consoleTick);
@@ -2178,6 +2249,14 @@ byId("jump_scenario").addEventListener("click",()=>{
   const grp=byId("grp_scenario");
   grp.open=true;
   grp.scrollIntoView({behavior:"smooth",block:"start"});
+});
+byId("jump_defib").addEventListener("click",()=>{
+  // Opens the whole BLS/ACLS group (Defibrillation/Cardioversion is one
+  // section partway down it, not its own <details>) then scrolls to that
+  // section's own label specifically, not just the group's top - grp_bls
+  // also holds Rhythm/Pacer/Clinical Events/CPR/Medications above this.
+  byId("grp_bls").open=true;
+  byId("gl_defib").scrollIntoView({behavior:"smooth",block:"start"});
 });
 
 // ZOLL R Series - a genuinely separate deployment (its own repo/GitHub
@@ -2417,6 +2496,7 @@ window.ctSharedEngine={
   getMedicatedMAPNow:()=>runner&&getMedicatedMAP(runner.state,runner.state.minute),
   setCPRNow:(active,quality)=>{setCPR(active,quality);return runner&&runner.state.circulation.cpr;},
   achieveROSCNow:()=>{achieveROSC();return runner&&runner.state;},
+  consoleTickNow:(ts)=>{consoleTick(ts);return{tickErrorCount};},
   getPerfusionStateNow:()=>runner&&({perfusing:isPerfusing(runner.state),pulsatile:isPulsatileFromFlow(runner.state),pulsatileArterial:isPulsatileArterial(runner.state),pulsatilePleth:isPulsatilePleth(runner.state)}),
   getEffectiveETCO2Now:()=>runner&&getEffectiveETCO2(runner.state,runner.state.minute),
   getEffectiveMAPRawNow:()=>runner&&({sbp:getEffectiveSBP(runner.state),dbp:getEffectiveDBP(runner.state)}),
