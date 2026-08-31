@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "2.0.0",
+  "id": "postcabg-rv-failure-low-co",
+  "title": "Post-CABG Acute Low Cardiac Output — Isolated RV Failure",
+  "population": "cardiothoracic-surgery",
+  "patient": {
+    "name": "John Doe",
+    "age": 68,
+    "sex": "M",
+    "history": ["Hypertension", "Prior MI x2 (DES placed 3 years ago)", "CKD II (baseline GFR 50, creatinine 1.6)"],
+    "procedure": "CABG x3, left atrial appendage (LAA) closure / MAZE — no significant intraoperative events"
+  },
+  "baseline": {
+    "hr": 106,
+    "bp": { "sbp": 92, "dbp": 58, "map": 68 },
+    "rhythm": "Sinus Tachycardia",
+    "cvp": 18,
+    "pa": { "systolic": 28, "diastolic": 14 },
+    "co": 3.2,
+    "ci": 1.7,
+    "svr": 1400,
+    "scvo2": 50,
+    "spo2": 95,
+    "rr": 18,
+    "temp": 35.9,
+    "chestTubes": { "rMediastinal": 40 },
+    "urineOutput": { "volumeMl": 35, "deviceType": "foley" },
+    "drips": { "epi": 3 }
+  },
+  "startStageId": "stage1-baseline",
+  "stages": [
+    {
+      "id": "stage1-baseline",
+      "label": "Baseline — POD0, arrival from OR",
+      "type": "baseline",
+      "facilitatorNotes": "Fresh off bypass, already on epinephrine 3 mcg/min. Note the pattern before anything changes: CVP 18 is elevated while PA systolic/diastolic (28/14) is comparatively unremarkable — the right ventricle, not the left, is the problem. Encourage the learner to look at CVP vs. PA diastolic relationship rather than just reacting to the low CI."
+    },
+    {
+      "id": "stage2-rv-failure-progression",
+      "label": "Stage II — Unaddressed RV Failure Progression",
+      "type": "deterioration",
+      "target": {
+        "hr": 122,
+        "bp": { "sbp": 78, "dbp": 48, "map": 58 },
+        "cvp": 24,
+        "co": 2.5,
+        "ci": 1.3,
+        "scvo2": 40,
+        "urineOutput": { "volumeMl": 12 }
+      },
+      "transitionDuration": 6,
+      "holdDuration": 5,
+      "destinationIfUnaddressed": "stage4b-worsening-shock",
+      "advanceMode": "auto",
+      "debriefMarkers": ["recognized-rv-failure-pattern", "avoided-fluid-bolus", "avoided-additional-epi"],
+      "facilitatorNotes": "Chest tube output stays flat (~40 mL) — reinforces this isn't bleeding/tamponade. Correct next moves: start milrinone (± inhaled nitric oxide — not a modeled numeric field in this engine, track it as a debrief marker) to unload/support the RV. Two traps: a fluid bolus (CVP is already high — this worsens RV distension) and more epinephrine (SVR is already elevated — this raises RV afterload further)."
+    },
+    {
+      "id": "stage3-branch-intervention",
+      "label": "Facilitator checkpoint — was RV-directed therapy initiated appropriately?",
+      "type": "branch",
+      "branches": [
+        { "label": "Learner initiated milrinone (± inhaled nitric oxide), avoided fluid bolus and additional epinephrine", "destinationId": "stage4a-improving" },
+        { "label": "Fluid bolus and/or additional epinephrine given, or RV-directed therapy not started", "destinationId": "stage4b-worsening-shock" }
+      ],
+      "facilitatorNotes": "Pick based on what actually happened at the bedside — this isn't timed, it's your call as the facilitator."
+    },
+    {
+      "id": "stage4a-improving",
+      "label": "Improving — Milrinone Response",
+      "type": "intervention-response",
+      "target": {
+        "hr": 92,
+        "bp": { "sbp": 102, "dbp": 62, "map": 76 },
+        "cvp": 13,
+        "co": 4.0,
+        "ci": 2.2,
+        "scvo2": 64,
+        "urineOutput": { "volumeMl": 32 }
+      },
+      "transitionDuration": 5,
+      "set": { "drips": { "milrinone": 0.375 } },
+      "advanceMode": "manual",
+      "debriefMarkers": ["initiated-milrinone", "achieved-hemodynamic-stability"],
+      "successCriteria": [
+        { "id": "started-milrinone", "label": "Started milrinone for RV support" },
+        { "id": "considered-inhaled-no", "label": "Considered/initiated inhaled nitric oxide for RV afterload reduction" },
+        { "id": "avoided-fluid-overload", "label": "Avoided fluid bolus despite low CO, recognizing elevated filling pressures" }
+      ],
+      "facilitatorNotes": "Milrinone onset ~5 minutes. Once settled, manually advance to the debrief discussion stage — no auto-advance here, this is the good outcome, let it breathe before debriefing."
+    },
+    {
+      "id": "stage4a-debrief-discussion",
+      "label": "Debrief — Weaning & Recovery Planning",
+      "type": "discussion",
+      "prompt": "The patient's hemodynamics have stabilized on milrinone. What's the plan from here — when and how do we start weaning milrinone, and what tells us this patient is ready to move toward extubation?",
+      "note": "Milrinone wean: typically down-titrated slowly once CI/CVP/UOP have been stable for a sustained period, watching for rebound in filling pressures or a drop in CI as the dose comes down — trend-driven, not a fixed timeline. Extubation readiness: hemodynamic stability off escalating support, adequate gas exchange, chest tube output trending down and non-bleeding, appropriate neuro wake-up. Good prompt for the learner: what would make you hesitant to wean right now, given this patient's RV was the primary problem?"
+    },
+    {
+      "id": "stage4b-worsening-shock",
+      "label": "Worsening — Progressive Cardiogenic Shock",
+      "type": "critical",
+      "target": {
+        "hr": 135,
+        "bp": { "sbp": 60, "dbp": 38, "map": 45 },
+        "cvp": 28,
+        "co": 1.6,
+        "ci": 0.9,
+        "scvo2": 28,
+        "urineOutput": { "volumeMl": 5 }
+      },
+      "transitionDuration": 5,
+      "holdDuration": 5,
+      "destinationIfUnaddressed": "stage5-arrest-pulseless-vt",
+      "advanceMode": "auto",
+      "debriefMarkers": ["missed-rv-directed-therapy", "progression-to-cardiogenic-shock"],
+      "facilitatorNotes": "Watch the strip — increasing ventricular ectopy (frequent PVCs) is the real-world warning sign preceding pulseless VT; this engine doesn't model ectopy burden as a distinct field, so narrate it live rather than expecting it on the monitor. Last chance to correct course: stop fluid/epi escalation, start milrinone now."
+    },
+    {
+      "id": "stage5-arrest-pulseless-vt",
+      "label": "Cardiac Arrest — Pulseless Ventricular Tachycardia",
+      "type": "arrest",
+      "set": {
+        "hr": 180,
+        "rhythm": "Ventricular Tachycardia",
+        "bp": { "sbp": 0, "dbp": 0, "map": 0 },
+        "co": 0,
+        "ci": 0,
+        "flags": { "arrestActive": true }
+      },
+      "debriefMarkers": ["recognized-pulseless-vt", "initiated-code-blue"],
+      "successCriteria": [
+        { "id": "called-code-blue", "label": "Called Code Blue / initiated ACLS" },
+        { "id": "delivered-shock", "label": "Delivered defibrillation for pulseless VT" }
+      ],
+      "facilitatorNotes": "A mechanically-driven arrest — the underlying problem is still RV failure, not a primary electrical event. Run the code live from the Console (shock/CPR/ROSC are live facilitator actions, not scripted here). Debrief point once resolved: the rhythm might convert, but did the RV problem actually get addressed, or just the arrest?"
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "2.0.0",
+  "id": "emergent-sternotomy-vt-arrest",
+  "title": "Emergent Bedside Sternotomy — VT/PEA Arrest, Post-Op Cardiac Surgery",
+  "population": "cardiothoracic-surgery",
+  "patient": {
+    "name": "D. Cooley",
+    "age": 55,
+    "sex": "M",
+    "history": ["Late-presenting inferior MI complicated by cardiogenic shock", "2 DES to RCA at outside hospital", "Transferred to Keck for higher level of care"],
+    "procedure": "POD0 s/p CABG x2 (LIMA→LAD, SVG→OM1) and MVR. Open chest, persistently elevated inotrope requirements post-operatively."
+  },
+  "baseline": {
+    "hr": 90,
+    "bp": { "sbp": 82, "dbp": 63, "map": 76 },
+    "rhythm": "Atrial Fibrillation",
+    "cvp": 15,
+    "pa": { "systolic": 50, "diastolic": 28 },
+    "co": 3.5,
+    "ci": 1.9,
+    "spo2": 96,
+    "rr": 14,
+    "temp": 36.0,
+    "drips": { "epi": 10, "levo": 8, "vasopressin": 0.04, "insulin": 2.6 }
+  },
+  "startStageId": "stage1-baseline-arrival",
+  "stages": [
+    {
+      "id": "stage1-baseline-arrival",
+      "label": "Baseline — Open Chest, Arrival to Room",
+      "type": "baseline",
+      "advanceMode": "manual",
+      "facilitatorNotes": "Hemodynamic baseline is already up before students walk in (CI 1.9, per the source protocol's own on-the-fly Juno setup). Rhythm is Atrial Fibrillation ~90 with PVC probability 75% in the source material — this engine doesn't model ectopy burden as a distinct field, narrate frequent PVCs on the strip verbally. Drips running per the source protocol beyond what this engine models numerically: nicardipine 5 (paused), amiodarone 1, TKO fluids at 30, Amicar per policy, inhaled nitric oxide at 50ppm — flagged for a future engine phase, narrate as already running. Manually advance once ready to give report."
+    },
+    {
+      "id": "stage2-report-settling",
+      "label": "Report / Settling In — High Inotrope Requirement",
+      "type": "baseline",
+      "target": { "ci": 1.8 },
+      "transitionDuration": 5,
+      "advanceMode": "manual",
+      "facilitatorNotes": "SBAR script to read aloud: \"Patient is 55 year-old male D. Cooley, NKDA/full code, transferred to Keck from outside hospital for management of late presentation inferior MI complicated by cardiogenic shock. Pt received 2 DES to RCA at OSH and is now POD 0 s/p CABG x 2 (LIMA→LAD, SVG→OM1) and MVR. Pt has an open chest and has had persistently elevated inotrope requirements post-operatively (review drips). CI is 1.8, lactate remains elevated at 8. SvO2 47%. UOP 15-20cc/hr, 500cc 5% albumin. A STAT echo has been ordered and the echo tech is en route.\" Labs, if a learner asks: ABG pH 7.1 / CO2 45 / PaO2 64 / HCO3 16 / lactate 8. H/H 8.8/27, plt 180. BMP Na 140 / K 5.5 / CO2 16 / Cl 109 / Cr 1.8 / BUN 48 / glucose 185 / iCal 1.0. Manually advance to the arrest stage when ready to trigger the scripted event — not timed/auto-advancing, this is a facilitator-run drill."
+    },
+    {
+      "id": "stage3-arrest-vt-pea",
+      "label": "Cardiac Arrest — Sustained VT with Loss of Pulses (PEA)",
+      "type": "arrest",
+      "set": { "hr": 180, "rhythm": "Ventricular Tachycardia", "flags": { "arrestActive": true } },
+      "advanceMode": "manual",
+      "debriefMarkers": ["recognized-pulseless-vt", "called-for-sternotomy-appropriately", "3-stacked-shocks-no-rosc"],
+      "successCriteria": [
+        { "id": "stat-paged-surgeon-sbar", "label": "STAT paged the on-call surgeon and gave SBAR report" },
+        { "id": "notified-team", "label": "Notified OR, anesthesia, respiratory therapy, blood bank, RN supervisor, and pharmacy" },
+        { "id": "ordered-meds", "label": "Inventoried and ordered necessary medications (sedatives, vasopressors, inotropes, volume, blood products)" },
+        { "id": "ensured-iv-access", "label": "Ensured dedicated IV access for blood products/fluids/emergency medications" },
+        { "id": "placed-defib-pads", "label": "Placed defibrillator pads before antiseptic prep, sternal incision left clear" },
+        { "id": "gathered-equipment", "label": "Gathered sternotomy cart, crash cart, lighting, and set up 2 suction canisters" },
+        { "id": "assigned-roles", "label": "Assigned circulating, medication/blood, and scrub nurse roles" }
+      ],
+      "facilitatorNotes": "Simulation software: Cardiac → Cardiac Rhythm → Ventricular Tachycardia, then turn on PEA to make the patient pulseless. 3 stacked external shocks are given — no ROSC. This is the decision point to prep for and proceed with emergent bedside sternotomy while the code continues. Manually advance to the sternotomy stage once the team commits to opening the chest."
+    },
+    {
+      "id": "stage4-sternotomy-open-chest",
+      "label": "Sternotomy Performed — Internal Paddles Placed",
+      "type": "critical",
+      "set": { "flags": { "sternotomyPerformed": true } },
+      "advanceMode": "manual",
+      "debriefMarkers": ["opened-chest-during-code", "connected-internal-paddles", "prepared-sterile-tray"],
+      "successCriteria": [
+        { "id": "scrub-prepped-chest", "label": "Scrub RN removed dressing, prepped chest/clavicles/abdomen with antiseptic, placed Bovie pad" },
+        { "id": "maintained-sterility", "label": "Maintained sterile field and technique throughout" },
+        { "id": "connected-internal-paddles", "label": "Connected internal defibrillator paddles and managed the defibrillator" },
+        { "id": "managed-airway-meds", "label": "Managed airway/IV pump and administered emergency medications, blood products, and fluids" }
+      ],
+      "facilitatorNotes": "Still pulseless — no vitals change yet, this stage marks the sternotomy/open-chest event itself. 1 internal defibrillation is given and the patient is resuscitated. Manually advance to ROSC once the internal shock succeeds."
+    },
+    {
+      "id": "stage5-rosc-postcode",
+      "label": "ROSC — Post-Code",
+      "type": "rosc",
+      "set": {
+        "hr": 110,
+        "rhythm": "Atrial Fibrillation",
+        "bp": { "sbp": 78, "dbp": 54, "map": 62 },
+        "cvp": 18,
+        "pa": { "systolic": 44, "diastolic": 28 },
+        "flags": { "arrestActive": false }
+      },
+      "advanceMode": "manual",
+      "debriefMarkers": ["achieved-rosc-via-internal-defib"],
+      "facilitatorNotes": "Post-code vitals exactly as specified: AFib 110s, BP 78/54, CVP 18, PA 44/28 (MAP 62 is my own reasonable estimate, not explicitly given — adjust if you want a specific value). Chest remains open (sternotomyPerformed stays true). Manually advance to debrief when ready."
+    },
+    {
+      "id": "stage6-debrief",
+      "label": "Debrief",
+      "type": "discussion",
+      "prompt": "What went well? What opportunities were there?",
+      "note": "Highlight: connection of internal paddles to the defibrillator, essential components of the sterile tray, connection of suction, lighting, and removal of the open chest dressing."
+    }
+  ]
+}

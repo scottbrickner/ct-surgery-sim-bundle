@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "2.0.0",
+  "id": "postop-gut-source-sepsis",
+  "title": "Infection of Unknown Origin → Septic Shock — Gut Translocation Post-Bowel Resection",
+  "population": "cardiothoracic-surgery",
+  "patient": {
+    "name": "Robert Klein",
+    "age": 61,
+    "sex": "M",
+    "history": ["Colon adenocarcinoma with liver metastases", "Peripheral arterial disease (PAD)"],
+    "procedure": "POD2 s/p partial colectomy (bowel resection) for colon adenocarcinoma; TPN initiated POD1; NPO x5 days total (preoperative bowel rest + postoperative ileus)"
+  },
+  "baseline": {
+    "hr": 98,
+    "bp": { "sbp": 118, "dbp": 72, "map": 87 },
+    "rhythm": "Sinus Rhythm",
+    "temp": 37.9,
+    "rr": 20,
+    "spo2": 96,
+    "cvp": 8,
+    "co": 5.5,
+    "ci": 3.0,
+    "svr": 1000,
+    "scvo2": 68,
+    "urineOutput": { "volumeMl": 40, "deviceType": "foley" }
+  },
+  "startStageId": "stage1-baseline",
+  "stages": [
+    {
+      "id": "stage1-baseline",
+      "label": "Baseline — POD2, subtle infection signs",
+      "type": "baseline",
+      "facilitatorNotes": "On TPN since POD1, ileus, NPO x5 days total. Vitals are nearly normal-looking — HR 98, low-grade temp 37.9 — easy to write off as 'just post-op.' Chart Review/Labs shows lactate 2.1 (mildly elevated, easy to miss). This is the point: nothing screams sepsis yet."
+    },
+    {
+      "id": "stage2-rsepsis",
+      "label": "Stage II — R/O Sepsis, Evolving SIRS",
+      "type": "deterioration",
+      "target": {
+        "hr": 118,
+        "bp": { "sbp": 104, "dbp": 64, "map": 77 },
+        "temp": 38.6,
+        "rr": 26,
+        "spo2": 94,
+        "co": 6.5,
+        "ci": 3.6,
+        "svr": 850,
+        "scvo2": 70,
+        "urineOutput": { "volumeMl": 28 }
+      },
+      "transitionDuration": 8,
+      "holdDuration": 5,
+      "destinationIfUnaddressed": "stage4b-septic-shock",
+      "advanceMode": "auto",
+      "debriefMarkers": ["recognized-evolving-sepsis", "obtained-cultures-before-antibiotics", "considered-tpn-line-source", "ruled-out-line-source", "identified-gut-source", "initiated-empiric-antibiotics", "rechecked-lactate"],
+      "successCriteria": [
+        { "id": "obtained-cultures-before-abx", "label": "Obtained blood cultures (peripheral + TPN line) before starting antibiotics" },
+        { "id": "started-empiric-antibiotics", "label": "Started broad-spectrum empiric antibiotics promptly" },
+        { "id": "investigated-tpn-line", "label": "Investigated TPN line as a possible source" },
+        { "id": "identified-gut-source", "label": "Identified gut/ileus-translocation as the likely source" }
+      ],
+      "facilitatorNotes": "Correct moves: blood cultures from BOTH a peripheral site and the TPN line before antibiotics, prompt broad-spectrum empiric coverage, recheck lactate. This is the differential moment — the TPN line is a real, reasonable suspect (running since POD1); coach the learner toward actually investigating it rather than anchoring on the gut source immediately. Chart Review/Labs: lactate trending 2.1 → 3.4, WBC trending up. Not yet a large fluid bolus — lactate's only mildly elevated, this isn't frank shock."
+    },
+    {
+      "id": "stage3-branch-bundle",
+      "label": "Facilitator checkpoint — was the sepsis bundle managed appropriately?",
+      "type": "branch",
+      "branches": [
+        { "label": "Bundle completed promptly — cultures before antibiotics, empiric coverage started, source appropriately investigated", "destinationId": "stage4a-stabilizing" },
+        { "label": "Bundle delayed/incomplete — antibiotics delayed, cultures missed, or source not pursued", "destinationId": "stage4b-septic-shock" }
+      ],
+      "facilitatorNotes": "Pick based on what actually happened at the bedside — this isn't timed, it's your call as the facilitator."
+    },
+    {
+      "id": "stage4a-stabilizing",
+      "label": "Stabilizing — Bundle-Concordant Management",
+      "type": "intervention-response",
+      "target": {
+        "hr": 100,
+        "bp": { "sbp": 114, "dbp": 70, "map": 85 },
+        "temp": 37.6,
+        "co": 5.8,
+        "ci": 3.2,
+        "svr": 950,
+        "scvo2": 68,
+        "urineOutput": { "volumeMl": 38 }
+      },
+      "transitionDuration": 6,
+      "advanceMode": "manual",
+      "debriefMarkers": ["completed-sepsis-bundle", "avoided-progression-to-shock"],
+      "successCriteria": [
+        { "id": "achieved-early-stabilization", "label": "Achieved hemodynamic stabilization before progression to overt shock" }
+      ],
+      "facilitatorNotes": "Chart Review/Labs: lactate clearing, 3.4 → 1.8. Once settled, manually advance to the debrief discussion when ready — no auto-advance, let it breathe."
+    },
+    {
+      "id": "stage4b-septic-shock",
+      "label": "Septic Shock — Delayed/Incomplete Bundle",
+      "type": "critical",
+      "target": {
+        "hr": 132,
+        "bp": { "sbp": 82, "dbp": 44, "map": 56 },
+        "temp": 39.4,
+        "co": 7.2,
+        "ci": 4.0,
+        "svr": 550,
+        "scvo2": 78,
+        "urineOutput": { "volumeMl": 8 }
+      },
+      "transitionDuration": 6,
+      "advanceMode": "manual",
+      "debriefMarkers": ["progressed-to-septic-shock", "missed-or-delayed-bundle"],
+      "facilitatorNotes": "Classic warm/distributive shock — SVR frankly low, CO still up, ScvO2 paradoxically high. Chart Review/Labs: lactate 5.8. This meets criteria for a real fluid bolus now (not held back like Stage 2) plus norepinephrine as first-line pressor. Stops here — no scripted progression to arrest for this case. Manually advance to the debrief discussion once managed."
+    },
+    {
+      "id": "stage5-debrief-source-control",
+      "label": "Debrief — Source Control Timing",
+      "type": "discussion",
+      "prompt": "Whether this settled with early bundle-concordant care or progressed to septic shock, the underlying gut source hasn't been surgically addressed. What's the plan for source control — back to the OR, or managed medically first? How does that timing change once cultures speciate? And what's the plan for the TPN line, now that a gut source has been identified?",
+      "note": "Source control (per Surviving Sepsis Campaign framing): as soon as medically/logistically feasible, ideally within hours of starting resuscitation, once the patient can tolerate it. Antibiotic de-escalation: narrow once cultures speciate (gram-negative rods/anaerobes typical of gut flora would fit this case). TPN line: peripheral + line cultures work together to rule the line in or out — if line cultures return negative and the gut source is confirmed, there's no indication to pull a working line. Good prompt for the learner: what would change your answer if TPN line cultures came back positive instead?"
+    }
+  ]
+}
