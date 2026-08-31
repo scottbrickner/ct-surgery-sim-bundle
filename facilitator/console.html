@@ -556,11 +556,30 @@
         <div class="hint" style="font-size:10.5px;color:var(--ink-faint)" id="cprStatus">CPR not active</div>
 
         <div class="gl">Defibrillation / Cardioversion</div>
+        <!-- Direct user request: "should allow for the failure to convert
+             rhythm vs conversion options" - achieveROSC() previously always
+             succeeded, despite this section's own hint text already implying
+             "or doesn't" (aspirational, never actually implemented). One
+             outcome selector governs BOTH buttons below, rather than a
+             separate pair of fail buttons - matches this file's existing
+             "New overrides:"/MAP-source mode-pair convention (pick a mode,
+             then act). On Failed to convert, deliberately NOTHING changes
+             (no rhythm/HR/arrestActive change) - the same "thin helper, not
+             a state machine" philosophy achieveROSC() was already built on;
+             the facilitator narrates the failed attempt and chooses what
+             happens next (repeat, escalate meds, continue CPR) via this
+             panel's other existing controls, rather than this button
+             encoding a second scripted deterioration of its own. -->
+        <div class="row" style="margin-top:0"><label>On click</label></div>
+        <div class="mode-pair">
+          <button class="act on" id="shock_outcome_success" type="button">Success</button>
+          <button class="act" id="shock_outcome_fail" type="button">Failed to convert</button>
+        </div>
         <div class="btnrow">
           <button class="act danger" id="btn_shock">Deliver Shock</button>
           <button class="act danger" id="btn_cardiovert">Synchronized Cardioversion</button>
         </div>
-        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Both are facilitator-chosen outcomes (converts to the rhythm/HR set below, or doesn't) - no energy/joules mechanics, pad placement, or real sync-pulse timing this pass. "Deliver Shock" is for a fibrillating/pulseless rhythm (VF, PEA, pulseless VT); "Synchronized Cardioversion" is for an organized-but-unstable tachyarrhythmia that already has a pulse.</div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)" id="shockOutcomeHint">Success - converts to the rhythm/HR set below. No energy/joules mechanics, pad placement, or real sync-pulse timing this pass. "Deliver Shock" is for a fibrillating/pulseless rhythm (VF, PEA, pulseless VT); "Synchronized Cardioversion" is for an organized-but-unstable tachyarrhythmia that already has a pulse.</div>
         <div class="grid2">
           <div class="row"><label>On success → rhythm</label></div>
         </div>
@@ -1701,8 +1720,25 @@ byId("cpr_stop").addEventListener("click",()=>setCPR(false,null));
 // which button was pressed). Deliberately reuses startFacilitatorRamp()
 // (already exists) for the post-event instability window rather than a new
 // tracked ROSC state - see REVIEW #5, "thin helper, not a state machine".
+let shockOutcomeMode="success"; // 'success' | 'fail'
+const SHOCK_OUTCOME_HINTS={
+  success:'Success - converts to the rhythm/HR set below. No energy/joules mechanics, pad placement, or real sync-pulse timing this pass. "Deliver Shock" is for a fibrillating/pulseless rhythm (VF, PEA, pulseless VT); "Synchronized Cardioversion" is for an organized-but-unstable tachyarrhythmia that already has a pulse.',
+  fail:"Failed to convert - clicking either button below logs the attempt but changes nothing (no rhythm/HR/arrest-flag change). Narrate the failed attempt and use this panel's other controls (repeat, escalate meds, CPR) to decide what happens next.",
+};
+function setShockOutcome(mode){
+  shockOutcomeMode=mode;
+  byId("shock_outcome_success").classList.toggle("on",mode==="success");
+  byId("shock_outcome_fail").classList.toggle("on",mode==="fail");
+  byId("shockOutcomeHint").textContent=SHOCK_OUTCOME_HINTS[mode];
+}
+byId("shock_outcome_success").addEventListener("click",()=>setShockOutcome("success"));
+byId("shock_outcome_fail").addEventListener("click",()=>setShockOutcome("fail"));
 function achieveROSC(actionLabel){
   if(!runner)return;
+  if(shockOutcomeMode==="fail"){
+    logChange(`${actionLabel} → failed to convert (no change)`);
+    return;
+  }
   const rhythm=byId("shock_target_rhythm").value;
   const hr=parseFloat(byId("shock_target_hr").value);
   const unstableMinutes=parseFloat(byId("shock_unstable_minutes").value)||0;
