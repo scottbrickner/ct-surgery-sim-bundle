@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   createRunner, next, prev, reset, jumpToPart, tick, applyFacilitatorOverride,
   getRampProgress, checkAutoAdvance, getAutoAdvanceCountdown, cancelAutoAdvance,
-  startFacilitatorRamp,
+  startFacilitatorRamp, fastForwardRamp, commitRampNow,
   setOverrideWithRelease, releaseOverrideNow, startGradualRelease, tickReleaseRamps,
   getOverrideInfo, isOverridden, checkOverrideReleases,
 } from './scenarioRunner.js';
@@ -334,6 +334,69 @@ test('startFacilitatorRamp() without BOTH autoAdvanceAfterMinutes and outcomePat
   assert.equal(r.pendingAutoAdvance, null);
   r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4, outcomePatch: { rhythm: 'PEA' } }, 0); // no autoAdvanceAfterMinutes
   assert.equal(r.pendingAutoAdvance, null);
+});
+
+/* ---------------- fastForwardRamp()/commitRampNow() - direct user request: "facilitator should have ability to fast forward or immediately commit change to final destination" ---------------- */
+
+test('fastForwardRamp() is a no-op when nothing is ramping, or when ms is not positive', () => {
+  let r = createRunner(fixtureScenario());
+  assert.equal(fastForwardRamp(r, 60000, 0), r);
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4 }, 0);
+  assert.equal(fastForwardRamp(r, 0, 1000), r);
+  assert.equal(fastForwardRamp(r, -5000, 1000), r);
+});
+
+test('fastForwardRamp() advances a partial ramp by the given simulated ms, without waiting for real time', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4 }, 0); // 90 -> 40 over 240000ms
+  // Still at t=0 real time - fast-forward by 2 minutes of simulated progress (half the ramp)
+  r = fastForwardRamp(r, 120000, 0);
+  assert.equal(r.state.hr, 65); // halfway between 90 and 40
+  assert.ok(r.activeRamp); // still in flight - only half done
+  assert.equal(r.activeRamp.startedAtMs, -120000); // shifted backward so the math reflects the fast-forward
+});
+
+test('fastForwardRamp() past the ramp\'s own duration settles it exactly like a completed real-time tick', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4 }, 0);
+  r = fastForwardRamp(r, 999999, 0);
+  assert.equal(r.state.hr, 40);
+  assert.equal(r.activeRamp, null);
+});
+
+test('fastForwardRamp() does not touch pendingAutoAdvance - a separately-scheduled grace-period auto-fire keeps its own original wall-clock deadline', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2,
+    outcomePatch: { rhythm: 'PEA' }, label: 'cardiac arrest',
+  }, 0);
+  const before = r.pendingAutoAdvance;
+  r = fastForwardRamp(r, 120000, 0);
+  assert.deepEqual(r.pendingAutoAdvance, before); // unchanged - fastForwardRamp only touches activeRamp
+});
+
+test('commitRampNow() is a no-op when nothing is ramping', () => {
+  const r = createRunner(fixtureScenario());
+  assert.equal(commitRampNow(r), r);
+});
+
+test('commitRampNow() snaps immediately to the ramp target regardless of how little real time has elapsed', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4 }, 1000);
+  r = commitRampNow(r); // no tick(), no elapsed time at all - started at 1000, "now" is still effectively 1000
+  assert.equal(r.state.hr, 40);
+  assert.equal(r.activeRamp, null);
+});
+
+test('commitRampNow() does not touch pendingAutoAdvance, same scope boundary as fastForwardRamp()', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, autoAdvanceAfterMinutes: 2,
+    outcomePatch: { rhythm: 'PEA' }, label: 'cardiac arrest',
+  }, 0);
+  const before = r.pendingAutoAdvance;
+  r = commitRampNow(r);
+  assert.deepEqual(r.pendingAutoAdvance, before);
 });
 
 test('checkAutoAdvance() applies the custom outcome patch on fire, WITHOUT touching partIndex/stepIndex', () => {

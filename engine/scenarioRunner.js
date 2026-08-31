@@ -182,6 +182,45 @@ export function getRampProgress(runner, nowMs) {
 }
 
 /**
+ * Fast-forward an in-flight ramp by `ms` of SIMULATED elapsed time, without
+ * waiting for real wall-clock time to pass - direct user request:
+ * "facilitator should have ability to fast forward or immediately commit
+ * change to final destination." Shifts activeRamp.startedAtMs backward by
+ * `ms` (making it look, to the fraction math, like that much more real time
+ * has already elapsed) and re-derives state immediately, rather than
+ * requiring the caller to wait for a subsequent tick() to see the effect. A
+ * no-op if no ramp is active or `ms` isn't positive. Deliberately does NOT
+ * touch tickReleaseRamps()/pendingAutoAdvance - this advances only the ONE
+ * ramp the facilitator is looking at, not every other independent timed
+ * process the runner might also have in flight (an already-scheduled grace-
+ * period auto-advance still fires on its own original wall-clock schedule;
+ * cancelAutoAdvance() is the separate, existing control for that).
+ */
+export function fastForwardRamp(runner, ms, nowMs) {
+  if (!runner.activeRamp || !(ms > 0)) return runner;
+  const { fromState, target, durationMs } = runner.activeRamp;
+  const shiftedStartedAtMs = runner.activeRamp.startedAtMs - ms;
+  const fraction = durationMs <= 0 ? 1 : Math.min(1, Math.max(0, (nowMs - shiftedStartedAtMs) / durationMs));
+  const state = rampState(fromState, target, fraction);
+  return { ...runner, state, activeRamp: fraction >= 1 ? null : { ...runner.activeRamp, startedAtMs: shiftedStartedAtMs } };
+}
+
+/**
+ * Immediately completes an in-flight ramp, snapping straight to its target -
+ * the facilitator-chosen "commit to the final destination now" action from
+ * the same request fastForwardRamp() above answers. A no-op if no ramp is
+ * active. Same pendingAutoAdvance scope note as fastForwardRamp() - only the
+ * ramp itself completes early, a separately-scheduled grace-period countdown
+ * is untouched.
+ */
+export function commitRampNow(runner) {
+  if (!runner.activeRamp) return runner;
+  const { fromState, target } = runner.activeRamp;
+  const state = rampState(fromState, target, 1);
+  return { ...runner, state, activeRamp: null };
+}
+
+/**
  * If a ramp step was authored with `autoAdvanceAfterMinutes`, calling this
  * every tick (alongside tick() itself) advances the scenario via next() once
  * that grace period elapses with no facilitator action - e.g. "if nobody

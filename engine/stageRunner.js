@@ -17,6 +17,7 @@ import {
   startGradualRelease, getOverrideInfo, isOverridden,
   applyFacilitatorOverride, startFacilitatorRamp, advanceSimClock,
   getRampProgress, getAutoAdvanceCountdown, cancelAutoAdvance,
+  fastForwardRamp, commitRampNow,
 } from './scenarioRunner.js';
 
 export {
@@ -24,6 +25,7 @@ export {
   startGradualRelease, getOverrideInfo, isOverridden,
   applyFacilitatorOverride, startFacilitatorRamp, advanceSimClock,
   getRampProgress, getAutoAdvanceCountdown, cancelAutoAdvance,
+  fastForwardRamp, commitRampNow,
 };
 
 function findStage(scenario, stageId) {

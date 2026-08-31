@@ -778,6 +778,7 @@ import {
   getRampProgress as srGetRampProgress, checkAutoAdvance as srCheckAutoAdvance,
   getAutoAdvanceCountdown as srGetAutoAdvanceCountdown, cancelAutoAdvance as srCancelAutoAdvance,
   startFacilitatorRamp as srStartFacilitatorRamp,
+  fastForwardRamp as srFastForwardRamp, commitRampNow as srCommitRampNow,
   setOverrideWithRelease as srSetOverride, releaseOverrideNow as srReleaseNow,
   startGradualRelease as srReleaseGradually, getOverrideInfo as srGetOverrideInfo,
   checkOverrideReleases as srCheckOverrideReleases,
@@ -966,7 +967,12 @@ function renderDecompTimer(nowMs){
   let html;
   if(progress){
     const pct=Math.round(progress.fraction*100);
-    html=`<div class="decomp-label"><span>Decompensating</span><span>${fmtMMSS(progress.elapsedMs)} / ${fmtMMSS(progress.durationMs)}</span></div><div class="decomp-bar"><div class="decomp-fill" style="width:${pct}%"></div></div>`;
+    // Direct user request: "facilitator should have ability to fast forward
+    // or immediately commit change to final destination." Fast-forward
+    // buttons match the existing "Simulated Time" +1/+5 min convention for
+    // consistency; Commit Now snaps straight to the target - see
+    // fastForwardRamp()/commitRampNow() in engine/scenarioRunner.js.
+    html=`<div class="decomp-label"><span>Decompensating</span><span>${fmtMMSS(progress.elapsedMs)} / ${fmtMMSS(progress.durationMs)}</span></div><div class="decomp-bar"><div class="decomp-fill" style="width:${pct}%"></div></div><div class="btnrow" style="margin-top:4px"><button class="act decomp-ff" data-ms="60000">+1 min</button><button class="act decomp-ff" data-ms="300000">+5 min</button><button class="act danger decomp-commit">Commit Now — Skip to Destination</button></div>`;
   }else if(countdown){
     const what=countdown.label?("to "+countdown.label+" "):"";
     html=`<div class="decomp-label warn"><span>⚠ Auto-advancing ${what}if unaddressed in ${fmtMMSS(countdown.remainingMs)}</span></div><div class="btnrow" style="margin-top:4px"><button class="act danger decomp-cancel">Hold Here — Cancel Auto-Advance</button></div>`;
@@ -977,6 +983,17 @@ function renderDecompTimer(nowMs){
     el.innerHTML=html;
     const cancelBtn=el.querySelector(".decomp-cancel");
     if(cancelBtn)cancelBtn.addEventListener("click",()=>{runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());});
+    el.querySelectorAll(".decomp-ff").forEach(btn=>btn.addEventListener("click",()=>{
+      runner=srFastForwardRamp(runner,parseFloat(btn.dataset.ms),performance.now());
+      syncControlsFromRunner();renderReadout();renderDecompTimer(performance.now());
+      logChange(`Fast-forwarded the active Clinical Change ramp by ${parseFloat(btn.dataset.ms)/60000} min`);
+    }));
+    const commitBtn=el.querySelector(".decomp-commit");
+    if(commitBtn)commitBtn.addEventListener("click",()=>{
+      runner=srCommitRampNow(runner);
+      syncControlsFromRunner();renderReadout();renderDecompTimer(performance.now());
+      logChange("Committed the active Clinical Change ramp immediately to its target");
+    });
   });
 }
 // v1-only controls - guarded so a stray event (or a leftover keyboard focus
@@ -2360,6 +2377,8 @@ window.ctSharedEngine={
   advanceToStageNow:(stageId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.advanceToStage(runner,stageId,ts);syncControlsFromRunner();render();return runner.state;},
   chooseBranchNow:(destinationId,ts)=>{if(!runner||engineMode!=="v2")return null;runner=v2Engine.chooseBranch(runner,destinationId,ts);syncControlsFromRunner();render();return runner.state;},
   cancelAutoAdvanceNow:()=>{if(!runner)return null;runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());return runner.pendingAutoAdvance;},
+  fastForwardRampNow:(ms)=>{if(!runner)return null;runner=srFastForwardRamp(runner,ms,performance.now());syncControlsFromRunner();renderReadout();renderDecompTimer(performance.now());return runner.state;},
+  commitRampNow:()=>{if(!runner)return null;runner=srCommitRampNow(runner);syncControlsFromRunner();renderReadout();renderDecompTimer(performance.now());return runner.state;},
   // Testing hook, same rationale as every rAF/setInterval-gated redraw in
   // this file (see tickNow's own precedent): renderRhythmNotes is normally
   // only re-run from consoleTick's throttled ~1Hz redraw, which this
