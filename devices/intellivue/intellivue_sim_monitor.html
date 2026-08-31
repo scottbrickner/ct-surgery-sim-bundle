@@ -39,13 +39,15 @@
      on #nums) scales font sizes so text stays proportionate to the bigger
      box - a real Philips monitor showing 4 parameters uses noticeably
      larger numerals than one showing 12, not just bigger empty tiles. */
-  .tile{flex:1 1 0;min-height:48px;border:1px solid rgba(255,255,255,.18);margin:3px 4px;border-radius:4px;padding:1px 7px 2px;position:relative;display:flex;flex-direction:column;justify-content:center;background:#040404;cursor:pointer;}
+  .tile{flex:1 1 0;min-height:62px;border:1px solid rgba(255,255,255,.18);margin:3px 4px;border-radius:4px;padding:0;position:relative;display:flex;flex-direction:row;align-items:stretch;background:#040404;cursor:pointer;overflow:hidden;}
   .tile:hover{border-color:#2f6f9a;}
-  .tile .lab{font-size:12px;font-weight:700;line-height:1.1;display:flex;justify-content:space-between;align-items:baseline;}
+  .tile .tlab{writing-mode:vertical-rl;transform:rotate(180deg);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;letter-spacing:.5px;padding:2px 4px;flex:0 0 auto;border-right:1px solid rgba(255,255,255,.15);white-space:nowrap;}
+  .tile .tbody{flex:1 1 0;display:flex;flex-direction:column;justify-content:center;position:relative;padding:2px 8px 3px 7px;min-width:0;}
+  .tile .lab{position:absolute;top:2px;right:7px;display:flex;justify-content:flex-end;}
   .tile .lim{font-size:9px;color:#7a7a7a;font-weight:600;}
-  .tile .big{font-size:40px;font-weight:700;line-height:.9;font-variant-numeric:tabular-nums;letter-spacing:-1px;}
-  .tile .big.med{font-size:28px;} .tile .big.sm{font-size:22px;}
-  .tile .sub{font-size:11px;font-weight:600;opacity:.85;}
+  .tile .big{font-size:56px;font-weight:700;line-height:.9;font-variant-numeric:tabular-nums;letter-spacing:-1px;align-self:flex-start;}
+  .tile .big.med{font-size:39px;} .tile .big.sm{font-size:31px;}
+  .tile .sub{position:absolute;right:7px;bottom:2px;font-size:15px;font-weight:600;opacity:.85;text-align:right;max-width:70%;}
   /* Density tiers - "lg" (the original, unscaled sizes just above) is the
      implicit default for the common 6-8-visible-tiles case; these three
      override it further up/down. Reasoned thresholds (a facilitator toggling
@@ -59,24 +61,28 @@
      more. If the column still doesn't have enough total height for these
      floors, #nums's own pre-existing overflow-y:auto scrolls instead of
      letting tiles visually collide - correct fallback, not a new one. */
-  #nums[data-density="xl"] .tile{min-height:92px;}
-  #nums[data-density="xl"] .tile .big{font-size:64px;}
-  #nums[data-density="xl"] .tile .big.med{font-size:46px;}
-  #nums[data-density="xl"] .tile .big.sm{font-size:36px;}
-  #nums[data-density="xl"] .tile .lab{font-size:15px;}
-  #nums[data-density="xl"] .tile .sub{font-size:13px;}
-  #nums:not([data-density]) .tile,#nums[data-density="lg"] .tile{min-height:68px;}
-  #nums[data-density="md"] .tile{min-height:58px;}
-  #nums[data-density="md"] .tile .big{font-size:32px;}
-  #nums[data-density="md"] .tile .big.med{font-size:23px;}
-  #nums[data-density="md"] .tile .big.sm{font-size:18px;}
-  #nums[data-density="md"] .tile .lab{font-size:11px;}
-  #nums[data-density="md"] .tile .sub{font-size:10px;}
-  #nums[data-density="sm"] .tile .big{font-size:24px;}
-  #nums[data-density="sm"] .tile .big.med{font-size:18px;}
-  #nums[data-density="sm"] .tile .big.sm{font-size:15px;}
-  #nums[data-density="sm"] .tile .lab{font-size:10px;}
-  #nums[data-density="sm"] .tile .sub{font-size:9px;}
+  #nums[data-density="xl"] .tile{min-height:114px;}
+  #nums[data-density="xl"] .tile .tlab{font-size:19px;}
+  #nums[data-density="xl"] .tile .big{font-size:84px;}
+  #nums[data-density="xl"] .tile .big.med{font-size:60px;}
+  #nums[data-density="xl"] .tile .big.sm{font-size:46px;}
+  #nums[data-density="xl"] .tile .lim{font-size:11px;}
+  #nums[data-density="xl"] .tile .sub{font-size:17px;}
+  #nums:not([data-density]) .tile,#nums[data-density="lg"] .tile{min-height:88px;}
+  #nums[data-density="md"] .tile{min-height:76px;}
+  #nums[data-density="md"] .tile .tlab{font-size:14px;}
+  #nums[data-density="md"] .tile .big{font-size:44px;}
+  #nums[data-density="md"] .tile .big.med{font-size:31px;}
+  #nums[data-density="md"] .tile .big.sm{font-size:24px;}
+  #nums[data-density="md"] .tile .lim{font-size:9px;}
+  #nums[data-density="md"] .tile .sub{font-size:13px;}
+  #nums[data-density="sm"] .tile{min-height:62px;}
+  #nums[data-density="sm"] .tile .tlab{font-size:12px;padding:2px 3px;}
+  #nums[data-density="sm"] .tile .big{font-size:34px;}
+  #nums[data-density="sm"] .tile .big.med{font-size:25px;}
+  #nums[data-density="sm"] .tile .big.sm{font-size:21px;}
+  #nums[data-density="sm"] .tile .lim{font-size:8px;}
+  #nums[data-density="sm"] .tile .sub{font-size:11px;}
   .tile.alarm-red{animation:tr .8s steps(1) infinite;} .tile.alarm-yel{animation:ty 1.2s steps(1) infinite;}
   @keyframes tr{50%{background:#5a0000;}} @keyframes ty{50%{background:#4a3f00;}}
   .hide{display:none!important;}
@@ -104,6 +110,8 @@
   #fac button.act.warn{background:#5a4414;border-color:#7a5e20;color:#ffeccd;}
   #fac .tog{flex:1 1 28%;background:#13202c;border:1px solid #26415a;border-radius:5px;padding:6px 4px;font-size:11.5px;cursor:pointer;color:#90a6ba;text-align:center;font-weight:600;}
   #fac .tog.on{background:#16384f;color:#fff;border-color:#2f6f9a;}
+  #fac .tog.eng-locked{cursor:not-allowed;opacity:.45;}
+  #fac .tog.eng-locked.on{background:#16384f;color:#7f97ab;border-color:#26415a;}
   #fac .chk{display:flex;align-items:center;gap:5px;font-size:11.5px;color:#cdd9e4;flex:1 1 44%;cursor:pointer;}
   #fac .scn{display:block;width:100%;text-align:left;margin:4px 0;background:#13202c;border:1px solid #26415a;border-radius:5px;padding:7px 10px;cursor:pointer;color:#dce8f2;}
   #fac .scn:hover{background:#1b3144;} #fac .scn b{display:block;font-size:12.5px;color:#fff;} #fac .scn span{font-size:10.5px;color:#90a6ba;}
@@ -197,19 +205,19 @@
   <div id="main">
     <div id="waveWrap"><canvas id="wave"></canvas><canvas id="labels"></canvas></div>
     <div id="nums">
-      <div class="tile" id="t_hr" data-color="ecg"><div class="lab"><span id="l_hr">HR</span><span class="lim" id="lim_hr"></span></div><div class="big" id="v_hr">--</div><div class="sub">bpm <span id="s_pvc"></span></div></div>
-      <div class="tile" id="t_spo2" data-color="pleth"><div class="lab"><span>SpO₂</span><span class="lim" id="lim_spo2"></span></div><div class="big" id="v_spo2">--</div><div class="sub">% Perf <span id="s_perf">2.4</span></div></div>
-      <div class="tile" id="t_rr" data-color="resp"><div class="lab"><span>RR</span><span class="lim" id="lim_rr"></span></div><div class="big med" id="v_rr">--</div><div class="sub">/min</div></div>
-      <div class="tile" id="t_nbp" data-color="nbp"><div class="lab"><span>NBP</span><span class="lim" id="nbp_time">--:--</span></div><div class="big sm" id="v_nbp">--/--</div><div class="sub">(<span id="v_nbpmap">--</span>) mmHg</div></div>
-      <div class="tile" id="t_abp" data-color="abp"><div class="lab"><span id="l_abp">ART</span><span class="lim" id="lim_abp">mmHg</span></div><div class="big med" id="v_abp">--/--</div><div class="sub">(<span id="v_abpmap">--</span>)</div></div>
-      <div class="tile" id="t_abp2" data-color="abp2"><div class="lab"><span id="l_abp2">Fem</span><span class="lim">mmHg</span></div><div class="big med" id="v_abp2">--/--</div><div class="sub">(<span id="v_abp2map">--</span>)</div></div>
-      <div class="tile" id="t_pap" data-color="pap"><div class="lab"><span id="l_pap">PAP</span><span class="lim" id="lim_pap">mmHg</span></div><div class="big sm" id="v_pap">--/--</div><div class="sub">(<span id="v_papmap">--</span>) PAWP <span id="v_pawp">--</span></div></div>
-      <div class="tile" id="t_cvp" data-color="cvp"><div class="lab"><span id="l_cvp">CVP</span><span class="lim" id="lim_cvp">mean</span></div><div class="big" id="v_cvp">--</div><div class="sub">mmHg</div></div>
-      <div class="tile" id="t_icp" data-color="icp"><div class="lab"><span>ICP</span><span class="lim" id="lim_icp">mean</span></div><div class="big" id="v_icp">--</div><div class="sub">mmHg</div></div>
-      <div class="tile" id="t_cpp" data-color="cpp"><div class="lab"><span>CPP</span><span class="lim" id="lim_cpp">≥60</span></div><div class="big" id="v_cpp">--</div><div class="sub">mmHg</div></div>
-      <div class="tile" id="t_co2" data-color="co2"><div class="lab"><span>etCO₂</span><span class="lim" id="lim_etco2"></span></div><div class="big" id="v_co2">--</div><div class="sub">mmHg awRR <span id="s_awrr">14</span></div></div>
-      <div class="tile" id="t_coci" data-color="coci"><div class="lab"><span>C.O./C.I.</span><span class="lim" id="co_time">td</span></div><div class="big sm" id="v_coci">--/--</div><div class="sub">L/min · /m²</div></div>
-      <div class="tile" id="t_temp" data-color="temp"><div class="lab"><span>Temp</span><span class="lim" id="lim_temp">°C</span></div><div class="big med" id="v_temp">--</div><div class="sub">core</div></div>
+      <div class="tile" id="t_hr" data-color="ecg"><div class="tlab"><span id="l_hr">HR</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_hr"></span></div><div class="big" id="v_hr">--</div><div class="sub">bpm <span id="s_pvc"></span></div></div></div>
+      <div class="tile" id="t_spo2" data-color="pleth"><div class="tlab"><span>SpO₂</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_spo2"></span></div><div class="big" id="v_spo2">--</div><div class="sub">% Perf <span id="s_perf">2.4</span></div></div></div>
+      <div class="tile" id="t_rr" data-color="resp"><div class="tlab"><span>RR</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_rr"></span></div><div class="big med" id="v_rr">--</div><div class="sub">/min</div></div></div>
+      <div class="tile" id="t_nbp" data-color="nbp"><div class="tlab"><span>NBP</span></div><div class="tbody"><div class="lab"><span class="lim" id="nbp_time">--:--</span></div><div class="big sm" id="v_nbp">--/--</div><div class="sub">(<span id="v_nbpmap">--</span>) mmHg</div></div></div>
+      <div class="tile" id="t_abp" data-color="abp"><div class="tlab"><span id="l_abp">ART</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_abp">mmHg</span></div><div class="big med" id="v_abp">--/--</div><div class="sub">(<span id="v_abpmap">--</span>)</div></div></div>
+      <div class="tile" id="t_abp2" data-color="abp2"><div class="tlab"><span id="l_abp2">Fem</span></div><div class="tbody"><div class="lab"><span class="lim">mmHg</span></div><div class="big med" id="v_abp2">--/--</div><div class="sub">(<span id="v_abp2map">--</span>)</div></div></div>
+      <div class="tile" id="t_pap" data-color="pap"><div class="tlab"><span id="l_pap">PAP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_pap">mmHg</span></div><div class="big sm" id="v_pap">--/--</div><div class="sub">(<span id="v_papmap">--</span>) PAWP <span id="v_pawp">--</span></div></div></div>
+      <div class="tile" id="t_cvp" data-color="cvp"><div class="tlab"><span id="l_cvp">CVP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_cvp">mean</span></div><div class="big" id="v_cvp">--</div><div class="sub">mmHg</div></div></div>
+      <div class="tile" id="t_icp" data-color="icp"><div class="tlab"><span>ICP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_icp">mean</span></div><div class="big" id="v_icp">--</div><div class="sub">mmHg</div></div></div>
+      <div class="tile" id="t_cpp" data-color="cpp"><div class="tlab"><span>CPP</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_cpp">≥60</span></div><div class="big" id="v_cpp">--</div><div class="sub">mmHg</div></div></div>
+      <div class="tile" id="t_co2" data-color="co2"><div class="tlab"><span>etCO₂</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_etco2"></span></div><div class="big" id="v_co2">--</div><div class="sub">mmHg awRR <span id="s_awrr">14</span></div></div></div>
+      <div class="tile" id="t_coci" data-color="coci"><div class="tlab"><span>CO/CI</span></div><div class="tbody"><div class="lab"><span class="lim" id="co_time">td</span></div><div class="big sm" id="v_coci">--/--</div><div class="sub">L/min · /m²</div></div></div>
+      <div class="tile" id="t_temp" data-color="temp"><div class="tlab"><span>Temp</span></div><div class="tbody"><div class="lab"><span class="lim" id="lim_temp">°C</span></div><div class="big med" id="v_temp">--</div><div class="sub">core</div></div></div>
     </div>
   </div>
   <div id="softkeys">
@@ -359,6 +367,7 @@
       <div class="row2sel" style="margin-top:4px"><label>ICP compliance<select id="s_icpcomp"><option value="normal">Normal (P1>P2>P3)</option><option value="reduced">Reduced (P2>P1)</option><option value="low">Critically low (P1-P2 merged)</option></select></label></div>
     </div>
     <div class="grp"><div class="gl">Parameters On Screen (ECG · Pleth · RR · NBP always on)</div>
+      <div class="hint" id="togEngHint" style="display:none;font-size:10.5px;color:#90a6ba;margin:-2px 0 6px">A scenario is driving this monitor - greyed toggles are set by the scenario/Console's own "Monitored" controls (Patient Assessments & Outputs), not here.</div>
       <div class="btnrow" id="togbox">
         <div class="tog on" data-tog="abp">ART</div><div class="tog" data-tog="abp2">2nd Art</div>
         <div class="tog" data-tog="pap">PAP</div><div class="tog on" data-tog="cvp">CVP</div>
@@ -510,7 +519,7 @@
 
 <script type="module">
 import { getEffectiveRhythm } from '../../engine/physiology.js';
-import { getMedicatedHR } from '../../engine/clinical/pharmacology.js';
+import { getMedicatedHR, getMedicatedPASys, getMedicatedPADia } from '../../engine/clinical/pharmacology.js';
 import { isPerfusing, isPulsatile, getEffectiveSBP, getEffectiveDBP, getEffectiveETCO2 } from '../../engine/clinical/pulsatility.js';
 import {
   createRunner, next as srNext, prev as srPrev, reset as srReset, jumpToPart as srJumpToPart,
@@ -536,6 +545,11 @@ const gauss=(t,c,w,a)=>a*Math.exp(-0.5*Math.pow((t-c)/w,2));
 // applyEngineValuesLight, further down) because loadScenario("baseline") is
 // called at module-boot time, before that point in the file would execute.
 let sharedPerfusing=null,sharedPulsatile=null;
+// engineMonitored: same boot-order reasoning as sharedPerfusing/sharedPulsatile
+// above - refreshToggleUI() (used by the Parameters On Screen toggles, further
+// down) reads this, and loadScenario("baseline") calls refreshToggleUI() at
+// module-boot time too.
+let engineMonitored=null; // the shared engine's last-seen `monitored` object, or null in native/practice mode (no such concept there - always show numbers)
 const state={
   hr:78,spo2:98,sys:118,dia:64,cvp:8,paSys:26,paDia:12,pawp:10,icp:10,rr:14,etco2:38,co:5.2,temp:36.8,
   rhythm:"sinus",pvcQueued:false,beatCount:0,beatAmp:1,
@@ -880,7 +894,7 @@ function frame(ts){const dt=Math.min(0.05,(ts-lastTs)/1000);lastTs=ts;
 function numVal(line,real){if(zeroing(line)){const t=state.zero[line].t;if(t<1.0)return"0";if(t<1.8)return"--";if(t<2.6)return"0";}return real;}
 function syncNumTiles(){const map={t_abp:"abp",t_abp2:"abp2",t_pap:"pap",t_cvp:"cvp",t_icp:"icp",t_cpp:"cpp",t_co2:"co2",t_coci:"coci",t_temp:"temp"};
   for(const id in map)byId(id).classList.toggle("hide",!state.show[map[id]]);
-  document.querySelectorAll(".tile").forEach(t=>{const c=cssv("--"+t.dataset.color);t.style.borderColor=hexA(c,.5);t.querySelector(".big").style.color=c;const lab=t.querySelector(".lab>span");if(lab)lab.style.color=c;});
+  document.querySelectorAll(".tile").forEach(t=>{const c=cssv("--"+t.dataset.color);t.style.borderColor=hexA(c,.5);t.querySelector(".big").style.color=c;const lab=t.querySelector(".tlab>span");if(lab)lab.style.color=c;});
   byId("l_abp").textContent=state.labels.abp;byId("l_abp2").textContent=state.labels.abp2;
   byId("l_pap").textContent=state.paCath==="RV"?"RV":state.labels.pap;
   refreshLimLabels();scaleNumTiles();}
@@ -1069,8 +1083,37 @@ function ctLoadIV(id){ctId=id;ctStepIdx=0;const ind=byId("ctStepIV");if(id)ctApp
  const p=byId("ctPrevIV");if(p)p.addEventListener("click",()=>{const sc=CTSCN[ctId];if(sc&&ctStepIdx>0){ctStepIdx--;ctApplyIV();}});
  const r=byId("ctResetIV");if(r)r.addEventListener("click",()=>{if(ctId){ctStepIdx=0;ctApplyIV();}});}
 // toggles & labels
-function refreshToggleUI(){document.querySelectorAll("[data-tog]").forEach(t=>t.classList.toggle("on",state.show[t.dataset.tog]));}
-document.querySelectorAll("[data-tog]").forEach(t=>t.addEventListener("click",()=>{const k=t.dataset.tog;state.show[k]=!state.show[k];t.classList.toggle("on",state.show[k]);layout();}));
+// Keys this device's local "Parameters On Screen" toggles share with the
+// shared engine's `monitored` groups (see applyMonitoredToShow above) - a
+// local click on one of THESE keys gets silently reverted on the very next
+// engine tick whenever a scenario is actively driving this device (local or
+// synced), since applyMonitoredToShow() re-derives state.show from
+// es.monitored every tick. Real, reported bug: clicking the toggle looked
+// like it worked for an instant, then bounced back - not a click-handling
+// bug, a source-of-truth conflict between this pre-existing local toggle and
+// the newer shared-engine `monitored` field governing the same key. Rather
+// than let the two silently fight, lock these specific toggles (visibly,
+// with a hint) whenever engineMonitored is non-null, matching this file's
+// existing "disable + hint, don't silently fight" precedent (e.g. the MAP
+// slider under Calculated mode). Keys with no engine equivalent (abp2, co2)
+// are never locked - the engine has no opinion on them.
+const ENGINE_GOVERNED_TOG=["abp","pap","cvp","icp","cpp","coci","temp"];
+function refreshToggleUI(){
+  const hint=byId("togEngHint");
+  document.querySelectorAll("[data-tog]").forEach(t=>{
+    const k=t.dataset.tog;
+    t.classList.toggle("on",state.show[k]);
+    const locked=!!engineMonitored&&ENGINE_GOVERNED_TOG.includes(k);
+    t.classList.toggle("eng-locked",locked);
+    t.title=locked?"Controlled by the running scenario/Console - use its \"Monitored\" toggle instead":"";
+  });
+  if(hint)hint.style.display=engineMonitored?"block":"none";
+}
+document.querySelectorAll("[data-tog]").forEach(t=>t.addEventListener("click",()=>{
+  const k=t.dataset.tog;
+  if(engineMonitored&&ENGINE_GOVERNED_TOG.includes(k))return; // locked - see refreshToggleUI's comment above
+  state.show[k]=!state.show[k];t.classList.toggle("on",state.show[k]);layout();
+}));
 byId("lbl_abp").addEventListener("input",e=>{state.labels.abp=e.target.value;drawLabels();syncNumTiles();});
 byId("lbl_abp2").addEventListener("input",e=>{state.labels.abp2=e.target.value;drawLabels();syncNumTiles();});
 byId("lbl_pap").addEventListener("input",e=>{state.labels.pap=e.target.value;drawLabels();syncNumTiles();});
@@ -1293,13 +1336,17 @@ function applyMonitoredToShow(es){
   for(const k in next){if(state.show[k]!==next[k]){state.show[k]=next[k];changed=true;}}
   return changed;
 }
-let engineMonitored=null; // the shared engine's last-seen `monitored` object, or null in native/practice mode (no such concept there - always show numbers)
 function applyEngineValuesLight(es){
   sharedPerfusing=isPerfusing(es);sharedPulsatile=isPulsatile(es);
   engineMonitored=es.monitored||null;
   const showChanged=applyMonitoredToShow(es);
   state.hr=getMedicatedHR(es,es.minute);state.sys=getEffectiveSBP(es);state.dia=getEffectiveDBP(es);state.cvp=es.cvp;
-  state.paSys=es.pa.systolic;state.paDia=es.pa.diastolic;state.spo2=es.spo2;
+  // Round 4, direct user request: "inhaled nitric oxide/inhaled
+  // epoprostonolol" - both act specifically on PA pressures (see
+  // pharmacology.js's getMedicatedPASys/getMedicatedPADia docblock for the
+  // real gap this closed: PA pressures had no medication-effect layer at
+  // all before this, unlike hr/map/co/rr).
+  state.paSys=getMedicatedPASys(es,es.minute);state.paDia=getMedicatedPADia(es,es.minute);state.spo2=es.spo2;
   if(es.rr)state.rr=es.rr;if(es.temp)state.temp=es.temp;state.co=es.co;
   if(es.etco2!==undefined)state.etco2=getEffectiveETCO2(es,es.minute);
   state.rhythm=mapEngineRhythm(getEffectiveRhythm(es));
