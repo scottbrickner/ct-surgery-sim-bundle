@@ -609,8 +609,25 @@
              import) - not a fourth hand-duplicated option list. -->
         <select id="shock_target_rhythm"></select>
         <div class="row"><label>Target HR</label><input type="number" id="shock_target_hr" value="90" min="20" max="220"></div>
+        <!-- Direct user request: "need quick way to improve or restore VS
+             after successful ROSC obtained." achieveROSC() previously only
+             ever ramped HR - BP/MAP/SpO2 were left wherever the pre-ROSC
+             (often arrest-flatlined) state had them, with no restoration
+             path except manually dragging every Patient Assessments slider
+             one at a time. These three fields ride the SAME ramp as HR
+             (one startFacilitatorRamp() call, same duration/label), not a
+             second mechanism - defaults are a reasonable, NOT independently
+             cited post-ROSC target (mildly conservative BP, SpO2 titrated
+             short of hyperoxia per general post-arrest teaching) matching
+             this project's existing "reasoned training default" class
+             (e.g. BP_NORMAL_PULSE_PRESSURE). MAP is always computed from
+             sys/dia here (no separate manual-MAP field, unlike the Clinical
+             Change panel) - simplicity was chosen over exposing a
+             Manual/Calculated toggle for a quick-restore action. -->
+        <div class="row"><label>Target BP sys / dia</label><input type="number" id="shock_target_sbp" value="112" min="0" max="260" style="width:60px"> / <input type="number" id="shock_target_dbp" value="68" min="0" max="160" style="width:60px"></div>
+        <div class="row"><label>Target SpO₂</label><input type="number" id="shock_target_spo2" value="96" min="0" max="100"></div>
         <div class="row"><label>Post-event instability (min)</label><input type="number" id="shock_unstable_minutes" value="2" min="0" max="15" step="0.5"></div>
-        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">A successful shock ramps toward the target over the instability window instead of snapping straight to it - the common, taught post-event hemodynamic instability - rather than a new tracked ROSC state (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">A successful shock ramps HR, BP (sys/dia, MAP computed from them), and SpO₂ together toward these targets over the instability window instead of snapping straight to them - the common, taught post-event hemodynamic instability - rather than a new tracked ROSC state (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
 
         <div class="gl">Medications (IV Push)</div>
         <div id="pushDrugList"></div>
@@ -1006,7 +1023,18 @@ function renderDecompTimer(nowMs){
     html=`<div class="decomp-label"><span>Decompensating</span><span>${fmtMMSS(progress.elapsedMs)} / ${fmtMMSS(progress.durationMs)}</span></div><div class="decomp-bar"><div class="decomp-fill" style="width:${pct}%"></div></div><div class="btnrow" style="margin-top:4px"><button class="act decomp-ff" data-ms="60000">+1 min</button><button class="act decomp-ff" data-ms="300000">+5 min</button><button class="act danger decomp-commit">Commit Now — Skip to Destination</button></div>`;
   }else if(countdown){
     const what=countdown.label?("to "+countdown.label+" "):"";
-    html=`<div class="decomp-label warn"><span>⚠ Auto-advancing ${what}if unaddressed in ${fmtMMSS(countdown.remainingMs)}</span></div><div class="btnrow" style="margin-top:4px"><button class="act danger decomp-cancel">Hold Here — Cancel Auto-Advance</button></div>`;
+    // Direct user report: "doesn't consistently show ability to cut directly
+    // to primed VS in the decompensation" - real gap, not inconsistent
+    // rendering: once a ramp settles and moves into this grace-period
+    // countdown (waiting to auto-fire its outcome), the ONLY control shown
+    // was Cancel - no way to skip the wait and commit the outcome
+    // immediately, unlike the ramp-in-progress branch just above (which has
+    // always had its own "Commit Now"). Added the equivalent here:
+    // force-fires checkAutoAdvance by passing its own fireAtMs as `nowMs`
+    // (the exact same function every real tick already calls, just invoked
+    // with the deadline treated as already-reached) rather than a second,
+    // parallel "apply the outcome" code path.
+    html=`<div class="decomp-label warn"><span>⚠ Auto-advancing ${what}if unaddressed in ${fmtMMSS(countdown.remainingMs)}</span></div><div class="btnrow" style="margin-top:4px"><button class="act danger decomp-fire">Commit Now — Trigger Outcome</button><button class="act decomp-cancel">Hold Here — Cancel Auto-Advance</button></div>`;
   }else{
     html="";
   }
@@ -1014,6 +1042,13 @@ function renderDecompTimer(nowMs){
     el.innerHTML=html;
     const cancelBtn=el.querySelector(".decomp-cancel");
     if(cancelBtn)cancelBtn.addEventListener("click",()=>{runner=srCancelAutoAdvance(runner);renderDecompTimer(performance.now());});
+    const fireBtn=el.querySelector(".decomp-fire");
+    if(fireBtn)fireBtn.addEventListener("click",()=>{
+      const fireAtMs=runner.pendingAutoAdvance?runner.pendingAutoAdvance.fireAtMs:performance.now();
+      runner=(engineMode==="v1"?srCheckAutoAdvance:v2Engine.checkAutoAdvance)(runner,fireAtMs);
+      syncControlsFromRunner();renderReadout();renderDecompTimer(performance.now());
+      logChange("Committed the pending auto-advance outcome immediately");
+    });
     el.querySelectorAll(".decomp-ff").forEach(btn=>btn.addEventListener("click",()=>{
       runner=srFastForwardRamp(runner,parseFloat(btn.dataset.ms),performance.now());
       syncControlsFromRunner();renderReadout();renderDecompTimer(performance.now());
@@ -1798,12 +1833,17 @@ function achieveROSC(actionLabel){
   }
   const rhythm=byId("shock_target_rhythm").value;
   const hr=parseFloat(byId("shock_target_hr").value);
+  const sbp=parseFloat(byId("shock_target_sbp").value);
+  const dbp=parseFloat(byId("shock_target_dbp").value);
+  const spo2=parseFloat(byId("shock_target_spo2").value);
+  const map=Math.round((sbp+2*dbp)/3);
   const unstableMinutes=parseFloat(byId("shock_unstable_minutes").value)||0;
   runner=srOverride(runner,{rhythm,flags:{arrestActive:false}});
-  if(unstableMinutes>0)runner=srStartFacilitatorRamp(runner,{target:{hr},durationMinutes:unstableMinutes,label:"post-event-stabilization"},performance.now());
-  else runner=srOverride(runner,{hr});
+  const target={hr,bp:{sbp,dbp,map},spo2};
+  if(unstableMinutes>0)runner=srStartFacilitatorRamp(runner,{target,durationMinutes:unstableMinutes,label:"post-event-stabilization"},performance.now());
+  else runner=srOverride(runner,target);
   syncControlsFromRunner();renderReadout();
-  logChange(`${actionLabel} → ${rhythm} (target HR ${hr})`);
+  logChange(`${actionLabel} → ${rhythm} (target HR ${hr}, BP ${sbp}/${dbp}, SpO₂ ${spo2})`);
 }
 byId("btn_shock").addEventListener("click",()=>achieveROSC("Deliver Shock"));
 byId("btn_cardiovert").addEventListener("click",()=>achieveROSC("Synchronized Cardioversion"));
