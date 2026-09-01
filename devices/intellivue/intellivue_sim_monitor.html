@@ -717,7 +717,20 @@ let tBeat=0,rrSec=60/78,prevRRSec=60/78,beatType="normal",hasP=true,tAtrial=0,at
 // re-derives everything else from state.rhythm fresh each call anyway.
 let wenckebachPos=0,wenckebachPrMs=0,mobitzPos=0;
 function pickRhythmTiming(){let hr=state.hr,rr=60/Math.max(20,hr);hasP=true;beatType="normal";
-  switch(state.rhythm){case"afib":rr*=(0.55+Math.random()*0.9);hasP=false;break;case"aflutter":hasP=false;break;
+  switch(state.rhythm){case"afib":
+    // Direct, REPEATED user report across this whole engagement ("Atrial
+    // fib rhythm not that irregular", then again later "still waveform
+    // looks pretty regular"): the original 0.55-1.45x band (a real, but
+    // only ~2.6x min-to-max spread) measured as genuinely irregular
+    // (352-904ms R-R in a direct sample) yet still read as too regular to
+    // a trained clinical eye - a uniform random scale in a narrow-ish band
+    // doesn't produce the visually obvious, "irregularly irregular" look
+    // real AFib strips have. Widened to 0.4-1.7x (a ~4.25x spread) for a
+    // clearly more dramatic, textbook-recognizable range - still a single
+    // rate distribution (RHYTHM_LIBRARY correctly classifies AFib
+    // 'irregular', the widest jitter tier), not a rewrite of the model.
+    rr*=(0.4+Math.random()*1.3);hasP=false;break;
+    case"aflutter":hasP=false;break;
     // Real audit finding: VT used to be entirely special-cased in ecgValue()
     // as a raw 2-harmonic sine, bypassing this whole per-beat state machine
     // (and pickRhythmTiming/advanceCardiac's own regular tBeat/rrSec clock)
