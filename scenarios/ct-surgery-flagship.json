@@ -33,12 +33,12 @@
         "temp": 36.2,
         "drips": { "epi": 2, "levo": 7, "milrinone": 0.25, "propofol": 75, "fentanyl": 50 },
         "chestTubes": { "rPleural": 15, "rMediastinal": 25, "blake": 50, "lPleural": 50, "lMediastinal": 50 },
-        "pacer": { "mode": "DDD", "rate": 90, "outputMa": 9, "sensitivityMv": 1.5, "captured": true }
+        "pacer": { "mode": "DDD", "rate": 90, "outputMa": 9, "sensitivityMv": 1.5, "captured": false }
       },
       "steps": [],
       "sourceNotes": [
         "bp.map (77) is ESTIMATED via the standard (SBP+2*DBP)/3 formula because the source case study gives no charted MAP for this part (unlike Parts 2-3, which give an explicit parenthetical MAP) — treat as an approximation, not transcribed data.",
-        "rhythm is set to a placeholder 'Sinus Rhythm' since the source doesn't state the intrinsic/underlying rhythm — this value is never actually shown while pacer.captured stays true (getEffectiveRhythm() returns 'Paced (DDD)' regardless); it only matters if a future edit sets captured to false before the arrest step.",
+        "rhythm is set to a placeholder 'Sinus Rhythm' since the source doesn't state the intrinsic/underlying rhythm. Direct user request (2026-09-01): pacer.captured now defaults to false here (was true) so a freshly-loaded case doesn't silently start mid-paced with no learner explanation - getEffectiveRhythm() now genuinely shows this placeholder rhythm from the very start of the case, not just after the arrest step. The pacer itself is still fully programmed (mode/rate/output/sensitivity) and ready - a facilitator captures it live via the Pacer panel or the quick BLS/ACLS toggle when that's the teaching point for this run.",
         "pa.{systolic,diastolic}, svr, svri, svv, ppv, hpi are not given in the source for this part — left at engine defaults.",
         "Neuro/resp/GI/GU/skin assessment findings from the case study (RASS -2, ETT 23cm at the lip, vent AC/12/500/PEEP8/FiO2 100%, iNO 20ppm, OGT, Foley 50mL/hr, dermabond + LPWT dressing) are not modeled as physiology-engine fields — they're narrative/assessment content for the facilitator, not monitor-displayed numbers.",
         "Line detail (RIJ CCO PA cath 45cm, dual-lumen cordis, R radial a-line, L AC 18ga PIV) is likewise narrative context, not an engine field."
@@ -57,7 +57,7 @@
         "cvp": 8,
         "spo2": 97,
         "drips": { "epi": 2, "levo": 5, "milrinone": 0.25, "propofol": 50, "fentanyl": 50 },
-        "pacer": { "mode": "DDD", "rate": 90, "outputMa": 9, "sensitivityMv": 1.5, "captured": true }
+        "pacer": { "mode": "DDD", "rate": 90, "outputMa": 9, "sensitivityMv": 1.5, "captured": false }
       },
       "steps": [
         {
@@ -109,7 +109,7 @@
         }
       ],
       "sourceNotes": [
-        "rhythm is set to a placeholder 'Sinus Rhythm' for the same reason as Part 1 — never actually shown while pacer.captured is true, up until the arrest step explicitly overrides both rhythm and captured.",
+        "rhythm is set to a placeholder 'Sinus Rhythm' for the same reason as Part 1. pacer.captured also defaults to false here now (was true) - see Part 1's own sourceNotes for why.",
         "rr, temp, co/ci/svr/svri/svv/ppv/scvo2/hpi, and chest-tube mL totals are not restated in the source for this part — left at engine defaults. Each part is authored from its own independent 'Start of scenario' snapshot per the source, so Part 1's ending values are deliberately NOT carried forward. Facilitator should override live if a specific number matters for the class.",
         "'atMinute: 8' on the arrest step documents the source's 'At 8 min, patient goes into cardiac arrest' and is now also mechanically enforced: tamponade-onset's 'autoAdvanceAfterMinutes: 3' fires arrest automatically 3 minutes after the 5-minute ramp settles (5+3=8) if the facilitator hasn't already called it manually via Next — either path lands on the identical arrest state. The facilitator can cancel the auto-advance from the panel to hold the pre-arrest state open for discussion instead.",
         "The arrest step sets pacer.captured to false — modeling the pacer<->ECG feedback loop from BUILD_PROMPT.md §3.1 (loss of capture reveals the underlying rhythm). The source's 'HR – PEA (150 bpm st)' is read as the ECG showing organized electrical activity at 150 with no pulse, i.e. the pacer is no longer effectively capturing at that point, not that PEA is a distinct paced morphology."

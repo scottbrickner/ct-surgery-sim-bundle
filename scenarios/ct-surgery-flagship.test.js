@@ -25,7 +25,7 @@ test('scenario shape: 3 parts, ids match BUILD_PROMPT.md §4', () => {
   ]);
 });
 
-test('Part 1: baseline snapshot matches the source, pacer captured so effective rhythm is paced', () => {
+test('Part 1: baseline snapshot matches the source, pacer programmed but NOT captured by default (direct user request 2026-09-01), so effective rhythm shows the placeholder intrinsic rhythm', () => {
   const r = createRunner(scenario);
   assert.equal(r.state.hr, 90);
   assert.equal(r.state.bp.sbp, 102);
@@ -33,7 +33,8 @@ test('Part 1: baseline snapshot matches the source, pacer captured so effective 
   assert.equal(r.state.pacer.mode, 'DDD');
   assert.equal(r.state.pacer.outputMa, 9);
   assert.equal(r.state.pacer.sensitivityMv, 1.5);
-  assert.equal(getEffectiveRhythm(r.state), 'Paced (DDD)');
+  assert.equal(r.state.pacer.captured, false); // was true - a fresh case no longer silently starts mid-paced
+  assert.equal(getEffectiveRhythm(r.state), 'Sinus Rhythm'); // the placeholder intrinsic rhythm, genuinely shown now that captured defaults off
   assert.equal(scenario.parts[0].steps.length, 0); // assessment-only, no scripted transition
 });
 

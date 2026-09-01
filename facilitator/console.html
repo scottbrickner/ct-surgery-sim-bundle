@@ -619,8 +619,17 @@
              checkbox like Clinical Change's - rhythm conversion IS the
              point of a shock, not an optional add-on. -->
         <div id="rosc_vitals"></div>
-        <div class="row"><label>Post-event instability (min)</label><input type="number" id="shock_unstable_minutes" value="2" min="0" max="15" step="0.5"></div>
-        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">A successful shock ramps every checked vital together toward these targets over the instability window instead of snapping straight to them - the common, taught post-event hemodynamic instability - rather than a new tracked ROSC state (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
+        <!-- Direct user request (2026-09-01): "the ROSC vitals should be
+             defaulted to 0 min recovery so they immediately start after
+             intervention shock" - was 2 by default. achieveROSC() already
+             branches on unstableMinutes>0 vs not - at 0 it skips the ramp
+             entirely and applies the target instantly via srOverride, so
+             vitals snap immediately with no decompensation-timer UI shown
+             at all (matching a genuine snap, not a same-frame ramp).
+             Still fully facilitator-adjustable for the taught post-event
+             hemodynamic-instability teaching point when that's wanted. -->
+        <div class="row"><label>Post-event instability (min)</label><input type="number" id="shock_unstable_minutes" value="0" min="0" max="15" step="0.5"></div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">Restores every checked vital toward these targets immediately by default (0 min) - raise this if you want the taught post-event hemodynamic instability to play out gradually instead of snapping straight to target (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
 
         <div class="gl">Medications (IV Push)</div>
         <div id="pushDrugList"></div>

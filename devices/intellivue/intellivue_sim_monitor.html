@@ -638,11 +638,30 @@ const RED={hr:[10,30],abp:[10,25],spo2:[5,0],rr:[4,12],etco2:[8,15],temp:[1,1],c
 const DKEYS=["hr","spo2","rr","sys","dia","cvp","paSys","paDia","icp","etco2","temp","co"];
 const disp={},dispNext={};
 function initDisp(){DKEYS.forEach(k=>{disp[k]=state[k];dispNext[k]=0;});}
+// Real bug found via full fidelity/UX pass, direct user report ("prebuilt
+// simulation doesn't render correctly"): reproduced with the arrest step of
+// the CT Surgery Flagship's Part 2 ("emergent sternotomy") - CVP tile showed
+// "-1" with state.cvp authored as exactly 0. Root cause: the settle-noise
+// branch below (cosmetic small measurement jitter once a value has caught
+// up to its target) had NO floor - `disp[k]=tgt+n` where n can be negative
+// pushes an already-at-zero value (any pressure/rate field genuinely
+// flatlined during arrest) below 0, which is physiologically nonsensical
+// for every field in DKEYS (a real transducer zeroed to atmospheric never
+// reads negative when there's no pressure at all) except temp (a real
+// floor exists but is never remotely close to 0 in this sim, so not worth
+// a special case) and spo2 (already has its own 0-100 clamp below).
+// Clamped at the point of assignment, not by special-casing cvp alone -
+// paSys/paDia/icp/etco2/sys/dia/co/hr/rr all shared the identical
+// unclamped pattern and could show the same nonsensical negative jitter
+// any time their target legitimately sits at or very near 0.
 function tickDisp(now){for(const k of DKEYS){const tgt=state[k],diff=tgt-disp[k],thr=(k==="temp"?0.3:k==="co"?0.4:3);
   if(Math.abs(diff)>thr){disp[k]+=diff*0.30;if(Math.abs(tgt-disp[k])<(k==="temp"?0.1:0.6))disp[k]=tgt;dispNext[k]=now+700;}
   else if(now>=dispNext[k]){let n;if(k==="temp")n=Math.random()*0.2-0.1;else if(k==="co")n=Math.random()*0.3-0.15;
     else if(k==="spo2")n=(Math.random()<0.6?0:(Math.random()<0.5?-1:1));else if(k==="hr")n=Math.round((Math.random()*2-1)*(state.rhythm==="afib"?4:1.4));
-    else n=Math.round((Math.random()*2-1)*1.6);disp[k]=tgt+n;dispNext[k]=now+4000+Math.random()*5000;}}}
+    else n=Math.round((Math.random()*2-1)*1.6);
+    disp[k]=tgt+n;
+    if(k==="spo2")disp[k]=clamp(disp[k],0,100);else if(k!=="temp")disp[k]=Math.max(0,disp[k]);
+    dispNext[k]=now+4000+Math.random()*5000;}}}
 
 /* ---------------- Scenarios ---------------- */
 const SCN={
