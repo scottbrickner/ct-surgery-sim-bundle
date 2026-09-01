@@ -608,26 +608,19 @@
              assess_rhythm above (see that loop, near the RHYTHM_LIBRARY
              import) - not a fourth hand-duplicated option list. -->
         <select id="shock_target_rhythm"></select>
-        <div class="row"><label>Target HR</label><input type="number" id="shock_target_hr" value="90" min="20" max="220"></div>
         <!-- Direct user request: "need quick way to improve or restore VS
-             after successful ROSC obtained." achieveROSC() previously only
-             ever ramped HR - BP/MAP/SpO2 were left wherever the pre-ROSC
-             (often arrest-flatlined) state had them, with no restoration
-             path except manually dragging every Patient Assessments slider
-             one at a time. These three fields ride the SAME ramp as HR
-             (one startFacilitatorRamp() call, same duration/label), not a
-             second mechanism - defaults are a reasonable, NOT independently
-             cited post-ROSC target (mildly conservative BP, SpO2 titrated
-             short of hyperoxia per general post-arrest teaching) matching
-             this project's existing "reasoned training default" class
-             (e.g. BP_NORMAL_PULSE_PRESSURE). MAP is always computed from
-             sys/dia here (no separate manual-MAP field, unlike the Clinical
-             Change panel) - simplicity was chosen over exposing a
-             Manual/Calculated toggle for a quick-restore action. -->
-        <div class="row"><label>Target BP sys / dia</label><input type="number" id="shock_target_sbp" value="112" min="0" max="260" style="width:60px"> / <input type="number" id="shock_target_dbp" value="68" min="0" max="160" style="width:60px"></div>
-        <div class="row"><label>Target SpO₂</label><input type="number" id="shock_target_spo2" value="96" min="0" max="100"></div>
+             after successful ROSC obtained," then "mimic same Decline/
+             Change parameters in the ROSC BLS/ACLS section recovery" - this
+             is now the SAME generated, per-vital checkbox+slider+manual-
+             entry+link-toggle grid the Clinical Change panel uses (see
+             CD_VITALS/wireVitalsGrid/injectManualEntries), not a separate,
+             smaller hand-built set of 3 fixed fields. Rhythm stays its own
+             required dropdown above (unchanged) rather than an optional
+             checkbox like Clinical Change's - rhythm conversion IS the
+             point of a shock, not an optional add-on. -->
+        <div id="rosc_vitals"></div>
         <div class="row"><label>Post-event instability (min)</label><input type="number" id="shock_unstable_minutes" value="2" min="0" max="15" step="0.5"></div>
-        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">A successful shock ramps HR, BP (sys/dia, MAP computed from them), and SpO₂ together toward these targets over the instability window instead of snapping straight to them - the common, taught post-event hemodynamic instability - rather than a new tracked ROSC state (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
+        <div class="hint" style="font-size:10.5px;color:var(--ink-faint)">A successful shock ramps every checked vital together toward these targets over the instability window instead of snapping straight to them - the common, taught post-event hemodynamic instability - rather than a new tracked ROSC state (see engine/clinical/pulsatility-design.md REVIEW #5).</div>
 
         <div class="gl">Medications (IV Push)</div>
         <div id="pushDrugList"></div>
@@ -1695,14 +1688,18 @@ function renderRhythmNotes(){
   byId("assess_rhythm_notes").textContent=text;
 }
 const REGULARITY_LABELS={regular:"Regular",irregular:"Irregular",regularly_irregular:"Regularly irregular"};
-// All three selects populated from the same RHYTHM_LIBRARY keys - was
-// hand-duplicated <option> lists (a real drift risk once the library grew
-// past the original 7 - shock_target_rhythm was still stuck at its
-// original 3 until this fix) - see the HTML comment above each <select>.
-for(const id of["ov_rhythm","assess_rhythm","shock_target_rhythm"]){
+// Every rhythm <select> in this file populates from the same RHYTHM_LIBRARY
+// keys - was hand-duplicated <option> lists (a real drift risk once the
+// library grew past the original 7 - shock_target_rhythm was still stuck at
+// its original 3 until that fix) - see the HTML comment above each one.
+// cd1_rhythm/cd2_rhythm don't exist yet at this point in the file (created
+// later by the Clinical Change vitals-grid innerHTML assignment) - they're
+// populated separately, right after that assignment, via this same function.
+function populateRhythmSelect(id){
   const sel=byId(id);
-  sel.innerHTML=Object.keys(RHYTHM_LIBRARY).map(r=>`<option value="${r}">${r}</option>`).join("");
+  if(sel)sel.innerHTML=Object.keys(RHYTHM_LIBRARY).map(r=>`<option value="${r}">${r}</option>`).join("");
 }
+for(const id of["ov_rhythm","assess_rhythm","shock_target_rhythm"])populateRhythmSelect(id);
 byId("ov_rhythm").addEventListener("change",()=>setRhythm(byId("ov_rhythm").value));
 byId("assess_rhythm").addEventListener("change",()=>setRhythm(byId("assess_rhythm").value));
 function togglePacerCapture(){
@@ -1832,18 +1829,23 @@ function achieveROSC(actionLabel){
     return;
   }
   const rhythm=byId("shock_target_rhythm").value;
-  const hr=parseFloat(byId("shock_target_hr").value);
-  const sbp=parseFloat(byId("shock_target_sbp").value);
-  const dbp=parseFloat(byId("shock_target_dbp").value);
-  const spo2=parseFloat(byId("shock_target_spo2").value);
-  const map=Math.round((sbp+2*dbp)/3);
+  // Direct user request: "mimic same Decline/Change parameters in the ROSC
+  // BLS/ACLS section recovery" - reads the SAME per-vital checkbox grid
+  // Clinical Change uses (cdReadVitalsTarget/CD_VITALS), respecting
+  // whichever vitals are actually checked ON here rather than a fixed
+  // HR/BP/SpO2 trio - includes MAP-calculated-mode and BP/PA link toggles
+  // for free, since it's literally the same grid/state (cdMapMode.rosc,
+  // cdBpLinked.rosc, cdPaLinked.rosc).
+  const target=cdReadVitalsTarget("rosc");
   const unstableMinutes=parseFloat(byId("shock_unstable_minutes").value)||0;
-  runner=srOverride(runner,{rhythm,flags:{arrestActive:false}});
-  const target={hr,bp:{sbp,dbp,map},spo2};
-  if(unstableMinutes>0)runner=srStartFacilitatorRamp(runner,{target,durationMinutes:unstableMinutes,label:"post-event-stabilization"},performance.now());
-  else runner=srOverride(runner,target);
+  // Rhythm + arrest-clear apply INSTANTLY via `set`, alongside whatever
+  // numeric target is also ramping - see startFacilitatorRamp()'s docblock.
+  const set={rhythm,flags:{arrestActive:false}};
+  if(unstableMinutes>0)runner=srStartFacilitatorRamp(runner,{target,durationMinutes:unstableMinutes,label:"post-event-stabilization",set},performance.now());
+  else runner=srOverride(runner,{...set,...target});
   syncControlsFromRunner();renderReadout();
-  logChange(`${actionLabel} → ${rhythm} (target HR ${hr}, BP ${sbp}/${dbp}, SpO₂ ${spo2})`);
+  const restoredLabels=CD_VITALS.filter(v=>byId(`rosc_${cdSlug(v.path)}_on`)?.checked).map(v=>v.label).join(", ");
+  logChange(`${actionLabel} → ${rhythm}${restoredLabels?` (restoring: ${restoredLabels})`:""}`);
 }
 byId("btn_shock").addEventListener("click",()=>achieveROSC("Deliver Shock"));
 byId("btn_cardiovert").addEventListener("click",()=>achieveROSC("Synchronized Cardioversion"));
@@ -1876,6 +1878,12 @@ const CD_VITALS=[
   {path:"icp",label:"ICP",min:0,max:80,step:1,def:10,defaultOn:false,isIcp:true},
 ];
 function cdSlug(path){return path.replace(/\./g,"_");}
+// Direct user request: "match functionality to VS parameter programming...
+// include link toggle for SBP/DBP and MAP calculation, add one for PAP as
+// well systolic/diastolic/map." Same reasoned-default class as
+// BP_NORMAL_PULSE_PRESSURE (see applyBPDerivedEffects's own docblock) - a
+// typical PA pulse pressure, not independently cited.
+const CD_PA_NORMAL_PULSE_PRESSURE=15;
 function cdVitalRowHTML(prefix,v){
   const id=`${prefix}_${cdSlug(v.path)}`;
   let html=`<label class="row cd-vital-row">`+
@@ -1888,67 +1896,198 @@ function cdVitalRowHTML(prefix,v){
   // vital's row - scoped per-stage (cd1_mapmode_*/cd2_mapmode_*), completely
   // independent of the Assessments panel's own map_mode_manual/calc toggle;
   // this stage's target MAP can be calculated from ITS OWN sys/dia targets
-  // even while live MAP is being tracked manually, or vice versa.
+  // even while live MAP is being tracked manually, or vice versa. Link
+  // toggle mirrors the Assessments panel's own bpLinked, also scoped
+  // per-stage - moving either sys/dia target here nudges the OTHER one to
+  // hold a normal pulse pressure, same non-live-state-touching rule every
+  // OTHER target slider in this panel already follows (a future ramp
+  // target, not an immediate change).
+  if(v.path==="bp.sbp"){
+    html+=`<div class="checkrow" style="margin-top:0"><label><input type="checkbox" id="${prefix}_bp_link"> Link sys/dia (maintain a normal ~${BP_NORMAL_PULSE_PRESSURE} mmHg pulse pressure)</label></div>`;
+  }
   if(v.isMap){
     html+=`<div class="row" style="margin-top:0"><label>MAP source (this stage)</label></div>`+
       `<div class="mode-pair"><button class="act on" id="${prefix}_mapmode_manual" type="button">Manual</button>`+
       `<button class="act" id="${prefix}_mapmode_calc" type="button">Calculated</button></div>`;
+  }
+  // PAP has no independently-authored mean field in the shared engine (see
+  // engine/physiology.js - only pa.systolic/pa.diastolic exist), so unlike
+  // BP's MAP there's no separate value to toggle Manual/Calculated between -
+  // just a live read-only computed preview, same treatment as CPP just
+  // below. Link toggle works the same way BP's does.
+  if(v.path==="pa.systolic"){
+    html+=`<div class="checkrow" style="margin-top:0"><label><input type="checkbox" id="${prefix}_pa_link"> Link PA sys/dia (maintain a normal ~${CD_PA_NORMAL_PULSE_PRESSURE} mmHg pulse pressure)</label></div>`;
+  }
+  if(v.path==="pa.diastolic"){
+    html+=`<div class="row wide-label"><label>PAP mean (calculated)</label><span class="val" id="${prefix}_papmean_v">—</span></div>`;
   }
   if(v.isIcp){
     html+=`<div class="row wide-label"><label>CPP (calculated)</label><span class="val" id="${prefix}_cpp_v">—</span></div>`;
   }
   return html;
 }
-byId("cd1_vitals").innerHTML=CD_VITALS.map(v=>cdVitalRowHTML("cd1",v)).join("");
-byId("cd2_vitals").innerHTML=CD_VITALS.map(v=>cdVitalRowHTML("cd2",v)).join("");
+// Direct user request: "should include rhythm as well" - rhythm can't ramp
+// (not a NUMERIC_PATHS field), so this is a separate optional checkbox+
+// dropdown, not part of the CD_VITALS loop above - when checked, the chosen
+// rhythm applies INSTANTLY the moment this stage's ramp starts, via
+// startFacilitatorRamp()'s new `set` parameter (see engine/scenarioRunner.js).
+// Off by default, same as every other non-default-spec vital (CVP/PA/ICP).
+function cdRhythmRowHTML(prefix){
+  return `<div class="checkrow" style="margin-top:10px"><label><input type="checkbox" id="${prefix}_rhythm_on"> Change rhythm</label></div>`+
+    `<select id="${prefix}_rhythm" disabled></select>`;
+}
+byId("cd1_vitals").innerHTML=CD_VITALS.map(v=>cdVitalRowHTML("cd1",v)).join("")+cdRhythmRowHTML("cd1");
+byId("cd2_vitals").innerHTML=CD_VITALS.map(v=>cdVitalRowHTML("cd2",v)).join("")+cdRhythmRowHTML("cd2");
+populateRhythmSelect("cd1_rhythm");
+populateRhythmSelect("cd2_rhythm");
 
-const cdMapMode={cd1:"manual",cd2:"manual"}; // 'manual' | 'calculated', independent per stage
+const cdMapMode={cd1:"manual",cd2:"manual",rosc:"manual"}; // 'manual' | 'calculated', independent per target editor
+const cdBpLinked={cd1:false,cd2:false,rosc:false};
+const cdPaLinked={cd1:false,cd2:false,rosc:false};
 function cdRecalcCpp(prefix){
   const cppEl=byId(`${prefix}_cpp_v`);
+  if(!cppEl)return;
   if(!byId(`${prefix}_icp_on`).checked){cppEl.textContent="—";return;}
   const mapVal=parseFloat(byId(`${prefix}_bp_map`).value),icpVal=parseFloat(byId(`${prefix}_icp`).value);
   cppEl.textContent=Math.round(mapVal-icpVal);
+}
+// PAP has no independently-authored mean field in the shared engine (only
+// pa.systolic/pa.diastolic - see engine/physiology.js), so unlike BP's MAP
+// there's nothing to ramp toward directly - this is a read-only computed
+// PREVIEW only, same treatment as CPP just above.
+function cdRecalcPapMean(prefix){
+  const el=byId(`${prefix}_papmean_v`);
+  if(!el)return;
+  if(!byId(`${prefix}_pa_diastolic_on`).checked){el.textContent="—";return;}
+  const sys=parseFloat(byId(`${prefix}_pa_systolic`).value),dia=parseFloat(byId(`${prefix}_pa_diastolic`).value);
+  el.textContent=Math.round((sys+2*dia)/3);
 }
 function cdRecalcMap(prefix){
   if(cdMapMode[prefix]!=="calculated")return;
   const sbp=parseFloat(byId(`${prefix}_bp_sbp`).value),dbp=parseFloat(byId(`${prefix}_bp_dbp`).value);
   const mapVal=Math.round((sbp+2*dbp)/3);
   byId(`${prefix}_bp_map`).value=mapVal; byId(`${prefix}_bp_map_v`).textContent=mapVal;
+  const m=byId(`${prefix}_bp_map_manual`); if(m)m.value=mapVal;
   cdRecalcCpp(prefix);
 }
 function cdSetMapMode(prefix,mode){
   cdMapMode[prefix]=mode;
   byId(`${prefix}_mapmode_manual`).classList.toggle("on",mode==="manual");
   byId(`${prefix}_mapmode_calc`).classList.toggle("on",mode==="calculated");
-  byId(`${prefix}_bp_map`).disabled=(mode==="calculated")||!byId(`${prefix}_bp_map_on`).checked;
+  const onChecked=byId(`${prefix}_bp_map_on`).checked;
+  byId(`${prefix}_bp_map`).disabled=(mode==="calculated")||!onChecked;
+  const m=byId(`${prefix}_bp_map_manual`); if(m)m.disabled=(mode==="calculated")||!onChecked;
   if(mode==="calculated")cdRecalcMap(prefix);
+}
+// Link toggles mirror the Assessments panel's own bpLinked/applyBPDerivedEffects
+// convention, scoped per target editor instead of live state - moving one
+// target slider here just nudges the OTHER target slider's own displayed
+// number, never touches runner.state (same rule every other target slider
+// in this panel already follows - a future ramp target, not a live change).
+function cdApplyLinkEffects(prefix,changedPath){
+  if(cdBpLinked[prefix]&&(changedPath==="bp.sbp"||changedPath==="bp.dbp")){
+    const sbpEl=byId(`${prefix}_bp_sbp`),dbpEl=byId(`${prefix}_bp_dbp`);
+    if(changedPath==="bp.sbp"){
+      const v=Math.max(+dbpEl.min,Math.round(+sbpEl.value-BP_NORMAL_PULSE_PRESSURE));
+      dbpEl.value=v; byId(`${prefix}_bp_dbp_v`).textContent=v; const m=byId(`${prefix}_bp_dbp_manual`); if(m)m.value=v;
+    }else{
+      const v=Math.min(+sbpEl.max,Math.round(+dbpEl.value+BP_NORMAL_PULSE_PRESSURE));
+      sbpEl.value=v; byId(`${prefix}_bp_sbp_v`).textContent=v; const m=byId(`${prefix}_bp_sbp_manual`); if(m)m.value=v;
+    }
+  }
+  if(cdPaLinked[prefix]&&(changedPath==="pa.systolic"||changedPath==="pa.diastolic")){
+    const sysEl=byId(`${prefix}_pa_systolic`),diaEl=byId(`${prefix}_pa_diastolic`);
+    if(changedPath==="pa.systolic"){
+      const v=Math.max(+diaEl.min,Math.round(+sysEl.value-CD_PA_NORMAL_PULSE_PRESSURE));
+      diaEl.value=v; byId(`${prefix}_pa_diastolic_v`).textContent=v; const m=byId(`${prefix}_pa_diastolic_manual`); if(m)m.value=v;
+    }else{
+      const v=Math.min(+sysEl.max,Math.round(+diaEl.value+CD_PA_NORMAL_PULSE_PRESSURE));
+      sysEl.value=v; byId(`${prefix}_pa_systolic_v`).textContent=v; const m=byId(`${prefix}_pa_systolic_manual`); if(m)m.value=v;
+    }
+  }
+}
+/**
+ * Manual numeric entry for every CD_VITALS target slider, generic across any
+ * prefix (cd1/cd2/rosc) - same rationale/pattern as the Assessments panel's
+ * own OVERRIDE_MAP manual-entry injection (see that loop's own docblock):
+ * typed values clamp to the SAME min/max the slider already enforces. Must
+ * run before wireVitalsGrid() references these elements.
+ */
+function injectManualEntries(prefix){
+  for(const v of CD_VITALS){
+    const id=`${prefix}_${cdSlug(v.path)}`;
+    const el=byId(id),vv=byId(`${id}_v`);
+    if(!el||!vv)continue;
+    const manual=document.createElement("input");
+    manual.type="number"; manual.className="manual-entry"; manual.id=id+"_manual";
+    manual.min=el.min; manual.max=el.max; manual.step=el.step||"1";
+    manual.value=el.value; manual.disabled=el.disabled;
+    vv.insertAdjacentElement("afterend",manual);
+  }
+}
+/**
+ * Wire one vitals-target-editor's checkboxes/sliders/manual-entries/link-
+ * toggles/MAP-calculated-mode/PAP-mean/CPP/rhythm - shared by Clinical
+ * Change's two stages AND the ROSC recovery section (direct user request:
+ * "mimic same Decline/Change parameters in the ROSC BLS/ACLS section
+ * recovery" - one generator/wiring function, not three hand-duplicated
+ * copies). `prefix` "rosc" has no `${prefix}_rhythm_on`/`_rhythm` elements
+ * (ROSC keeps its own required, always-on shock_target_rhythm dropdown
+ * instead - rhythm conversion IS the point of a shock, not an optional
+ * add-on) - the rhythm wiring below no-ops cleanly when those don't exist.
+ */
+function wireVitalsGrid(prefix){
+  for(const v of CD_VITALS){
+    const id=`${prefix}_${cdSlug(v.path)}`;
+    const onEl=byId(`${id}_on`),rangeEl=byId(id),vv=byId(`${id}_v`),manual=byId(`${id}_manual`);
+    function syncFromRange(){
+      const val=parseFloat(rangeEl.value);
+      vv.textContent=fmtVal(rangeEl,val);
+      if(manual)manual.value=fmtVal(rangeEl,val);
+      if(v.path==="bp.sbp"||v.path==="bp.dbp"){cdApplyLinkEffects(prefix,v.path);cdRecalcMap(prefix);}
+      if(v.path==="pa.systolic"||v.path==="pa.diastolic"){cdApplyLinkEffects(prefix,v.path);cdRecalcPapMean(prefix);}
+      if(v.isMap||v.isIcp)cdRecalcCpp(prefix);
+    }
+    onEl.addEventListener("change",()=>{
+      const mapLocked=v.isMap&&cdMapMode[prefix]==="calculated";
+      rangeEl.disabled=!onEl.checked||mapLocked;
+      if(manual)manual.disabled=!onEl.checked||mapLocked;
+      if(v.isMap||v.isIcp)cdRecalcCpp(prefix);
+      if(v.path==="pa.diastolic")cdRecalcPapMean(prefix);
+    });
+    rangeEl.addEventListener("input",syncFromRange);
+    if(manual)manual.addEventListener("change",()=>{
+      const val=Math.min(+rangeEl.max,Math.max(+rangeEl.min,parseFloat(manual.value)||0));
+      rangeEl.value=val; syncFromRange();
+    });
+  }
+  const bpLinkEl=byId(`${prefix}_bp_link`);
+  if(bpLinkEl)bpLinkEl.addEventListener("change",()=>{
+    cdBpLinked[prefix]=bpLinkEl.checked;
+    if(cdBpLinked[prefix])cdApplyLinkEffects(prefix,"bp.sbp");
+  });
+  const paLinkEl=byId(`${prefix}_pa_link`);
+  if(paLinkEl)paLinkEl.addEventListener("change",()=>{
+    cdPaLinked[prefix]=paLinkEl.checked;
+    if(cdPaLinked[prefix])cdApplyLinkEffects(prefix,"pa.systolic");
+  });
+  byId(`${prefix}_mapmode_manual`).addEventListener("click",()=>cdSetMapMode(prefix,"manual"));
+  byId(`${prefix}_mapmode_calc`).addEventListener("click",()=>cdSetMapMode(prefix,"calculated"));
+  const rhythmOnEl=byId(`${prefix}_rhythm_on`),rhythmSelEl=byId(`${prefix}_rhythm`);
+  if(rhythmOnEl&&rhythmSelEl)rhythmOnEl.addEventListener("change",()=>{rhythmSelEl.disabled=!rhythmOnEl.checked;});
 }
 
 /**
- * Wire one stage's toggles/sliders/grace-checkbox/outcome-select. `allowDeclineFurther`
- * gates whether this stage's own outcome list includes "declineFurther" (only
- * Stage 1's does - Stage 2 is the UI's terminal stage, matching the "UI
- * exposes 2 levels for now" scope note even though the engine's `nextStage`
- * chaining is itself unbounded; a Stage 3 would just be a third mirrored
- * panel, not an engine change, if ever needed).
+ * Wire one stage's grace-checkbox/outcome-select ON TOP of wireVitalsGrid()'s
+ * generic vitals wiring. `allowDeclineFurther` gates whether this stage's own
+ * outcome list includes "declineFurther" (only Stage 1's does - Stage 2 is
+ * the UI's terminal stage, matching the "UI exposes 2 levels for now" scope
+ * note even though the engine's `nextStage` chaining is itself unbounded; a
+ * Stage 3 would just be a third mirrored panel, not an engine change, if
+ * ever needed).
  */
 function cdWireStage(prefix,{allowDeclineFurther}){
-  for(const v of CD_VITALS){
-    const id=`${prefix}_${cdSlug(v.path)}`;
-    const onEl=byId(`${id}_on`),rangeEl=byId(id),vv=byId(`${id}_v`);
-    onEl.addEventListener("change",()=>{
-      rangeEl.disabled=!onEl.checked||(v.isMap&&cdMapMode[prefix]==="calculated");
-      if(v.isMap||v.isIcp)cdRecalcCpp(prefix);
-    });
-    rangeEl.addEventListener("input",()=>{
-      vv.textContent=fmtVal(rangeEl,parseFloat(rangeEl.value));
-      if(v.path==="bp.sbp"||v.path==="bp.dbp")cdRecalcMap(prefix);
-      if(v.isMap||v.isIcp)cdRecalcCpp(prefix);
-    });
-  }
-  byId(`${prefix}_mapmode_manual`).addEventListener("click",()=>cdSetMapMode(prefix,"manual"));
-  byId(`${prefix}_mapmode_calc`).addEventListener("click",()=>cdSetMapMode(prefix,"calculated"));
-
+  wireVitalsGrid(prefix);
   // Grace period optional per direct spec: "grace time should be optional" -
   // a checkbox, not just a number a facilitator has to remember to zero out.
   // Both the grace checkbox AND the grace field itself are hidden entirely
@@ -1965,8 +2104,16 @@ function cdWireStage(prefix,{allowDeclineFurther}){
   outcomeEl.addEventListener("change",syncOutcomeUI);
   syncOutcomeUI();
 }
+injectManualEntries("cd1");
+injectManualEntries("cd2");
 cdWireStage("cd1",{allowDeclineFurther:true});
 cdWireStage("cd2",{allowDeclineFurther:false});
+// ROSC recovery target editor - same generated grid as Clinical Change's two
+// stages, no rhythm checkbox (shock_target_rhythm stays separate/required)
+// and no grace/outcome wiring (ROSC isn't a scheduled decline).
+byId("rosc_vitals").innerHTML=CD_VITALS.map(v=>cdVitalRowHTML("rosc",v)).join("");
+injectManualEntries("rosc");
+wireVitalsGrid("rosc");
 
 const CD_OUTCOME_PRESETS={
   none:null,
@@ -1986,13 +2133,24 @@ const CD_OUTCOME_LABELS={declineFurther:"further decline (Stage 2)",arrest:"card
  * allowing it) it falls through to being treated as an unrecognized preset
  * key (CD_OUTCOME_PRESETS[...] undefined -> no-op patch), never recurses.
  */
-function cdReadStage(prefix,{allowNextStage}){
+/** Reads a target-editor's checked vitals into a plain {path: value} patch - shared by Clinical Change (via cdReadStage below) and achieveROSC(). */
+function cdReadVitalsTarget(prefix){
   const target={};
   for(const v of CD_VITALS){
     const id=`${prefix}_${cdSlug(v.path)}`;
     if(!byId(`${id}_on`).checked)continue;
     setPath(target,v.path,parseFloat(byId(id).value));
   }
+  return target;
+}
+/** Reads a target-editor's optional rhythm checkbox+dropdown, if present, into the `set` shape startFacilitatorRamp() expects - null if unchecked or absent (e.g. "rosc", which has no rhythm checkbox of its own). */
+function cdReadRhythmSet(prefix){
+  const onEl=byId(`${prefix}_rhythm_on`);
+  if(!onEl||!onEl.checked)return null;
+  return {rhythm:byId(`${prefix}_rhythm`).value};
+}
+function cdReadStage(prefix,{allowNextStage}){
+  const target=cdReadVitalsTarget(prefix);
   const durationMinutes=parseFloat(byId(`${prefix}_duration`).value)||0;
   const outcomeKey=byId(`${prefix}_outcome`).value;
   const isHold=outcomeKey==="none";
@@ -2000,6 +2158,11 @@ function cdReadStage(prefix,{allowNextStage}){
   const graceMinutes=byId(`${prefix}_grace_on`).checked?(parseFloat(byId(`${prefix}_grace`).value)||0):0;
   const label=byId(`${prefix}_label`).value.trim()||(isHold?"":CD_OUTCOME_LABELS[outcomeKey]||"");
   const cfg={target,durationMinutes,label};
+  // Direct user request: "should include rhythm as well" - applies INSTANTLY
+  // the moment this stage's ramp starts, alongside whatever numeric target
+  // is also ramping (see startFacilitatorRamp()'s new `set` parameter).
+  const rhythmSet=cdReadRhythmSet(prefix);
+  if(rhythmSet)cfg.set=rhythmSet;
   if(!isHold){
     cfg.autoAdvanceAfterMinutes=graceMinutes; // 0 when grace is unchecked - fires as soon as the ramp settles, no separate countdown phase
     if(isDeclineFurther)cfg.nextStage=cdReadStage("cd2",{allowNextStage:false});

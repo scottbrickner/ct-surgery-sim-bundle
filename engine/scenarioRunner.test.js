@@ -336,6 +336,29 @@ test('startFacilitatorRamp() without BOTH autoAdvanceAfterMinutes and outcomePat
   assert.equal(r.pendingAutoAdvance, null);
 });
 
+test('startFacilitatorRamp() with `set` applies a discrete field (rhythm) INSTANTLY and it survives every subsequent tick, alongside the numeric target still ramping normally', () => {
+  let r = createRunner(fixtureScenario());
+  assert.equal(r.state.rhythm, 'Normal Sinus Rhythm');
+  r = startFacilitatorRamp(r, {
+    target: { hr: 40 }, durationMinutes: 4, set: { rhythm: 'Atrial Fibrillation' },
+  }, 0);
+  // Applied immediately - before the ramp has progressed at all.
+  assert.equal(r.state.rhythm, 'Atrial Fibrillation');
+  assert.equal(r.activeRamp.fromState.rhythm, 'Atrial Fibrillation'); // captured POST-set, not pre-set
+  r = tick(r, 120000); // halfway through the numeric ramp
+  assert.equal(r.state.hr, 65); // numeric target still ramps exactly as it would without `set`
+  assert.equal(r.state.rhythm, 'Atrial Fibrillation'); // did NOT get silently reverted by rampState() rebuilding from fromState
+  r = tick(r, 240000); // ramp settles
+  assert.equal(r.state.hr, 40);
+  assert.equal(r.state.rhythm, 'Atrial Fibrillation');
+});
+
+test('startFacilitatorRamp() without `set` behaves exactly as before (rhythm untouched)', () => {
+  let r = createRunner(fixtureScenario());
+  r = startFacilitatorRamp(r, { target: { hr: 40 }, durationMinutes: 4 }, 0);
+  assert.equal(r.state.rhythm, 'Normal Sinus Rhythm');
+});
+
 /* ---------------- fastForwardRamp()/commitRampNow() - direct user request: "facilitator should have ability to fast forward or immediately commit change to final destination" ---------------- */
 
 test('fastForwardRamp() is a no-op when nothing is ramping, or when ms is not positive', () => {

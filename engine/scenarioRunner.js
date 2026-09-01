@@ -294,9 +294,24 @@ export function getAutoAdvanceCountdown(runner, nowMs) {
  * `label` is carried through to getAutoAdvanceCountdown() for the UI to
  * display (e.g. "cardiac arrest") - purely cosmetic, no engine meaning.
  */
-export function startFacilitatorRamp(runner, { target, durationMinutes, autoAdvanceAfterMinutes, outcomePatch, nextStage, label }, nowMs) {
+export function startFacilitatorRamp(runner, { target, durationMinutes, autoAdvanceAfterMinutes, outcomePatch, nextStage, label, set }, nowMs) {
   const durationMs = (durationMinutes || 0) * 60000;
-  const activeRamp = { fromState: runner.state, target, startedAtMs: nowMs, durationMs };
+  // `set` (optional): a discrete-field patch (e.g. rhythm) applied INSTANTLY
+  // alongside a ramp that starts here - direct user request ("Clinical
+  // Change should include rhythm as well"). Rhythm can't ramp - it isn't in
+  // NUMERIC_PATHS, there's no "50% of the way from Sinus to AFib" - so a
+  // facilitator-chosen rhythm change fires the moment this stage's ramp
+  // begins, same instant as the numeric target starts interpolating.
+  // Mirrors engine/stageRunner.js's advanceToStage(), which already
+  // established this exact "a ramp stage may ALSO carry a set" pattern for
+  // v2/graph scenarios - see that function's own docblock for the real bug
+  // it fixed: `set` MUST be applied BEFORE activeRamp.fromState is
+  // captured, not after. rampState() reconstructs state ENTIRELY from
+  // fromState every tick, so anything `set` touched outside `target`'s own
+  // fields would be silently discarded the instant the first tick ran
+  // otherwise - confirmed by that same real regression, not a hypothetical.
+  const baseState = set ? applyInstant(runner.state, set) : runner.state;
+  const activeRamp = { fromState: baseState, target, startedAtMs: nowMs, durationMs };
   let pendingAutoAdvance = null;
   if (typeof autoAdvanceAfterMinutes === 'number' && (outcomePatch || nextStage)) {
     pendingAutoAdvance = { fireAtMs: nowMs + durationMs + autoAdvanceAfterMinutes * 60000, kind: 'custom', patch: outcomePatch, label };
@@ -308,6 +323,7 @@ export function startFacilitatorRamp(runner, { target, durationMinutes, autoAdva
   }
   return {
     ...runner,
+    state: baseState, // stays at this (post-set) value until tick() progresses the ramp fields on top of it - same convention as v2's advanceToStage()
     activeRamp,
     pendingAutoAdvance,
     events: [...runner.events, { at: `custom-decline:${label || 'start'}`, nowMs }],
