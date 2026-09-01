@@ -2004,17 +2004,55 @@ function showTickErrorBanner(e){
   banner.classList.add("show");
 }
 byId("tickErrorBannerDismiss")&&byId("tickErrorBannerDismiss").addEventListener("click",()=>byId("tickErrorBanner").classList.remove("show"));
-function consoleTick(ts){
+function runConsoleTick(ts){
   try{
     consoleTickInner(ts);
   }catch(e){
     tickErrorCount++;
     console.error("consoleTick error (recovered, tick loop continues):",e);
     if(ts-lastTickErrorBannerMs>3000){lastTickErrorBannerMs=ts;showTickErrorBanner(e);}
-  }finally{
-    requestAnimationFrame(consoleTick);
   }
 }
+function consoleTick(ts){
+  runConsoleTick(ts);
+  requestAnimationFrame(consoleTick);
+}
+// Real bug found live while prepping a class session, directly reproduced
+// and root-caused, not guessed: a Scheduled/Acute Clinical Change ramp's
+// own TIME tracking (getRampProgress - a pure function of real elapsed
+// time) stayed correct even while this tab was backgrounded, but the
+// actual state interpolation silently stalled the whole time - confirmed
+// directly by starting a ramp, letting real wall-clock time pass with the
+// tab not the active/focused one, and observing state.hr still pinned at
+// its pre-ramp value while getRampProgress().fraction had already climbed
+// past 50%. requestAnimationFrame is suspended/throttled by every major
+// browser whenever a tab isn't the visible, focused one (a standard,
+// well-documented power-saving behavior, not a bug in any one browser) -
+// and this entire tick loop had NO fallback, relying on rAF alone. A
+// facilitator glancing at another app/window, or a projector/screen-share
+// switching away even briefly, would silently freeze every active ramp/
+// auto-advance/override-release until they tabbed back - then everything
+// would jump/catch up abruptly in one burst, since consoleTickInner always
+// recomputes state fresh from the real elapsed timestamp (fraction-based,
+// never delta-accumulated) rather than losing correctness, just visibly
+// stalling in the meantime - exactly the "the countdown may appear, but
+// automatic progression doesn't reliably happen" symptom this project's
+// own crash-recovery fix (see the docblock above) suspected but didn't
+// fully explain: that fix only covers a THROWN error, not rAF's own
+// browser-level suspension, which throws nothing at all.
+//
+// Fixed with a setInterval backstop calling the exact same tick logic.
+// setInterval is ALSO throttled in a backgrounded tab (browsers clamp it
+// to a minimum interval, commonly ~1000ms), but critically it is never
+// fully SUSPENDED the way rAF is - it keeps firing, just less often, which
+// is exactly the guarantee a real-wall-clock-time ramp needs. Safe to run
+// redundantly alongside rAF on a normal foreground tab (where rAF alone
+// already covers this): every tick recomputes the SAME idempotent state
+// from the current timestamp rather than accumulating anything, so an
+// extra call just repaints the same correct value a little early - never
+// double-applies an effect, matching this project's existing fraction-
+// based ramp design (see rampState()'s own docblock, engine/physiology.js).
+setInterval(()=>runConsoleTick(performance.now()),300);
 function consoleTickInner(ts){
   if(runner){
     const before=runner;
